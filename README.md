@@ -134,3 +134,17 @@ Resumen: **8/8 implementadas** y reforzadas en esta base.
 - [x] Limpieza de duplicación visual de storage en estado de guardado.
 - [x] Refuerzo de origen: en reimportación de contacto existente se actualiza al origen nuevo y se registra historial de origen por usuario.
 
+
+
+## Verificación rápida de versión antes de publicar
+
+Si te aparece un build con versión vieja (por ejemplo `1.1.13`), ejecutá:
+
+```bash
+npm run version:sync
+npm run version:verify
+```
+
+- `version:sync` toma la versión del tag `vX.Y.Z` apuntando a `HEAD`.
+- `version:verify` valida que `package.json` y `package-lock.json` queden alineados.
+
