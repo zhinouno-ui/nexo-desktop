@@ -1,0 +1,8 @@
+﻿node_modules/
+dist/
+win-unpacked/
+builder-debug/
+builder-effective-config/
+*.log
+.DS_Store
+.env
