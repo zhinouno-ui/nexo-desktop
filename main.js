@@ -3,6 +3,7 @@ const { autoUpdater } = require('electron-updater');
 const fs = require('fs/promises');
 const fssync = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
 
 const MIN_UPDATE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -67,6 +68,52 @@ function normalizeError(error) {
 
 function perfLog(scope, message, extra = {}) {
   try { console.log(`[nexo:${scope}] ${message}`, extra); } catch (_) {}
+}
+
+function humanUpdaterError(error) {
+  const normalized = normalizeError(error);
+  const raw = `${normalized.code || ''} ${normalized.message || ''}`.toLowerCase();
+  if (raw.includes('enetunreach') || raw.includes('econnrefused') || raw.includes('timed out') || raw.includes('network')) {
+    return 'Sin conexión de red o el servidor de updates no respondió.';
+  }
+  if (raw.includes('certificate') || raw.includes('self signed')) {
+    return 'Problema de certificado TLS al validar la descarga.';
+  }
+  if (raw.includes('403') || raw.includes('forbidden')) {
+    return 'Acceso denegado al release (403). Revisá permisos del repositorio/release.';
+  }
+  if (raw.includes('404') || raw.includes('not found') || raw.includes('no published versions')) {
+    return 'No se encontró release disponible para este canal/arquitectura (404).';
+  }
+  if (raw.includes('sha') || raw.includes('checksum') || raw.includes('hash')) {
+    return 'La integridad del instalador falló (hash/checksum inválido).';
+  }
+  if (raw.includes('ebusy') || raw.includes('eperm') || raw.includes('access is denied')) {
+    return 'No se pudo escribir/reemplazar archivos (archivo bloqueado o sin permisos).';
+  }
+  if (raw.includes('enomem') || raw.includes('out of memory')) {
+    return 'Memoria insuficiente para procesar la actualización.';
+  }
+  if (raw.includes('enospc') || raw.includes('no space')) {
+    return 'Espacio en disco insuficiente para descargar o instalar la actualización.';
+  }
+  return normalized.message || 'Falló el actualizador por una causa no clasificada.';
+}
+
+async function computeFileSha512(filePath) {
+  const hash = crypto.createHash('sha512');
+  const file = await fs.open(filePath, 'r');
+  try {
+    const stream = file.createReadStream();
+    await new Promise((resolve, reject) => {
+      stream.on('data', (chunk) => hash.update(chunk));
+      stream.on('error', reject);
+      stream.on('end', resolve);
+    });
+  } finally {
+    await file.close();
+  }
+  return hash.digest('base64');
 }
 
 function sendUpdaterStatus(status, payload = {}) {
@@ -285,6 +332,8 @@ async function handleUpdateDownloaded(info) {
   let sizeBytes = 0;
   let suspicious = false;
   let suspicionReason = '';
+  let downloadedSha512 = '';
+  const expectedSha512 = info?.files?.[0]?.sha512 || info?.sha512 || '';
 
   try {
     if (downloadedFile) {
@@ -308,13 +357,37 @@ async function handleUpdateDownloaded(info) {
     }
   }
 
+  try {
+    if (downloadedFile) downloadedSha512 = await computeFileSha512(downloadedFile);
+  } catch (error) {
+    suspicious = true;
+    suspicionReason = `No se pudo calcular hash SHA512: ${error?.message || error}`;
+    await appendErrorLog('update-downloaded-hash', error, { downloadedFile, version });
+  }
+
+  if (!suspicious && expectedSha512 && downloadedSha512 && expectedSha512 !== downloadedSha512) {
+    suspicious = true;
+    suspicionReason = 'Hash SHA512 distinto al publicado en metadata del release.';
+  }
+
   const cachedPath = await cacheDownloadedInstaller(downloadedFile, version);
-  downloadedUpdateMeta = { version, downloadedFile, sizeBytes, suspicious, suspicionReason, cachedPath };
+  downloadedUpdateMeta = {
+    version,
+    downloadedFile,
+    sizeBytes,
+    suspicious,
+    suspicionReason,
+    cachedPath,
+    expectedSha512,
+    downloadedSha512
+  };
 
   if (suspicious) {
     sendUpdaterStatus('suspicious-update', {
       version,
       sizeBytes,
+      expectedSha512,
+      downloadedSha512,
       message: `⚠️ Update sospechosa: ${suspicionReason}`
     });
     await appendErrorLog('update-suspicious', new Error('Suspicious update package'), downloadedUpdateMeta);
@@ -324,6 +397,8 @@ async function handleUpdateDownloaded(info) {
     version,
     sizeBytes,
     suspicious,
+    expectedSha512,
+    downloadedSha512,
     message: suspicious ? 'Update descargada con advertencia. Revisá antes de instalar.' : 'Actualización lista. Reiniciar ahora'
   });
 }
@@ -357,8 +432,8 @@ function setupAutoUpdater() {
     });
   });
   autoUpdater.on('error', (error) => {
-    const readable = error?.message || String(error);
-    appendErrorLog('autoUpdater', error).catch(() => {});
+    const readable = humanUpdaterError(error);
+    appendErrorLog('autoUpdater', error, { classifiedMessage: readable }).catch(() => {});
     sendUpdaterStatus('error', { message: `Error de actualización: ${readable}` });
   });
 }
@@ -420,6 +495,16 @@ ipcMain.handle('store:backupNow', async () => {
 });
 ipcMain.handle('app:openDataFolder', async () => shell.openPath(app.getPath('userData')));
 ipcMain.handle('app:getVersion', async () => app.getVersion());
+ipcMain.handle('app:getRuntimeHash', async () => {
+  try {
+    if (!app.isPackaged) return { hash: '', note: 'dev-mode' };
+    const hash = await computeFileSha512(process.execPath);
+    return { hash };
+  } catch (error) {
+    await appendErrorLog('app:getRuntimeHash', error);
+    return { hash: '', error: error?.message || String(error) };
+  }
+});
 ipcMain.handle('app:getErrorLogPath', async () => getErrorLogPath());
 ipcMain.handle('app:openErrorLog', async () => {
   const p = getErrorLogPath();
