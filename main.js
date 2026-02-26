@@ -8,6 +8,9 @@ const { spawn } = require('child_process');
 
 const MIN_UPDATE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_UPDATE_SIZE_BYTES = 500 * 1024 * 1024;
+const RELEASE_OWNER = 'zhinouno-ui';
+const RELEASE_REPO = 'nexo-desktop';
+const STABLE_TAG = 'v1.1.10';
 
 const DEFAULT_DB = {
   contactsData: [],
@@ -116,6 +119,77 @@ async function computeFileSha512(filePath) {
   return hash.digest('base64');
 }
 
+
+function getStableReleaseUrl() {
+  return `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases/tag/${STABLE_TAG}`;
+}
+
+function parseArgValue(flag) {
+  const prefix = `${flag}=`;
+  const arg = process.argv.find((x) => typeof x === 'string' && x.startsWith(prefix));
+  return arg ? arg.slice(prefix.length) : '';
+}
+
+function createUpdateAssistantWindow(meta = {}) {
+  const win = new BrowserWindow({
+    width: 560,
+    height: 420,
+    resizable: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: false,
+      sandbox: false,
+      nodeIntegration: true
+    }
+  });
+
+  const safeVersion = String(meta.version || '');
+  const safeInstaller = String(meta.installerPath || '');
+  const encodedInstaller = JSON.stringify(safeInstaller);
+  const encodedVersion = JSON.stringify(safeVersion);
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Asistente de actualización</title>
+  <style>body{font-family:Segoe UI,system-ui,sans-serif;background:#0f172a;color:#e2e8f0;padding:18px} .card{background:#1e293b;border-radius:14px;padding:16px;border:1px solid #334155} .bar{height:12px;background:#0b1220;border-radius:999px;overflow:hidden} .fill{height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#10b981);transition:width .25s ease} button{margin-top:12px;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:10px 14px;cursor:pointer} pre{white-space:pre-wrap;max-height:120px;overflow:auto;background:#0b1220;padding:10px;border-radius:8px} </style></head>
+  <body><div class="card"><h2>Asistente de actualización</h2><div id="m">Preparando actualización…</div><div class="bar"><div id="f" class="fill"></div></div><p id="p">0%</p><pre id="l"></pre><button id="open" style="display:none">Abrir Nexo actualizado</button></div>
+  <script>
+    const { spawn } = require('child_process');
+    const installer = ${encodedInstaller};
+    const version = ${encodedVersion};
+    const msg = document.getElementById('m');
+    const fill = document.getElementById('f');
+    const pct = document.getElementById('p');
+    const log = document.getElementById('l');
+    const openBtn = document.getElementById('open');
+    const set = (v,t) => { fill.style.width=v+'%'; pct.textContent=v+'%'; if(t) msg.textContent=t; };
+    const addLog = (x) => { log.textContent += (x+'\n'); };
+    const fake = [12,28,41,63,79,91];
+    let i=0;
+    const timer = setInterval(()=>{ if(i>=fake.length){clearInterval(timer); return;} set(fake[i], 'Instalando Nexo '+(version||'')); i++; }, 700);
+    try {
+      addLog('Ejecutando instalador en modo silencioso…');
+      const child = spawn(installer, ['/S'], { detached:false, stdio:'ignore', windowsHide:true });
+      child.on('exit', (code) => {
+        set(100, code === 0 ? 'Actualización finalizada' : 'Actualización terminó con advertencia');
+        addLog('Proceso instalador cerrado. Código: '+code);
+        openBtn.style.display = 'inline-block';
+      });
+      child.on('error', (e) => {
+        addLog('Error al ejecutar instalador: '+(e.message||e));
+        msg.textContent = 'Falló la actualización';
+      });
+    } catch (e) {
+      addLog('Error crítico: '+(e.message||e));
+      msg.textContent = 'Falló la actualización';
+    }
+    openBtn.onclick = () => {
+      try { spawn(process.execPath, [], { detached:true, stdio:'ignore', windowsHide:true }).unref(); } catch(_) {}
+      window.close();
+    };
+  </script></body></html>`;
+
+  win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+}
+
 function sendUpdaterStatus(status, payload = {}) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send('updater:status', { status, ...payload });
@@ -199,6 +273,31 @@ function applyZoomReset() {
   return currentZoomFactor;
 }
 
+
+async function handleInternalUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  if (url.startsWith('nexo://rollback-previous')) {
+    try {
+      const candidate = await resolveRollbackInstaller();
+      if (!candidate) {
+        sendUpdaterStatus('error', { message: 'No hay versión anterior en cache para rollback.' });
+        return true;
+      }
+      await startInstallerAndQuit(candidate.fullPath);
+      return true;
+    } catch (error) {
+      await appendErrorLog('internal-url-rollback', error, { url });
+      sendUpdaterStatus('error', { message: `No se pudo iniciar rollback: ${error?.message || error}` });
+      return true;
+    }
+  }
+  if (url.startsWith('nexo://open-stable-110')) {
+    await shell.openExternal(getStableReleaseUrl());
+    return true;
+  }
+  return false;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -216,6 +315,10 @@ function createWindow() {
       shell.openExternal(url);
       return { action: 'deny' };
     }
+    if (url.startsWith('nexo://')) {
+      handleInternalUrl(url).catch((e) => appendErrorLog('windowOpenHandler', e, { url }));
+      return { action: 'deny' };
+    }
     return { action: 'allow' };
   });
 
@@ -223,6 +326,11 @@ function createWindow() {
     if (/whatsapp\.com|wa\.me/i.test(url)) {
       event.preventDefault();
       shell.openExternal(url);
+      return;
+    }
+    if (url.startsWith('nexo://')) {
+      event.preventDefault();
+      handleInternalUrl(url).catch((e) => appendErrorLog('will-navigate', e, { url }));
     }
   });
 
@@ -560,8 +668,29 @@ ipcMain.handle('updater:install', async (_event, payload) => {
       message: downloadedUpdateMeta.suspicionReason || 'Update sospechosa detectada'
     };
   }
-  setImmediate(() => autoUpdater.quitAndInstall(true, true));
-  return { ok: true };
+
+  const installerPath = downloadedUpdateMeta?.downloadedFile || '';
+  if (!installerPath || !fssync.existsSync(installerPath)) {
+    return { ok: false, message: 'No se encontró el instalador descargado para actualizar.' };
+  }
+
+  try {
+    const detached = spawn(process.execPath, [
+      '--update-assistant',
+      `--installer=${installerPath}`,
+      `--version=${downloadedUpdateMeta?.version || ''}`
+    ], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false
+    });
+    detached.unref();
+    setTimeout(() => app.quit(), 120);
+    return { ok: true };
+  } catch (error) {
+    await appendErrorLog('updater:install-assistant', error, { installerPath });
+    return { ok: false, message: `No se pudo abrir asistente de actualización: ${error?.message || error}` };
+  }
 });
 
 ipcMain.handle('updater:rollbackPrevious', async () => {
@@ -580,6 +709,15 @@ ipcMain.handle('updater:rollbackPrevious', async () => {
 });
 
 app.whenReady().then(async () => {
+  const installerArg = parseArgValue('--installer');
+  const versionArg = parseArgValue('--version');
+  const updateAssistantMode = process.argv.includes('--update-assistant');
+
+  if (updateAssistantMode) {
+    createUpdateAssistantWindow({ installerPath: installerArg, version: versionArg });
+    return;
+  }
+
   try { await readDb(); } catch (error) { console.warn('No se pudo precalentar cache local:', error?.message || error); }
   createWindow();
   setupAutoUpdater();

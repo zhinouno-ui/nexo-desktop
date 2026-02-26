@@ -1342,11 +1342,18 @@
         .quick-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; border-top:1px solid rgba(148,163,184,.22); padding-top:10px; }
         .quick-tools .btn { padding: 10px 12px; font-size: .9rem; }
         .shift-tag { font-size:.72rem; padding:2px 8px; border-radius:999px; border:1px solid rgba(148,163,184,.35); color:#cbd5e1; }
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
 
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
-    <a class="failsafe-downgrade-btn" href="https://github.com/zhinouno-ui/Nexo.exe/releases/tag/v1.1.10" target="_blank" rel="noopener noreferrer">⛑️ Downgrade estable 1.1.10</a>
+    <a class="failsafe-downgrade-btn" href="nexo://rollback-previous" target="_blank" rel="noopener noreferrer">⛑️ Volver a versión anterior (cache local)</a>
     <div class="upload-screen" id="uploadScreen">
         <div class="upload-card">
             <i class="fas fa-cloud-upload-alt"></i>
@@ -1949,7 +1956,10 @@
             importCancelRequested: false,
             reviewPositiveCounter: 0,
             reviewMilestonesShown: {},
-            runtimeHash: ''
+            runtimeHash: '',
+            lastImportBatchId: '',
+            previousImportBatchId: '',
+            lastImportFileName: ''
         };
 
         function ensureReviewMilestonesState() {
@@ -2012,6 +2022,11 @@
             saveTemplateBtn: $('#saveTemplateBtn'),
             checkUpdatesOption: $('#checkUpdatesOption'),
             restartUpdateOption: $('#restartUpdateOption'),
+            openGithubReleasesOption: $('#openGithubReleasesOption'),
+            openStable110Option: $('#openStable110Option'),
+            openErrorLogOption: $('#openErrorLogOption'),
+            rollbackPreviousOption: $('#rollbackPreviousOption'),
+            showQuickMetricsOption: $('#showQuickMetricsOption'),
             updateStatusText: $('#updateStatusText'),
             updateProgressFill: $('#updateProgressFill'),
             perfDebugToggle: $('#perfDebugToggle'),
@@ -2926,6 +2941,8 @@
             const origin = elements.originInput.value.trim() || 'Sin especificar';
             let totalNewContacts = 0;
             let totalMerged = 0;
+            const batchId = `imp_${Date.now()}`;
+            const batchFiles = [];
 
             if (selectedFiles.length === 0) return;
             AppState.importCancelRequested = false;
@@ -2935,6 +2952,7 @@
             try {
             for (let fileIndex = 0; fileIndex < selectedFiles.length; fileIndex++) {
                 const file = selectedFiles[fileIndex];
+                batchFiles.push(file.name);
                 const text = await file.text();
                 if (AppState.importCancelRequested) break;
 
@@ -2986,6 +3004,9 @@
                         }
                         if (touched) {
                             existingContact.lastUpdated = nowIso;
+                            existingContact.lastImportBatchId = batchId;
+                            existingContact.lastImportFile = file.name;
+                            existingContact.lastImportedAt = nowIso;
                             totalMerged++;
                             fileMerged++;
                         }
@@ -2999,7 +3020,10 @@
                             origin: origin,
                             status: newContact.status || suggestedStatus,
                             lastUpdated: nowIso,
-                            isDuplicate: false
+                            isDuplicate: false,
+                            lastImportBatchId: batchId,
+                            lastImportFile: file.name,
+                            lastImportedAt: nowIso
                         };
                         AppState.contacts.push(created);
                         if (normalizedPhone) phoneIndex.set(normalizedPhone, created);
@@ -3019,6 +3043,13 @@
                 addToHistory('Importación de archivo', `${file.name}: +${fileNewContacts} nuevos / ${fileMerged} actualizados`);
                 console.info('[import] merge done', { file: file.name, nuevos: fileNewContacts, actualizados: fileMerged });
             }
+
+            AppState.previousImportBatchId = AppState.lastImportBatchId || '';
+            AppState.lastImportBatchId = batchId;
+            AppState.lastImportFileName = batchFiles[batchFiles.length - 1] || '';
+            localStorage.setItem('lastImportBatchId', AppState.lastImportBatchId);
+            localStorage.setItem('previousImportBatchId', AppState.previousImportBatchId);
+            localStorage.setItem('lastImportFileName', AppState.lastImportFileName);
 
             detectDuplicates();
             const chunkedSaved = await persistContactsChunkedForImport(sanitizeContactsForStorage(AppState.contacts));
@@ -3688,7 +3719,10 @@
                 buildContactDerivedFields(contact);
                 const matchesSearch = parsedQuery.terms.length === 0 || parsedQuery.terms.every(term => contact._searchKey.includes(term));
                 const matchesStatus = !selectedStatus || normalizeSearchText(contact.status) === selectedStatus;
-                const matchesOrigin = !selectedOrigin || normalizeSearchText(contact.origin) === selectedOrigin || (normalizeSearchText(selectedOrigin) === 'operaciones panel' && !!contact.ops);
+                const isLastUploadFilter = selectedOrigin === '__last_upload__';
+                const matchesOrigin = isLastUploadFilter
+                    ? (AppState.lastImportBatchId && contact.lastImportBatchId === AppState.lastImportBatchId)
+                    : (!selectedOrigin || normalizeSearchText(contact.origin) === selectedOrigin || (normalizeSearchText(selectedOrigin) === 'operaciones panel' && !!contact.ops));
                 const matchesShift = !selectedShift || normalizeSearchText(contact.assignedShift) === selectedShift;
 
                 let matchesPhone = true;
@@ -3765,7 +3799,9 @@
             $('#progressFill').style.width = `${progressPercentage}%`;
 
             const uniqueOrigins = [...originSet].sort();
+            const lastUploadLabel = AppState.lastImportFileName ? `Última subida (${AppState.lastImportFileName})` : 'Última subida';
             elements.originFilter.innerHTML = '<option value="">Todos los orígenes</option>' +
+                `<option value="__last_upload__">${lastUploadLabel}</option>` +
                 uniqueOrigins.map(o => `<option value="${o}">${o}</option>`).join('');
             elements.originFilter.value = AppState.originFilter;
         }
@@ -4687,6 +4723,9 @@
                 if (!Number.isNaN(lastAutoDl) && lastAutoDl > 0) AppState.lastAutoDownloadAt = lastAutoDl;
                 const sig = localStorage.getItem('lastAutoBackupSignature') || '';
                 if (sig) AppState.lastAutoBackupSignature = sig;
+                AppState.lastImportBatchId = localStorage.getItem('lastImportBatchId') || '';
+                AppState.previousImportBatchId = localStorage.getItem('previousImportBatchId') || '';
+                AppState.lastImportFileName = localStorage.getItem('lastImportFileName') || '';
                 const backupMode = localStorage.getItem('autoBackupStorageMode');
                 if (backupMode === 'download' || backupMode === 'file' || backupMode === 'ask') {
                     AppState.autoBackupStorageMode = backupMode === 'ask' ? 'download' : backupMode;
@@ -5285,8 +5324,10 @@
             if (elements.perfDebugToggle) {
                 elements.perfDebugToggle.checked = localStorage.getItem('perfDebugMode') === '1';
                 AppState.perfDebug = elements.perfDebugToggle.checked;
+                document.body.classList.toggle('perf-mode', AppState.perfDebug);
                 elements.perfDebugToggle.onchange = (e) => {
                     AppState.perfDebug = !!e.target.checked;
+                    document.body.classList.toggle('perf-mode', AppState.perfDebug);
                     localStorage.setItem('perfDebugMode', AppState.perfDebug ? '1' : '0');
                     showNotification(`Modo debug performance ${AppState.perfDebug ? 'activado' : 'desactivado'}`, 'info');
                 };
@@ -5359,8 +5400,7 @@
                     }
                     if (status === 'downloaded') {
                         const updateHash = shortHash(payload.downloadedSha512 || payload.expectedSha512);
-                        const appHash = shortHash(AppState.runtimeHash);
-                        const hashSummary = updateHash ? ` · hash upd ${updateHash}${appHash ? ` / app ${appHash}` : ''}` : '';
+                        const hashSummary = updateHash ? ` · hash ${updateHash}` : '';
                         elements.updateStatusText.textContent = `${payload.message || 'Actualización lista. Reiniciar ahora'}${hashSummary}`;
                         if (elements.updateProgressFill) elements.updateProgressFill.style.width = '100%';
                         elements.restartUpdateOption.style.display = 'flex';
@@ -5404,7 +5444,7 @@
             };
             if (elements.openGithubReleasesOption) {
                 elements.openGithubReleasesOption.onclick = async () => {
-                    const url = 'https://github.com/zhinouno-ui/Nexo.exe/releases/latest';
+                    const url = 'https://github.com/zhinouno-ui/nexo-desktop/releases/latest';
                     try {
                         if (window.electronAPI?.openExternal) await window.electronAPI.openExternal(url);
                         else window.open(url, '_blank');
@@ -5416,7 +5456,7 @@
 
             if (elements.openStable110Option) {
                 elements.openStable110Option.onclick = async () => {
-                    const url = 'https://github.com/zhinouno-ui/Nexo.exe/releases/tag/v1.1.10';
+                    const url = 'https://github.com/zhinouno-ui/nexo-desktop/releases/tag/v1.1.10';
                     try {
                         if (window.electronAPI?.openExternal) await window.electronAPI.openExternal(url);
                         else window.open(url, '_blank');
@@ -5461,11 +5501,55 @@
 
             if (elements.showQuickMetricsOption) {
                 elements.showQuickMetricsOption.onclick = () => {
-                    const total = AppState.contacts.length;
-                    const revisados = AppState.contacts.filter(c => c.status && c.status !== 'sin revisar').length;
-                    const conTel = AppState.contacts.filter(c => (c.phone || '').trim()).length;
-                    const pct = total ? Math.round((revisados / total) * 100) : 0;
-                    showNotification(`Métrica rápida: ${revisados}/${total} revisados (${pct}%), con teléfono ${conTel}.`, 'info');
+                    const now = new Date();
+                    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+                    const yesterdayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+                    const yesterday = yesterdayDate.toISOString().slice(0, 10);
+                    const dayFromIso = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : '');
+
+                    const byShift = { tm: 0, tt: 0, tn: 0 };
+                    let editedToday = 0;
+                    let editedYesterday = 0;
+
+                    AppState.contacts.forEach((c) => {
+                        const day = dayFromIso(c.lastUpdated || c.lastEditedAt || c.lastImportedAt);
+                        if (day === today) editedToday++;
+                        if (day === yesterday) editedYesterday++;
+                        const shiftKey = String(c.shiftReviewedByShift || '').toLowerCase();
+                        if (byShift[shiftKey] !== undefined && day === today) byShift[shiftKey]++;
+                    });
+
+                    let revToContact = 0;
+                    let contactToJugando = 0;
+                    (AppState.history || []).forEach((entry) => {
+                        const day = dayFromIso(entry.timestamp);
+                        if (day !== today) return;
+                        const details = String(entry.details || '').toLowerCase();
+                        if (details.includes('revisado') && details.includes('→') && details.includes('contactado')) revToContact++;
+                        if (details.includes('contactado') && details.includes('→') && details.includes('jugando')) contactToJugando++;
+                    });
+
+                    const lastBatchCount = AppState.lastImportBatchId
+                        ? AppState.contacts.filter(c => c.lastImportBatchId === AppState.lastImportBatchId).length
+                        : 0;
+                    const prevBatchCount = AppState.previousImportBatchId
+                        ? AppState.contacts.filter(c => c.lastImportBatchId === AppState.previousImportBatchId).length
+                        : 0;
+
+                    const topShift = Object.entries(byShift).sort((a,b) => b[1]-a[1])[0];
+                    const topShiftText = topShift ? `${topShift[0].toUpperCase()} (${topShift[1]})` : 'sin datos';
+
+                    alert([
+                        `Métricas rápidas (${today})`,
+                        `• Contactos trabajados hoy: ${editedToday}`,
+                        `• Contactos trabajados ayer: ${editedYesterday}`,
+                        `• Turno con mayor actividad hoy: ${topShiftText}`,
+                        `• Revisado → Contactado (hoy): ${revToContact}`,
+                        `• Contactado → Jugando (hoy): ${contactToJugando}`,
+                        `• Contactos de la última subida: ${lastBatchCount}`,
+                        `• Contactos de la subida anterior: ${prevBatchCount}`,
+                        `• Filtro disponible: Origen > Última subida`
+                    ].join('\n'));
                 };
             }
             $('#closeUserOptionsModal').onclick = () => elements.userOptionsModal.classList.remove('active');
