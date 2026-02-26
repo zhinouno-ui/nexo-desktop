@@ -1779,7 +1779,7 @@
         };
 
         const state = { map: {}, saveTimer: null };
-        const KNOWN_KEYS = new Set(['contactsData', 'contactsHistory', 'whatsappTemplate', 'duplicateMergeMode', 'lastExportAt']);
+        const KNOWN_KEYS = new Set(['contactsData', 'contactsHistory', 'whatsappTemplate', 'duplicateMergeMode', 'lastExportAt', 'backups', 'extraStorage']);
 
         const mapFromDb = (db) => {
             const nextMap = {};
@@ -1948,7 +1948,8 @@
             perfDebug: false,
             importCancelRequested: false,
             reviewPositiveCounter: 0,
-            reviewMilestonesShown: {}
+            reviewMilestonesShown: {},
+            runtimeHash: ''
         };
 
         function ensureReviewMilestonesState() {
@@ -3288,7 +3289,7 @@
                 if (elements.storageMeter) {
                     elements.storageMeter.classList.remove('ok', 'warn', 'critical');
                     elements.storageMeter.classList.add(pct >= 92 ? 'critical' : (pct >= 80 ? 'warn' : 'ok'));
-                    elements.storageMeter.textContent = `Storage ${pct}%`;
+                    elements.storageMeter.textContent = `Almacenamiento ${pct}%`;
                     elements.storageMeter.title = `${detail}. Ejecutá getStorageStatus() en consola para más detalle.`;
                 }
                 if (pct >= 92) {
@@ -5254,6 +5255,13 @@
             elements.settingsBtn.onclick = () => {
                 elements.userOptionsModal.classList.add('active');
             };
+            const shortHash = (value) => {
+                if (!value) return '';
+                const raw = String(value).trim();
+                if (raw.length <= 16) return raw;
+                return `${raw.slice(0, 10)}…${raw.slice(-6)}`;
+            };
+
             const triggerUpdateCheck = async (from = 'principal') => {
                 if (elements.updateStatusText) elements.updateStatusText.textContent = 'Estado: buscando…';
                 if (elements.updateProgressFill) elements.updateProgressFill.style.width = '0%';
@@ -5339,7 +5347,8 @@
                         showNotification(payload.message || 'Estás en la última versión', 'success');
                     }
                     if (status === 'suspicious-update') {
-                        elements.updateStatusText.textContent = payload.message || 'Update sospechosa detectada';
+                        const issueHash = shortHash(payload.downloadedSha512 || payload.expectedSha512);
+                        elements.updateStatusText.textContent = `${payload.message || 'Update sospechosa detectada'}${issueHash ? ` (hash ${issueHash})` : ''}`;
                         if (elements.updateProgressFill) elements.updateProgressFill.style.width = '100%';
                         elements.restartUpdateOption.style.display = 'flex';
                         const titleEl = elements.restartUpdateOption.querySelector('.export-option-title');
@@ -5349,7 +5358,10 @@
                         showNotification(payload.message || 'Update sospechosa detectada', 'warning');
                     }
                     if (status === 'downloaded') {
-                        elements.updateStatusText.textContent = payload.message || 'Actualización lista. Reiniciar ahora';
+                        const updateHash = shortHash(payload.downloadedSha512 || payload.expectedSha512);
+                        const appHash = shortHash(AppState.runtimeHash);
+                        const hashSummary = updateHash ? ` · hash upd ${updateHash}${appHash ? ` / app ${appHash}` : ''}` : '';
+                        elements.updateStatusText.textContent = `${payload.message || 'Actualización lista. Reiniciar ahora'}${hashSummary}`;
                         if (elements.updateProgressFill) elements.updateProgressFill.style.width = '100%';
                         elements.restartUpdateOption.style.display = 'flex';
                         const titleEl = elements.restartUpdateOption.querySelector('.export-option-title');
@@ -6149,7 +6161,9 @@
                         const h1 = document.querySelector('#uploadScreen h1');
                         if (h1) h1.textContent = `Gestor de Contactos Masivo · v${version}`;
                     }
-                } catch (e) { console.warn('No se pudo leer versión de app', e); }
+                    const runtimeHash = await window.electronAPI?.getRuntimeHash?.();
+                    AppState.runtimeHash = runtimeHash?.hash || '';
+                } catch (e) { console.warn('No se pudo leer versión/hash de app', e); }
                 window.addEventListener('nexo-store-error', (event) => {
                     if (event && event.detail) showNotification(event.detail, 'warning');
                 });

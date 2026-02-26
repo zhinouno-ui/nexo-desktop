@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installUpdate: (options) => ipcRenderer.invoke('updater:install', options || {}),
   rollbackPreviousVersion: () => ipcRenderer.invoke('updater:rollbackPrevious'),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  getRuntimeHash: () => ipcRenderer.invoke('app:getRuntimeHash'),
   getErrorLogPath: () => ipcRenderer.invoke('app:getErrorLogPath'),
   openErrorLog: () => ipcRenderer.invoke('app:openErrorLog'),
   logError: (payload) => ipcRenderer.invoke('app:logError', payload),
