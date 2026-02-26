@@ -6245,7 +6245,9 @@
                         const h1 = document.querySelector('#uploadScreen h1');
                         if (h1) h1.textContent = `Gestor de Contactos Masivo · v${version}`;
                     }
-                } catch (e) { console.warn('No se pudo leer versión de app', e); }
+                    const runtimeHash = await window.electronAPI?.getRuntimeHash?.();
+                    AppState.runtimeHash = runtimeHash?.hash || '';
+                } catch (e) { console.warn('No se pudo leer versión/hash de app', e); }
                 window.addEventListener('nexo-store-error', (event) => {
                     if (event && event.detail) showNotification(event.detail, 'warning');
                 });
