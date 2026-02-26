@@ -1350,6 +1350,19 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v { font-size:1.2rem; font-weight:800; margin-top:4px; }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -1724,6 +1737,29 @@
         </div>
     </div>
 
+    <div class="modal" id="metricsModal">
+        <div class="modal-content" style="max-width: 760px;">
+            <div class="modal-header"><i class="fas fa-chart-line"></i> Centro de métricas</div>
+            <div id="metricsDateLabel" style="color:var(--text-secondary); margin-bottom:8px;">Resumen diario</div>
+            <div class="metrics-dashboard-grid">
+                <div class="metrics-card"><div class="k">Trabajados hoy</div><div id="metricEditedToday" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Trabajados ayer</div><div id="metricEditedYesterday" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Turno más activo</div><div id="metricTopShift" class="v">-</div></div>
+                <div class="metrics-card"><div class="k">Revisado → Contactado</div><div id="metricRevToContact" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Contactado → Jugando</div><div id="metricContactToJugando" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Última subida / anterior</div><div id="metricLastBatchCount" class="v">0 / 0</div></div>
+            </div>
+            <div class="metrics-actions">
+                <button id="metricsFilterLastBatchBtn" class="btn"><i class="fas fa-filter"></i> Filtrar última subida</button>
+                <button id="metricsDeleteLastBatchBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Borrar última subida</button>
+            </div>
+            <div class="modal-actions">
+                <button id="closeMetricsModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+
     <div class="modal" id="whatsappMessageModal">
         <div class="modal-content" style="max-width: 640px;">
             <div class="modal-header"><i class="fab fa-whatsapp"></i> Mensaje de WhatsApp</div>
@@ -2027,6 +2063,16 @@
             openErrorLogOption: $('#openErrorLogOption'),
             rollbackPreviousOption: $('#rollbackPreviousOption'),
             showQuickMetricsOption: $('#showQuickMetricsOption'),
+            metricsModal: $('#metricsModal'),
+            metricEditedToday: $('#metricEditedToday'),
+            metricEditedYesterday: $('#metricEditedYesterday'),
+            metricTopShift: $('#metricTopShift'),
+            metricRevToContact: $('#metricRevToContact'),
+            metricContactToJugando: $('#metricContactToJugando'),
+            metricLastBatchCount: $('#metricLastBatchCount'),
+            metricsDateLabel: $('#metricsDateLabel'),
+            metricsFilterLastBatchBtn: $('#metricsFilterLastBatchBtn'),
+            metricsDeleteLastBatchBtn: $('#metricsDeleteLastBatchBtn'),
             updateStatusText: $('#updateStatusText'),
             updateProgressFill: $('#updateProgressFill'),
             perfDebugToggle: $('#perfDebugToggle'),
@@ -2941,6 +2987,7 @@
             const origin = elements.originInput.value.trim() || 'Sin especificar';
             let totalNewContacts = 0;
             let totalMerged = 0;
+            let totalRenamedCleanup = 0;
             const batchId = `imp_${Date.now()}`;
             const batchFiles = [];
 
@@ -2967,6 +3014,7 @@
                 const nowIso = new Date().toISOString();
                 let fileNewContacts = 0;
                 let fileMerged = 0;
+                let fileRenamedCleanup = 0;
                 const phoneIndex = new Map();
                 const nameIndex = new Map();
                 for (const existingContact of AppState.contacts) {
@@ -2995,6 +3043,19 @@
                             touched = true;
                         }
                         const previousOrigin = (existingContact.origin || '').trim();
+                        const previousName = (existingContact.name || '').trim();
+                        const incomingName = (newContact.name || '').trim();
+                        if (incomingName && normalizeName(incomingName) !== normalizeName(previousName)) {
+                            existingContact.name = incomingName;
+                            if (!Array.isArray(existingContact.previousNames)) existingContact.previousNames = [];
+                            existingContact.previousNames.unshift({ at: nowIso, from: previousName || '(vacío)', to: incomingName, file: file.name });
+                            existingContact.previousNames = existingContact.previousNames.slice(0, 40);
+                            existingContact.cleanupLabel = 'contactos a borrar';
+                            existingContact.markedForCleanup = true;
+                            fileRenamedCleanup++;
+                            totalRenamedCleanup++;
+                            touched = true;
+                        }
                         if (origin && previousOrigin !== origin) {
                             existingContact.origin = origin;
                             if (!Array.isArray(existingContact.originHistory)) existingContact.originHistory = [];
@@ -3040,7 +3101,7 @@
                     }
                 }
 
-                addToHistory('Importación de archivo', `${file.name}: +${fileNewContacts} nuevos / ${fileMerged} actualizados`);
+                addToHistory('Importación de archivo', `${file.name}: +${fileNewContacts} nuevos / ${fileMerged} actualizados / ${fileRenamedCleanup} renombrados (contactos a borrar)`);
                 console.info('[import] merge done', { file: file.name, nuevos: fileNewContacts, actualizados: fileMerged });
             }
 
@@ -3060,8 +3121,8 @@
             setLoadingState(false, 'Listo', 100, false);
             showNotification(
                 AppState.importCancelRequested
-                    ? `Importación cancelada. ${totalNewContacts} nuevos, ${totalMerged} actualizados`
-                    : `✅ ${totalNewContacts} contactos nuevos, ${totalMerged} actualizados`,
+                    ? `Importación cancelada. ${totalNewContacts} nuevos, ${totalMerged} actualizados, ${totalRenamedCleanup} renombrados`
+                    : `✅ ${totalNewContacts} nuevos, ${totalMerged} actualizados, ${totalRenamedCleanup} renombrados`,
                 AppState.importCancelRequested ? 'warning' : 'success'
             );
             console.info('[import] complete', { ms: Date.now() - importStarted, newContacts: totalNewContacts, merged: totalMerged });
@@ -5539,19 +5600,53 @@
                     const topShift = Object.entries(byShift).sort((a,b) => b[1]-a[1])[0];
                     const topShiftText = topShift ? `${topShift[0].toUpperCase()} (${topShift[1]})` : 'sin datos';
 
-                    alert([
-                        `Métricas rápidas (${today})`,
-                        `• Contactos trabajados hoy: ${editedToday}`,
-                        `• Contactos trabajados ayer: ${editedYesterday}`,
-                        `• Turno con mayor actividad hoy: ${topShiftText}`,
-                        `• Revisado → Contactado (hoy): ${revToContact}`,
-                        `• Contactado → Jugando (hoy): ${contactToJugando}`,
-                        `• Contactos de la última subida: ${lastBatchCount}`,
-                        `• Contactos de la subida anterior: ${prevBatchCount}`,
-                        `• Filtro disponible: Origen > Última subida`
-                    ].join('\n'));
+                    if (elements.metricsDateLabel) elements.metricsDateLabel.textContent = `Métricas del día ${today}`;
+                    if (elements.metricEditedToday) elements.metricEditedToday.textContent = String(editedToday);
+                    if (elements.metricEditedYesterday) elements.metricEditedYesterday.textContent = String(editedYesterday);
+                    if (elements.metricTopShift) elements.metricTopShift.textContent = topShiftText;
+                    if (elements.metricRevToContact) elements.metricRevToContact.textContent = String(revToContact);
+                    if (elements.metricContactToJugando) elements.metricContactToJugando.textContent = String(contactToJugando);
+                    if (elements.metricLastBatchCount) elements.metricLastBatchCount.textContent = `${lastBatchCount} / ${prevBatchCount}`;
+
+                    if (elements.metricsModal) elements.metricsModal.classList.add('active');
                 };
             }
+
+            if (elements.metricsFilterLastBatchBtn) {
+                elements.metricsFilterLastBatchBtn.onclick = () => {
+                    AppState.originFilter = '__last_upload__';
+                    if (elements.originFilter) elements.originFilter.value = '__last_upload__';
+                    AppState.currentPage = 1;
+                    render();
+                    showNotification('Filtro aplicado: última subida', 'info');
+                };
+            }
+
+            if (elements.metricsDeleteLastBatchBtn) {
+                elements.metricsDeleteLastBatchBtn.onclick = () => {
+                    if (!AppState.lastImportBatchId) {
+                        showNotification('No hay última subida para borrar', 'warning');
+                        return;
+                    }
+                    const count = AppState.contacts.filter(c => c.lastImportBatchId === AppState.lastImportBatchId).length;
+                    if (!count) {
+                        showNotification('No hay contactos de la última subida', 'warning');
+                        return;
+                    }
+                    const ok = confirm(`¿Borrar completamente ${count} contactos de la última subida?`);
+                    if (!ok) return;
+                    AppState.contacts = AppState.contacts.filter(c => c.lastImportBatchId !== AppState.lastImportBatchId);
+                    addToHistory('Borrado por métricas', `Se eliminaron ${count} contactos de la última subida`);
+                    AppState.lastImportBatchId = AppState.previousImportBatchId || '';
+                    localStorage.setItem('lastImportBatchId', AppState.lastImportBatchId);
+                    detectDuplicates();
+                    saveData();
+                    render();
+                    showNotification(`Eliminados ${count} contactos de la última subida`, 'success');
+                };
+            }
+
+            if ($('#closeMetricsModal')) $('#closeMetricsModal').onclick = () => $('#metricsModal').classList.remove('active');
             $('#closeUserOptionsModal').onclick = () => elements.userOptionsModal.classList.remove('active');
 
             elements.searchInput.oninput = (e) => {
@@ -5715,8 +5810,11 @@
             if (elements.selectFilteredBtn) {
                 elements.selectFilteredBtn.onclick = () => {
                     applyFilters();
-                    AppState.filteredContacts.forEach(c => AppState.selectedContacts.add(c.id));
-                    showNotification(`Seleccionados ${AppState.filteredContacts.length} contactos filtrados`, 'success');
+                    const start = (AppState.currentPage - 1) * AppState.itemsPerPage;
+                    const end = start + AppState.itemsPerPage;
+                    const visibleContacts = AppState.filteredContacts.slice(start, end);
+                    visibleContacts.forEach(c => AppState.selectedContacts.add(c.id));
+                    showNotification(`Seleccionados ${visibleContacts.length} contactos visibles`, 'success');
                     updateBulkActionsBar();
                     render();
                 };
@@ -6023,7 +6121,7 @@
                     touchContactEdit(contact, 'modal_edit');
                     AppState.lastEditedContact = contact.id;
                     const newSnapshot = `${contact.name} | ${contact.phone || 'sin teléfono'} | ${contact.origin || 'Manual'} | ${contact.status || 'sin revisar'}`;
-                    addToHistory('Contacto editado', `${oldSnapshot} → ${newSnapshot}`, editing.id);
+                    addToHistory('Contacto editado', `${oldSnapshot} → ${newSnapshot}`, contact.id);
                     detectDuplicates();
                     saveData();
                     render();
@@ -6188,7 +6286,7 @@
             const turnoManana = contacts.filter(c => c.origin && c.origin.toLowerCase().includes('mañana')).map(c => c.name);
             const turnoTarde = contacts.filter(c => c.origin && c.origin.toLowerCase().includes('tarde')).map(c => c.name);
             const turnoNoche = contacts.filter(c => c.origin && c.origin.toLowerCase().includes('noche')).map(c => c.name);
-            const aBorrar = contacts.filter(c => c.status === 'no interesado').map(c => c.name);
+            const aBorrar = contacts.filter(c => c.status === 'no interesado' || c.markedForCleanup).map(c => c.name);
 
             const maxLength = Math.max(contacts.length, yaContactados.length, recuperados.length, actualmenteCargando.length, turnoManana.length, turnoTarde.length, turnoNoche.length, aBorrar.length);
             
@@ -6219,6 +6317,27 @@
                 ];
                 csvContent += row.join(',') + '\n';
             }
+
+            const shiftTotals = { tm: 0, tt: 0, tn: 0 };
+            contacts.forEach((c) => {
+                const key = String(c.shiftReviewedByShift || '').toLowerCase();
+                if (shiftTotals[key] !== undefined) shiftTotals[key]++;
+            });
+            const originsCount = {};
+            contacts.forEach((c) => {
+                const o = (c.origin || 'Sin origen').toString();
+                originsCount[o] = (originsCount[o] || 0) + 1;
+            });
+            csvContent += '\n\n';
+            csvContent += 'META_LOG,TIPO,VALOR\n';
+            csvContent += `META_LOG,exportado_en,${formatCsvField(new Date().toISOString())}\n`;
+            csvContent += `META_LOG,total_contactos,${contacts.length}\n`;
+            csvContent += `META_LOG,turno_manana,${shiftTotals.tm}\n`;
+            csvContent += `META_LOG,turno_tarde,${shiftTotals.tt}\n`;
+            csvContent += `META_LOG,turno_noche,${shiftTotals.tn}\n`;
+            Object.entries(originsCount).forEach(([originName, qty]) => {
+                csvContent += `META_LOG,origen_${formatCsvField(originName)},${qty}\n`;
+            });
 
             downloadFile(csvContent, `planilla_exportada_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv;charset=utf-8;');
             showNotification('Exportación completada con teléfonos', 'success');

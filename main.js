@@ -37,22 +37,24 @@ function getErrorLogPath() {
 }
 
 function getUpdateCacheDir() {
-  return path.join(app.getPath('userData'), 'update-cache');
+  return path.join(app.getPath('userData'), 'update-cache', 'installers');
 }
 
 async function appendErrorLog(scope, error, extra = {}) {
   try {
     const err = normalizeError(error);
-    const line = JSON.stringify({
-      at: new Date().toISOString(),
-      scope,
-      message: err.message,
-      name: err.name,
-      stack: err.stack,
-      code: err.code,
-      ...extra
-    });
-    await fs.appendFile(getErrorLogPath(), `${line}\n`, 'utf8');
+    const at = new Date().toISOString();
+    const pretty = [
+      '============================================================',
+      `[${at}] ${scope}`,
+      `Mensaje: ${err.message || 'Sin mensaje'}`,
+      `Tipo: ${err.name || 'Error'}`,
+      `Codigo: ${err.code || '-'}`,
+      err.stack ? `Stack:\n${err.stack}` : 'Stack: -',
+      `Extra: ${Object.keys(extra || {}).length ? JSON.stringify(extra, null, 2) : '-'}`,
+      ''
+    ].join('\n');
+    await fs.appendFile(getErrorLogPath(), pretty, 'utf8');
   } catch (_e) {
     // best effort log
   }
