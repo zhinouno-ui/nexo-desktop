@@ -1342,6 +1342,13 @@
         .quick-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; border-top:1px solid rgba(148,163,184,.22); padding-top:10px; }
         .quick-tools .btn { padding: 10px 12px; font-size: .9rem; }
         .shift-tag { font-size:.72rem; padding:2px 8px; border-radius:999px; border:1px solid rgba(148,163,184,.35); color:#cbd5e1; }
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
 
         .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
         .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
@@ -6357,7 +6364,9 @@
                         const h1 = document.querySelector('#uploadScreen h1');
                         if (h1) h1.textContent = `Gestor de Contactos Masivo · v${version}`;
                     }
-                } catch (e) { console.warn('No se pudo leer versión de app', e); }
+                    const runtimeHash = await window.electronAPI?.getRuntimeHash?.();
+                    AppState.runtimeHash = runtimeHash?.hash || '';
+                } catch (e) { console.warn('No se pudo leer versión/hash de app', e); }
                 window.addEventListener('nexo-store-error', (event) => {
                     if (event && event.detail) showNotification(event.detail, 'warning');
                 });

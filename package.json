@@ -26,13 +26,13 @@
       "preload.js",
       "renderer/**/*"
     ],
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "zhinouno-ui",
-        "repo": "nexo-desktop",
-        "releaseType": "release"
-      }
+  "publish": [
+  {
+    "provider": "github",
+    "owner": "zhinouno-ui",
+    "repo": "Nexo.exe",
+    "releaseType": "release"
+  }
     ],
     "win": {
       "target": [
