@@ -30,7 +30,7 @@
       {
         "provider": "github",
         "owner": "zhinouno-ui",
-        "repo": "Nexo.exe",
+        "repo": "nexo-desktop",
         "releaseType": "release"
       }
     ],
