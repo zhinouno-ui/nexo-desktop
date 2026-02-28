@@ -60,7 +60,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
    git tag v1.1.15
    git push origin v1.1.15
    ```
-4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest`, **sincroniza versión desde el tag** (`vX.Y.Z`) y genera el Release automáticamente.
+4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest` y genera/publica el Release automáticamente desde la versión definida en `package.json`.
 5. Verificar que el Release tenga assets:
    - instalador NSIS (`*.exe`)
    - `latest.yml`
@@ -69,8 +69,6 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 6. Instalar una versión anterior en las PCs y abrir app para detectar la nueva.
 
 > Importante: **subir archivos al repo (commits) NO sirve para auto-update**. `electron-updater` busca metadatos/artefactos en **GitHub Releases**.
-
-> Control de seguridad: el workflow valida que el instalador generado incluya exactamente la versión del tag; si no coincide, falla el release.
 
 > El Release debe incluir sí o sí: instalador `.exe`, `latest.yml` y `*.blockmap` para que `electron-updater` funcione.
 
@@ -116,7 +114,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 ## Rollback y logs
 
-- Se guarda cache de instaladores descargados en `AppData\Roaming\Nexo\update-cache\installers`.
+- Se guarda cache de instaladores descargados en `AppData\Roaming\Nexo\updates-cache`.
 - Desde Ajustes podés intentar `Volver a versión anterior` (usa instalador cacheado local).
 - Log de errores en `AppData\Roaming\Nexo\nexo-error.log`.
 - Se bloquea instalación automática cuando un instalador pesa menos de 10MB o más de 500MB (requiere confirmación manual para forzar).
@@ -136,19 +134,6 @@ Resumen: **8/8 implementadas** y reforzadas en esta base.
 
 
 
-## Verificación rápida de versión antes de publicar
-
-Si te aparece un build con versión vieja (por ejemplo `1.1.13`), ejecutá:
-
-```bash
-npm run version:sync
-npm run version:verify
-```
-
-- `version:sync` toma la versión del tag `vX.Y.Z` apuntando a `HEAD`.
-- `version:verify` valida que `package.json` y `package-lock.json` queden alineados.
-
-
 
 ## Perfiles multi-base (1.1.15)
 
@@ -156,3 +141,12 @@ npm run version:verify
 - Puede importar múltiples CSV creando/seleccionando perfil por archivo.
 - Cada contacto guarda `profileId` para separar bases en la misma instalación.
 - Cada import crea snapshot local por perfil (`bk_profile_*`) para recuperación rápida.
+
+## Release manual simplificado
+
+```bash
+npm run release
+```
+
+Ese comando ejecuta: build Windows NSIS, crea tag `v<version>`, hace push y publica release con `gh`.
+

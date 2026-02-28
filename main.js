@@ -4,7 +4,7 @@ const fssync = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
-const { autoUpdater, initUpdater, checkForUpdatesWithFallback, ensureVersionInstallerCached, RELEASE_OWNER, RELEASE_REPO } = require('./update-manager');
+const { autoUpdater, initUpdater, checkForUpdatesWithFallback, ensureVersionInstallerCached, RELEASE_OWNER, RELEASE_REPO, getUpdatesCacheDir } = require('./update-manager');
 
 const MIN_UPDATE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_UPDATE_SIZE_BYTES = 500 * 1024 * 1024;
@@ -35,7 +35,7 @@ function getErrorLogPath() {
 }
 
 function getUpdateCacheDir() {
-  return path.join(app.getPath('userData'), 'update-cache', 'installers');
+  return getUpdatesCacheDir();
 }
 
 async function appendErrorLog(scope, error, extra = {}) {
@@ -153,7 +153,6 @@ function createUpdateAssistantWindow(meta = {}) {
   <body><div class="card"><h2>Asistente de actualización</h2><div id="m">Preparando actualización…</div><div class="bar"><div id="f" class="fill"></div></div><p id="p">0%</p><pre id="l"></pre><button id="open" style="display:none">Abrir Nexo actualizado</button></div>
   <script>
     const { spawn } = require('child_process');
-const { autoUpdater, initUpdater, checkForUpdatesWithFallback, ensureVersionInstallerCached, RELEASE_OWNER, RELEASE_REPO } = require('./update-manager');
     const installer = ${encodedInstaller};
     const version = ${encodedVersion};
     const msg = document.getElementById('m');
@@ -394,7 +393,7 @@ async function cacheDownloadedInstaller(installerPath, version) {
     await fs.mkdir(cacheDir, { recursive: true });
     const safeVersion = String(version || detectVersionFromName(installerPath) || 'unknown').replace(/[^\d.]/g, '') || 'unknown';
     const ext = path.extname(installerPath) || '.exe';
-    const target = path.join(cacheDir, `Nexo-${safeVersion}-cached${ext}`);
+    const target = path.join(cacheDir, `Nexo-${safeVersion}${ext}`);
     await fs.copyFile(installerPath, target);
     return target;
   } catch (error) {

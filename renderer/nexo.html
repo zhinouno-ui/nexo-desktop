@@ -1402,6 +1402,19 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v { font-size:1.2rem; font-weight:800; margin-top:4px; }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">

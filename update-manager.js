@@ -7,6 +7,15 @@ const { app, dialog, shell } = require('electron');
 
 const RELEASE_OWNER = 'zhinouno-ui';
 const RELEASE_REPO = 'nexo-desktop';
+const RELEASES_URL = `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases/latest`;
+
+const updaterLogger = {
+  info: (...args) => console.log('[updater]', ...args),
+  warn: (...args) => console.warn('[updater]', ...args),
+  error: (...args) => console.error('[updater]', ...args)
+};
+
+autoUpdater.logger = updaterLogger;
 
 function githubApi(pathname) {
   return `https://api.github.com/repos/${RELEASE_OWNER}/${RELEASE_REPO}${pathname}`;
@@ -30,7 +39,7 @@ function downloadFile(url, destPath) {
     https.get(url, { headers: { 'User-Agent': 'nexo-desktop-updater' } }, (res) => {
       if (res.statusCode && res.statusCode >= 400) {
         file.close();
-        reject(new Error(`HTTP ${res.statusCode} al descargar backup`));
+        reject(new Error(`HTTP ${res.statusCode} al descargar instalador`));
         return;
       }
       res.pipe(file);
@@ -43,6 +52,10 @@ function downloadFile(url, destPath) {
       reject(error);
     });
   });
+}
+
+async function openManualReleaseFallback() {
+  await shell.openExternal(RELEASES_URL);
 }
 
 async function fallbackUpdate({ onStatus = () => {}, onErrorLog = async () => {} } = {}) {
@@ -62,19 +75,18 @@ async function fallbackUpdate({ onStatus = () => {}, onErrorLog = async () => {}
 
     onStatus('fallback-available', { latest, current, message: `Nueva versión ${latest} detectada por fallback.` });
 
-    if (asset?.browser_download_url) {
-      const result = await dialog.showMessageBox({
-        type: 'info',
-        title: 'Nueva versión disponible',
-        message: `Hay una nueva versión (${latest}) disponible.`,
-        buttons: ['Descargar manual', 'Cerrar'],
-        defaultId: 0,
-        cancelId: 1
-      });
+    const result = await dialog.showMessageBox({
+      type: 'info',
+      title: 'Nueva versión disponible',
+      message: `Hay una nueva versión (${latest}) disponible.`,
+      buttons: ['Descargar manual', 'Cerrar'],
+      defaultId: 0,
+      cancelId: 1
+    });
 
-      if (result.response === 0) {
-        await shell.openExternal(asset.browser_download_url);
-      }
+    if (result.response === 0) {
+      if (asset?.browser_download_url) await shell.openExternal(asset.browser_download_url);
+      else await openManualReleaseFallback();
     }
 
     return { ok: true, latest, current, updateAvailable: true };
@@ -85,13 +97,17 @@ async function fallbackUpdate({ onStatus = () => {}, onErrorLog = async () => {}
   }
 }
 
-async function ensureVersionInstallerCached(version, cacheDir, { onErrorLog = async () => {} } = {}) {
+function getUpdatesCacheDir() {
+  return path.join(app.getPath('userData'), 'updates-cache');
+}
+
+async function ensureVersionInstallerCached(version, cacheDir = getUpdatesCacheDir(), { onErrorLog = async () => {} } = {}) {
   try {
     const safeVersion = String(version || '').trim().replace(/^v/, '');
     if (!safeVersion) return null;
 
     await fs.mkdir(cacheDir, { recursive: true });
-    const targetPath = path.join(cacheDir, `Nexo-${safeVersion}-backup.exe`);
+    const targetPath = path.join(cacheDir, `Nexo-${safeVersion}.exe`);
     if (fssync.existsSync(targetPath)) return targetPath;
 
     const release = await requestJson(githubApi(`/releases/tags/v${safeVersion}`));
@@ -123,14 +139,17 @@ function initUpdater({ onStatus = () => {}, onErrorLog = async () => {}, onDownl
   autoUpdater.removeAllListeners();
 
   autoUpdater.on('checking-for-update', () => {
+    updaterLogger.info('checking-for-update');
     onStatus('checking', { message: 'Buscando actualización…' });
   });
 
   autoUpdater.on('update-available', (info) => {
+    updaterLogger.info('update-available', info?.version || 'unknown');
     onStatus('available', { version: info?.version || '', message: `Nueva versión detectada: ${info?.version || ''}` });
   });
 
   autoUpdater.on('update-not-available', (info) => {
+    updaterLogger.info('update-not-available', info?.version || app.getVersion());
     onStatus('not-available', { version: info?.version || app.getVersion(), message: 'Ya estás en la última versión' });
   });
 
@@ -139,10 +158,12 @@ function initUpdater({ onStatus = () => {}, onErrorLog = async () => {}, onDownl
   });
 
   autoUpdater.on('update-downloaded', async (info) => {
+    updaterLogger.info('update-downloaded', info?.version || 'unknown');
     await onDownloaded(info);
   });
 
   autoUpdater.on('error', async (error) => {
+    updaterLogger.error('autoUpdater error', error?.message || error);
     await onErrorLog('autoUpdater', error);
     onStatus('error', { message: `Updater oficial falló: ${error?.message || error}. Activando fallback…` });
     await fallbackUpdate({ onStatus, onErrorLog });
@@ -165,6 +186,8 @@ module.exports = {
   fallbackUpdate,
   checkForUpdatesWithFallback,
   ensureVersionInstallerCached,
+  getUpdatesCacheDir,
+  openManualReleaseFallback,
   RELEASE_OWNER,
   RELEASE_REPO
 };
