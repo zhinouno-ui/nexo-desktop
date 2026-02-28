@@ -47,18 +47,18 @@ Muestra estados:
 `package.json` usa `build.publish` con GitHub:
 
 - `owner: zhinouno-ui`
-- `repo: Nexo.exe`
+- `repo: nexo-desktop`
 
 Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHub en `package.json`.
 
 ## Flujo correcto de publicación (OBLIGATORIO para updater)
 
-1. Subir versión en `package.json` (ej. `1.1.12`).
+1. Subir versión en `package.json` (ej. `1.1.14`).
 2. Commit y push a rama principal.
 3. Crear y subir tag de release:
    ```bash
-   git tag v1.1.12
-   git push origin v1.1.12
+   git tag v1.1.14
+   git push origin v1.1.14
    ```
 4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest`, **sincroniza versión desde el tag** (`vX.Y.Z`) y genera el Release automáticamente.
 5. Verificar que el Release tenga assets:
@@ -84,7 +84,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 ## Release automatizado con GitHub Actions
 
 - Workflow: `.github/workflows/release.yml`.
-- Trigger: push de tags `v*.*.*` (ej. `v1.1.12`).
+- Trigger: push de tags `v*.*.*` (ej. `v1.1.14`).
 - Build en `windows-latest` para generar NSIS real para Windows.
 - Publica Release con nombre `Nexo vX.Y.Z` y sube automáticamente los assets de `nexo-desktop/dist`.
 
@@ -105,7 +105,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 ## Descarga manual (seguro)
 
-- En **Ajustes** existe la opción para abrir `https://github.com/zhinouno-ui/Nexo.exe/releases/latest` como fallback manual.
+- En **Ajustes** existe la opción para abrir `https://github.com/zhinouno-ui/nexo-desktop/releases/latest` como fallback manual.
 
 ## Exportación mejorada
 
@@ -116,7 +116,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 ## Rollback y logs
 
-- Se guarda cache de instaladores descargados en `AppData\Roaming\Nexo\update-cache`.
+- Se guarda cache de instaladores descargados en `AppData\Roaming\Nexo\update-cache\installers`.
 - Desde Ajustes podés intentar `Volver a versión anterior` (usa instalador cacheado local).
 - Log de errores en `AppData\Roaming\Nexo\nexo-error.log`.
 - Se bloquea instalación automática cuando un instalador pesa menos de 10MB o más de 500MB (requiere confirmación manual para forzar).
@@ -133,4 +133,18 @@ Resumen: **8/8 implementadas** y reforzadas en esta base.
 - [x] Verificador de update sospechosa por tamaño (`<10MB` o `>500MB`) con confirmación para forzar.
 - [x] Limpieza de duplicación visual de storage en estado de guardado.
 - [x] Refuerzo de origen: en reimportación de contacto existente se actualiza al origen nuevo y se registra historial de origen por usuario.
+
+
+
+## Verificación rápida de versión antes de publicar
+
+Si te aparece un build con versión vieja (por ejemplo `1.1.13`), ejecutá:
+
+```bash
+npm run version:sync
+npm run version:verify
+```
+
+- `version:sync` toma la versión del tag `vX.Y.Z` apuntando a `HEAD`.
+- `version:verify` valida que `package.json` y `package-lock.json` queden alineados.
 
