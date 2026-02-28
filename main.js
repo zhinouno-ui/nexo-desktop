@@ -1,12 +1,14 @@
 const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
-const { autoUpdater } = require('electron-updater');
 const fs = require('fs/promises');
 const fssync = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
+const { autoUpdater, initUpdater, checkForUpdatesWithFallback, ensureVersionInstallerCached, RELEASE_OWNER, RELEASE_REPO } = require('./update-manager');
 
 const MIN_UPDATE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_UPDATE_SIZE_BYTES = 500 * 1024 * 1024;
+const STABLE_TAG = 'v1.1.10';
 
 const DEFAULT_DB = {
   contactsData: [],
@@ -33,22 +35,24 @@ function getErrorLogPath() {
 }
 
 function getUpdateCacheDir() {
-  return path.join(app.getPath('userData'), 'update-cache');
+  return path.join(app.getPath('userData'), 'update-cache', 'installers');
 }
 
 async function appendErrorLog(scope, error, extra = {}) {
   try {
     const err = normalizeError(error);
-    const line = JSON.stringify({
-      at: new Date().toISOString(),
-      scope,
-      message: err.message,
-      name: err.name,
-      stack: err.stack,
-      code: err.code,
-      ...extra
-    });
-    await fs.appendFile(getErrorLogPath(), `${line}\n`, 'utf8');
+    const at = new Date().toISOString();
+    const pretty = [
+      '============================================================',
+      `[${at}] ${scope}`,
+      `Mensaje: ${err.message || 'Sin mensaje'}`,
+      `Tipo: ${err.name || 'Error'}`,
+      `Codigo: ${err.code || '-'}`,
+      err.stack ? `Stack:\n${err.stack}` : 'Stack: -',
+      `Extra: ${Object.keys(extra || {}).length ? JSON.stringify(extra, null, 2) : '-'}`,
+      ''
+    ].join('\n');
+    await fs.appendFile(getErrorLogPath(), pretty, 'utf8');
   } catch (_e) {
     // best effort log
   }
@@ -67,6 +71,124 @@ function normalizeError(error) {
 
 function perfLog(scope, message, extra = {}) {
   try { console.log(`[nexo:${scope}] ${message}`, extra); } catch (_) {}
+}
+
+function humanUpdaterError(error) {
+  const normalized = normalizeError(error);
+  const raw = `${normalized.code || ''} ${normalized.message || ''}`.toLowerCase();
+  if (raw.includes('enetunreach') || raw.includes('econnrefused') || raw.includes('timed out') || raw.includes('network')) {
+    return 'Sin conexión de red o el servidor de updates no respondió.';
+  }
+  if (raw.includes('certificate') || raw.includes('self signed')) {
+    return 'Problema de certificado TLS al validar la descarga.';
+  }
+  if (raw.includes('403') || raw.includes('forbidden')) {
+    return 'Acceso denegado al release (403). Revisá permisos del repositorio/release.';
+  }
+  if (raw.includes('404') || raw.includes('not found') || raw.includes('no published versions')) {
+    return 'No se encontró release disponible para este canal/arquitectura (404).';
+  }
+  if (raw.includes('sha') || raw.includes('checksum') || raw.includes('hash')) {
+    return 'La integridad del instalador falló (hash/checksum inválido).';
+  }
+  if (raw.includes('ebusy') || raw.includes('eperm') || raw.includes('access is denied')) {
+    return 'No se pudo escribir/reemplazar archivos (archivo bloqueado o sin permisos).';
+  }
+  if (raw.includes('enomem') || raw.includes('out of memory')) {
+    return 'Memoria insuficiente para procesar la actualización.';
+  }
+  if (raw.includes('enospc') || raw.includes('no space')) {
+    return 'Espacio en disco insuficiente para descargar o instalar la actualización.';
+  }
+  return normalized.message || 'Falló el actualizador por una causa no clasificada.';
+}
+
+async function computeFileSha512(filePath) {
+  const hash = crypto.createHash('sha512');
+  const file = await fs.open(filePath, 'r');
+  try {
+    const stream = file.createReadStream();
+    await new Promise((resolve, reject) => {
+      stream.on('data', (chunk) => hash.update(chunk));
+      stream.on('error', reject);
+      stream.on('end', resolve);
+    });
+  } finally {
+    await file.close();
+  }
+  return hash.digest('base64');
+}
+
+
+function getStableReleaseUrl() {
+  return `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases/tag/${STABLE_TAG}`;
+}
+
+function parseArgValue(flag) {
+  const prefix = `${flag}=`;
+  const arg = process.argv.find((x) => typeof x === 'string' && x.startsWith(prefix));
+  return arg ? arg.slice(prefix.length) : '';
+}
+
+function createUpdateAssistantWindow(meta = {}) {
+  const win = new BrowserWindow({
+    width: 560,
+    height: 420,
+    resizable: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: false,
+      sandbox: false,
+      nodeIntegration: true
+    }
+  });
+
+  const safeVersion = String(meta.version || '');
+  const safeInstaller = String(meta.installerPath || '');
+  const encodedInstaller = JSON.stringify(safeInstaller);
+  const encodedVersion = JSON.stringify(safeVersion);
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Asistente de actualización</title>
+  <style>body{font-family:Segoe UI,system-ui,sans-serif;background:#0f172a;color:#e2e8f0;padding:18px} .card{background:#1e293b;border-radius:14px;padding:16px;border:1px solid #334155} .bar{height:12px;background:#0b1220;border-radius:999px;overflow:hidden} .fill{height:100%;width:0%;background:linear-gradient(90deg,#3b82f6,#10b981);transition:width .25s ease} button{margin-top:12px;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:10px 14px;cursor:pointer} pre{white-space:pre-wrap;max-height:120px;overflow:auto;background:#0b1220;padding:10px;border-radius:8px} </style></head>
+  <body><div class="card"><h2>Asistente de actualización</h2><div id="m">Preparando actualización…</div><div class="bar"><div id="f" class="fill"></div></div><p id="p">0%</p><pre id="l"></pre><button id="open" style="display:none">Abrir Nexo actualizado</button></div>
+  <script>
+    const { spawn } = require('child_process');
+const { autoUpdater, initUpdater, checkForUpdatesWithFallback, ensureVersionInstallerCached, RELEASE_OWNER, RELEASE_REPO } = require('./update-manager');
+    const installer = ${encodedInstaller};
+    const version = ${encodedVersion};
+    const msg = document.getElementById('m');
+    const fill = document.getElementById('f');
+    const pct = document.getElementById('p');
+    const log = document.getElementById('l');
+    const openBtn = document.getElementById('open');
+    const set = (v,t) => { fill.style.width=v+'%'; pct.textContent=v+'%'; if(t) msg.textContent=t; };
+    const addLog = (x) => { log.textContent += (x+'\n'); };
+    const fake = [12,28,41,63,79,91];
+    let i=0;
+    const timer = setInterval(()=>{ if(i>=fake.length){clearInterval(timer); return;} set(fake[i], 'Instalando Nexo '+(version||'')); i++; }, 700);
+    try {
+      addLog('Ejecutando instalador en modo silencioso…');
+      const child = spawn(installer, ['/S'], { detached:false, stdio:'ignore', windowsHide:true });
+      child.on('exit', (code) => {
+        set(100, code === 0 ? 'Actualización finalizada' : 'Actualización terminó con advertencia');
+        addLog('Proceso instalador cerrado. Código: '+code);
+        openBtn.style.display = 'inline-block';
+      });
+      child.on('error', (e) => {
+        addLog('Error al ejecutar instalador: '+(e.message||e));
+        msg.textContent = 'Falló la actualización';
+      });
+    } catch (e) {
+      addLog('Error crítico: '+(e.message||e));
+      msg.textContent = 'Falló la actualización';
+    }
+    openBtn.onclick = () => {
+      try { spawn(process.execPath, [], { detached:true, stdio:'ignore', windowsHide:true }).unref(); } catch(_) {}
+      window.close();
+    };
+  </script></body></html>`;
+
+  win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 }
 
 function sendUpdaterStatus(status, payload = {}) {
@@ -152,6 +274,31 @@ function applyZoomReset() {
   return currentZoomFactor;
 }
 
+
+async function handleInternalUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  if (url.startsWith('nexo://rollback-previous')) {
+    try {
+      const candidate = await resolveRollbackInstaller();
+      if (!candidate) {
+        sendUpdaterStatus('error', { message: 'No hay versión anterior en cache para rollback.' });
+        return true;
+      }
+      await startInstallerAndQuit(candidate.fullPath);
+      return true;
+    } catch (error) {
+      await appendErrorLog('internal-url-rollback', error, { url });
+      sendUpdaterStatus('error', { message: `No se pudo iniciar rollback: ${error?.message || error}` });
+      return true;
+    }
+  }
+  if (url.startsWith('nexo://open-stable-110')) {
+    await shell.openExternal(getStableReleaseUrl());
+    return true;
+  }
+  return false;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -169,6 +316,10 @@ function createWindow() {
       shell.openExternal(url);
       return { action: 'deny' };
     }
+    if (url.startsWith('nexo://')) {
+      handleInternalUrl(url).catch((e) => appendErrorLog('windowOpenHandler', e, { url }));
+      return { action: 'deny' };
+    }
     return { action: 'allow' };
   });
 
@@ -176,6 +327,11 @@ function createWindow() {
     if (/whatsapp\.com|wa\.me/i.test(url)) {
       event.preventDefault();
       shell.openExternal(url);
+      return;
+    }
+    if (url.startsWith('nexo://')) {
+      event.preventDefault();
+      handleInternalUrl(url).catch((e) => appendErrorLog('will-navigate', e, { url }));
     }
   });
 
@@ -285,6 +441,8 @@ async function handleUpdateDownloaded(info) {
   let sizeBytes = 0;
   let suspicious = false;
   let suspicionReason = '';
+  let downloadedSha512 = '';
+  const expectedSha512 = info?.files?.[0]?.sha512 || info?.sha512 || '';
 
   try {
     if (downloadedFile) {
@@ -308,13 +466,37 @@ async function handleUpdateDownloaded(info) {
     }
   }
 
+  try {
+    if (downloadedFile) downloadedSha512 = await computeFileSha512(downloadedFile);
+  } catch (error) {
+    suspicious = true;
+    suspicionReason = `No se pudo calcular hash SHA512: ${error?.message || error}`;
+    await appendErrorLog('update-downloaded-hash', error, { downloadedFile, version });
+  }
+
+  if (!suspicious && expectedSha512 && downloadedSha512 && expectedSha512 !== downloadedSha512) {
+    suspicious = true;
+    suspicionReason = 'Hash SHA512 distinto al publicado en metadata del release.';
+  }
+
   const cachedPath = await cacheDownloadedInstaller(downloadedFile, version);
-  downloadedUpdateMeta = { version, downloadedFile, sizeBytes, suspicious, suspicionReason, cachedPath };
+  downloadedUpdateMeta = {
+    version,
+    downloadedFile,
+    sizeBytes,
+    suspicious,
+    suspicionReason,
+    cachedPath,
+    expectedSha512,
+    downloadedSha512
+  };
 
   if (suspicious) {
     sendUpdaterStatus('suspicious-update', {
       version,
       sizeBytes,
+      expectedSha512,
+      downloadedSha512,
       message: `⚠️ Update sospechosa: ${suspicionReason}`
     });
     await appendErrorLog('update-suspicious', new Error('Suspicious update package'), downloadedUpdateMeta);
@@ -324,42 +506,23 @@ async function handleUpdateDownloaded(info) {
     version,
     sizeBytes,
     suspicious,
+    expectedSha512,
+    downloadedSha512,
     message: suspicious ? 'Update descargada con advertencia. Revisá antes de instalar.' : 'Actualización lista. Reiniciar ahora'
   });
 }
 
 function setupAutoUpdater() {
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = false;
-
-  autoUpdater.on('checking-for-update', () => sendUpdaterStatus('checking'));
-  autoUpdater.on('update-available', (info) => {
-    sendUpdaterStatus('available', {
-      version: info?.version || '',
-      message: 'Descargando actualización…'
-    });
-  });
-  autoUpdater.on('update-not-available', (info) => {
-    sendUpdaterStatus('not-available', {
-      version: info?.version || app.getVersion(),
-      message: 'Estás en la última versión'
-    });
-  });
-  autoUpdater.on('download-progress', (progress) => {
-    sendUpdaterStatus('download-progress', {
-      percent: Math.round(progress?.percent || 0)
-    });
-  });
-  autoUpdater.on('update-downloaded', (info) => {
-    handleUpdateDownloaded(info).catch(async (error) => {
-      await appendErrorLog('update-downloaded', error, { info: info || {} });
-      sendUpdaterStatus('error', { message: `Error validando update descargada: ${error?.message || error}` });
-    });
-  });
-  autoUpdater.on('error', (error) => {
-    const readable = error?.message || String(error);
-    appendErrorLog('autoUpdater', error).catch(() => {});
-    sendUpdaterStatus('error', { message: `Error de actualización: ${readable}` });
+  initUpdater({
+    feed: { owner: RELEASE_OWNER, repo: RELEASE_REPO },
+    onStatus: (status, payload = {}) => sendUpdaterStatus(status, payload),
+    onErrorLog: async (scope, error, extra = {}) => {
+      const readable = humanUpdaterError(error);
+      await appendErrorLog(scope, error, { classifiedMessage: readable, ...extra });
+    },
+    onDownloaded: async (info) => {
+      await handleUpdateDownloaded(info);
+    }
   });
 }
 
@@ -420,6 +583,16 @@ ipcMain.handle('store:backupNow', async () => {
 });
 ipcMain.handle('app:openDataFolder', async () => shell.openPath(app.getPath('userData')));
 ipcMain.handle('app:getVersion', async () => app.getVersion());
+ipcMain.handle('app:getRuntimeHash', async () => {
+  try {
+    if (!app.isPackaged) return { hash: '', note: 'dev-mode' };
+    const hash = await computeFileSha512(process.execPath);
+    return { hash };
+  } catch (error) {
+    await appendErrorLog('app:getRuntimeHash', error);
+    return { hash: '', error: error?.message || String(error) };
+  }
+});
 ipcMain.handle('app:getErrorLogPath', async () => getErrorLogPath());
 ipcMain.handle('app:openErrorLog', async () => {
   const p = getErrorLogPath();
@@ -456,8 +629,11 @@ ipcMain.handle('updater:check', async () => {
     return { ok: false, message: 'Not packaged' };
   }
   try {
-    await autoUpdater.checkForUpdatesAndNotify();
-    return { ok: true };
+    const result = await checkForUpdatesWithFallback({
+      onErrorLog: async (scope, error, extra = {}) => appendErrorLog(scope, error, extra),
+      onStatus: (status, payload = {}) => sendUpdaterStatus(status, payload)
+    });
+    return result?.ok ? { ok: true } : { ok: false, message: result?.message || 'Fallback sin éxito' };
   } catch (error) {
     const message = error?.message || String(error);
     await appendErrorLog('updater:check', error);
@@ -475,8 +651,29 @@ ipcMain.handle('updater:install', async (_event, payload) => {
       message: downloadedUpdateMeta.suspicionReason || 'Update sospechosa detectada'
     };
   }
-  setImmediate(() => autoUpdater.quitAndInstall(true, true));
-  return { ok: true };
+
+  const installerPath = downloadedUpdateMeta?.downloadedFile || '';
+  if (!installerPath || !fssync.existsSync(installerPath)) {
+    return { ok: false, message: 'No se encontró el instalador descargado para actualizar.' };
+  }
+
+  try {
+    const detached = spawn(process.execPath, [
+      '--update-assistant',
+      `--installer=${installerPath}`,
+      `--version=${downloadedUpdateMeta?.version || ''}`
+    ], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false
+    });
+    detached.unref();
+    setTimeout(() => app.quit(), 120);
+    return { ok: true };
+  } catch (error) {
+    await appendErrorLog('updater:install-assistant', error, { installerPath });
+    return { ok: false, message: `No se pudo abrir asistente de actualización: ${error?.message || error}` };
+  }
 });
 
 ipcMain.handle('updater:rollbackPrevious', async () => {
@@ -495,14 +692,27 @@ ipcMain.handle('updater:rollbackPrevious', async () => {
 });
 
 app.whenReady().then(async () => {
+  const installerArg = parseArgValue('--installer');
+  const versionArg = parseArgValue('--version');
+  const updateAssistantMode = process.argv.includes('--update-assistant');
+
+  if (updateAssistantMode) {
+    createUpdateAssistantWindow({ installerPath: installerArg, version: versionArg });
+    return;
+  }
+
   try { await readDb(); } catch (error) { console.warn('No se pudo precalentar cache local:', error?.message || error); }
   createWindow();
   setupAutoUpdater();
+  ensureVersionInstallerCached(app.getVersion(), getUpdateCacheDir(), { onErrorLog: appendErrorLog }).catch(() => {});
   if (!app.isPackaged) {
     sendUpdaterStatus('not-available', { message: 'Modo desarrollo: auto-update desactivado.' });
   } else {
     try {
-      await autoUpdater.checkForUpdatesAndNotify();
+      await checkForUpdatesWithFallback({
+        onErrorLog: async (scope, error, extra = {}) => appendErrorLog(scope, error, extra),
+        onStatus: (status, payload = {}) => sendUpdaterStatus(status, payload)
+      });
     } catch (error) {
       await appendErrorLog('autoUpdater-initial-check', error);
       sendUpdaterStatus('error', { message: `Error de actualización: ${error?.message || error}` });
