@@ -53,12 +53,12 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 ## Flujo correcto de publicación (OBLIGATORIO para updater)
 
-1. Subir versión en `package.json` (ej. `1.1.15`).
+1. Subir versión en `package.json` (ej. `1.1.16`).
 2. Commit y push a rama principal.
 3. Crear y subir tag de release:
    ```bash
-   git tag v1.1.15
-   git push origin v1.1.15
+   git tag v1.1.16
+   git push origin v1.1.16
    ```
 4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest` y genera/publica el Release automáticamente desde la versión definida en `package.json`.
 5. Verificar que el Release tenga assets:
@@ -82,7 +82,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 ## Release automatizado con GitHub Actions
 
 - Workflow: `.github/workflows/release.yml`.
-- Trigger: push de tags `v*.*.*` (ej. `v1.1.15`).
+- Trigger: push de tags `v*.*.*` (ej. `v1.1.16`).
 - Build en `windows-latest` para generar NSIS real para Windows.
 - Publica Release con nombre `Nexo vX.Y.Z` y sube automáticamente los assets de `nexo-desktop/dist`.
 
@@ -135,7 +135,7 @@ Resumen: **8/8 implementadas** y reforzadas en esta base.
 
 
 
-## Perfiles multi-base (1.1.15)
+## Perfiles multi-base (base)
 
 - Soporta hasta 8 perfiles (bases) desde la UI.
 - Puede importar múltiples CSV creando/seleccionando perfil por archivo.
@@ -155,5 +155,11 @@ Ese comando ejecuta: build Windows NSIS, crea tag `v<version>`, hace push y publ
 ## Diagnóstico rápido de updater
 
 - Atajo: `Ctrl+Shift+U` en la ventana principal para ver versión, canal, estado de `latest.yml`, cache y ruta de log.
-- Log persistente del updater: `AppData\Roaming\Nexo\logs\main.log`.
+- Log persistente del updater: `AppData\Roaming\Nexo\logs\updater.log`.
 - Cache de instaladores: se mantiene automáticamente en las **últimas 3 versiones** en `AppData\Roaming\Nexo\updates-cache`.
+
+
+## Registro de cambios por versión
+
+- A partir de `1.1.16` cada actualización debe documentar **qué cambió vs la versión anterior** en `CHANGELOG.md`.
+- Objetivo: facilitar pruebas regresivas y saber exactamente qué validar antes de publicar el próximo release.

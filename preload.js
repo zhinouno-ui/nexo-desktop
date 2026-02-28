@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   installUpdate: (options) => ipcRenderer.invoke('updater:install', options || {}),
   rollbackPreviousVersion: () => ipcRenderer.invoke('updater:rollbackPrevious'),
+  getUpdaterDiagnostics: () => ipcRenderer.invoke('updater:diagnostics'),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
   getRuntimeHash: () => ipcRenderer.invoke('app:getRuntimeHash'),
   getErrorLogPath: () => ipcRenderer.invoke('app:getErrorLogPath'),

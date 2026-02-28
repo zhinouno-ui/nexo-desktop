@@ -4,44 +4,21 @@ const fs = require('fs/promises');
 const fssync = require('fs');
 const { autoUpdater } = require('electron-updater');
 const { app, dialog, shell } = require('electron');
+const log = require('electron-log/main');
 
 const RELEASE_OWNER = 'zhinouno-ui';
 const RELEASE_REPO = 'nexo-desktop';
 const RELEASE_CHANNEL = 'latest';
-const RELEASES_URL = `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases/latest`;
+const RELEASES_URL = `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases`;
 
 function getUpdaterLogPath() {
-  return path.join(app.getPath('userData'), 'logs', 'main.log');
+  return path.join(app.getPath('userData'), 'logs', 'updater.log');
 }
 
-async function appendUpdaterLog(level, args) {
-  try {
-    const line = `[${new Date().toISOString()}] [${level}] ${args.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' ')}\n`;
-    const p = getUpdaterLogPath();
-    await fs.mkdir(path.dirname(p), { recursive: true });
-    await fs.appendFile(p, line, 'utf8');
-  } catch (_) {
-    // best effort
-  }
-}
-
-const updaterLogger = {
-  transports: { file: { level: 'info' } },
-  info: (...args) => {
-    console.log('[updater]', ...args);
-    appendUpdaterLog('info', args);
-  },
-  warn: (...args) => {
-    console.warn('[updater]', ...args);
-    appendUpdaterLog('warn', args);
-  },
-  error: (...args) => {
-    console.error('[updater]', ...args);
-    appendUpdaterLog('error', args);
-  }
-};
-
-autoUpdater.logger = updaterLogger;
+log.initialize();
+log.transports.file.level = 'info';
+log.transports.file.resolvePathFn = () => getUpdaterLogPath();
+autoUpdater.logger = log;
 
 function githubApi(pathname) {
   return `https://api.github.com/repos/${RELEASE_OWNER}/${RELEASE_REPO}${pathname}`;
@@ -99,6 +76,21 @@ function normalizeVersion(v) {
   return String(v || '').trim().replace(/^v/, '');
 }
 
+function compareVersions(a, b) {
+  const ap = normalizeVersion(a).split('.').map((n) => parseInt(n, 10) || 0);
+  const bp = normalizeVersion(b).split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i += 1) {
+    if ((ap[i] || 0) > (bp[i] || 0)) return 1;
+    if ((ap[i] || 0) < (bp[i] || 0)) return -1;
+  }
+  return 0;
+}
+
+function extractVersionFromName(name) {
+  const m = String(name || '').match(/(\d+\.\d+\.\d+)/);
+  return m ? m[1] : '0.0.0';
+}
+
 async function pruneCachedInstallers(cacheDir = getUpdatesCacheDir(), keep = 3) {
   try {
     await fs.mkdir(cacheDir, { recursive: true });
@@ -106,24 +98,25 @@ async function pruneCachedInstallers(cacheDir = getUpdatesCacheDir(), keep = 3) 
     const entries = [];
     for (const name of names) {
       if (!name.toLowerCase().endsWith('.exe')) continue;
-      const full = path.join(cacheDir, name);
-      const stat = await fs.stat(full).catch(() => null);
-      if (!stat) continue;
-      entries.push({ name, full, mtime: stat.mtimeMs || 0 });
+      entries.push({
+        name,
+        full: path.join(cacheDir, name),
+        version: extractVersionFromName(name)
+      });
     }
-    entries.sort((a, b) => b.mtime - a.mtime);
+    entries.sort((a, b) => compareVersions(b.version, a.version));
     const stale = entries.slice(Math.max(keep, 0));
     for (const item of stale) {
       await fs.unlink(item.full).catch(() => {});
     }
     return { ok: true, kept: entries.length - stale.length, removed: stale.length };
   } catch (error) {
-    updaterLogger.warn('pruneCachedInstallers failed', error?.message || String(error));
+    log.warn('pruneCachedInstallers failed', error?.message || String(error));
     return { ok: false, removed: 0, message: error?.message || String(error) };
   }
 }
 
-async function validateLatestReleaseAssets({ onStatus = () => {} } = {}) {
+async function validateLatestReleaseAssets({ currentVersion = app.getVersion(), onStatus = () => {} } = {}) {
   try {
     const release = await requestJson(githubApi('/releases/latest'));
     const version = normalizeVersion(release?.tag_name);
@@ -136,8 +129,7 @@ async function validateLatestReleaseAssets({ onStatus = () => {} } = {}) {
       return { ok: false, version, message: 'Release incompleto: faltan latest.yml, instalador .exe o blockmap.' };
     }
 
-    const ymlUrl = latestYml.browser_download_url;
-    const ymlText = await requestText(ymlUrl);
+    const ymlText = await requestText(latestYml.browser_download_url);
     const ymlVersion = (ymlText.match(/\bversion:\s*([\w.-]+)/i) || [])[1] || '';
     const ymlPath = (ymlText.match(/\bpath:\s*([^\n\r]+)/i) || [])[1] || '';
     const hasSha512 = /\bsha512:\s*.+/i.test(ymlText);
@@ -150,15 +142,15 @@ async function validateLatestReleaseAssets({ onStatus = () => {} } = {}) {
       return { ok: false, version, message: `latest.yml inconsistente: version ${ymlVersion} != tag ${version}` };
     }
 
+    if (compareVersions(version, currentVersion) <= 0) {
+      return { ok: false, version, message: `latest.yml no tiene una versión mayor a la actual (${currentVersion}).` };
+    }
+
     if (!String(installer.name || '').includes(String(ymlPath).trim())) {
       onStatus('warning', { message: 'latest.yml path no coincide exactamente con el asset principal.' });
     }
 
-    return {
-      ok: true,
-      version,
-      assets: { latestYml: latestYml.name, installer: installer.name, blockmap: blockmap.name }
-    };
+    return { ok: true, version, assets: { latestYml: latestYml.name, installer: installer.name, blockmap: blockmap.name } };
   } catch (error) {
     return { ok: false, message: `No se pudo validar latest.yml: ${error?.message || error}` };
   }
@@ -168,10 +160,9 @@ async function fallbackUpdate({ onStatus = () => {}, onErrorLog = async () => {}
   try {
     const current = app.getVersion();
     const release = await requestJson(githubApi('/releases/latest'));
-    const latestTag = String(release?.tag_name || '').trim();
-    const latest = latestTag.replace(/^v/, '');
+    const latest = normalizeVersion(release?.tag_name);
 
-    if (!latest || latest === current) {
+    if (!latest || compareVersions(latest, current) <= 0) {
       onStatus('not-available', { message: 'Ya estás en la última versión (fallback)' });
       return { ok: true, latest, current, updateAvailable: false };
     }
@@ -244,33 +235,27 @@ function initUpdater({ onStatus = () => {}, onErrorLog = async () => {}, onDownl
   });
 
   autoUpdater.removeAllListeners();
-
   autoUpdater.on('checking-for-update', () => {
-    updaterLogger.info('checking-for-update');
+    log.info('checking-for-update');
     onStatus('checking', { message: 'Buscando actualización…' });
   });
-
   autoUpdater.on('update-available', (info) => {
-    updaterLogger.info('update-available', info?.version || 'unknown');
+    log.info('update-available', info?.version || 'unknown');
     onStatus('available', { version: info?.version || '', message: `Nueva versión detectada: ${info?.version || ''}` });
   });
-
   autoUpdater.on('update-not-available', (info) => {
-    updaterLogger.info('update-not-available', info?.version || app.getVersion());
+    log.info('update-not-available', info?.version || app.getVersion());
     onStatus('not-available', { version: info?.version || app.getVersion(), message: 'Ya estás en la última versión' });
   });
-
   autoUpdater.on('download-progress', (progress) => {
     onStatus('download-progress', { percent: Math.round(progress?.percent || 0) });
   });
-
   autoUpdater.on('update-downloaded', async (info) => {
-    updaterLogger.info('update-downloaded', info?.version || 'unknown');
+    log.info('update-downloaded', info?.version || 'unknown');
     await onDownloaded(info);
   });
-
   autoUpdater.on('error', async (error) => {
-    updaterLogger.error('autoUpdater error', error?.message || error);
+    log.error('autoUpdater error', error?.message || error);
     await onErrorLog('autoUpdater', error);
     await onUpdaterError(error);
     onStatus('error', { message: `Updater oficial falló: ${error?.message || error}. Activando fallback…` });
@@ -280,34 +265,39 @@ function initUpdater({ onStatus = () => {}, onErrorLog = async () => {}, onDownl
 
 async function checkForUpdatesWithFallback({ onErrorLog = async () => {}, onStatus = () => {} } = {}) {
   try {
-    const rel = await validateLatestReleaseAssets({ onStatus });
+    const rel = await validateLatestReleaseAssets({ currentVersion: app.getVersion(), onStatus });
     if (!rel.ok) {
+      log.error('release validation failed', rel.message || 'unknown');
       onStatus('error', { message: rel.message || 'latest.yml inválido en release.' });
       return { ok: false, message: rel.message || 'latest.yml inválido' };
     }
     await autoUpdater.checkForUpdates();
-    return { ok: true, latestVersion: rel.version };
+    return { ok: true, latestVersion: rel.version, updateUrl: RELEASES_URL };
   } catch (error) {
     await onErrorLog('checkForUpdatesWithFallback', error);
     return fallbackUpdate({ onStatus, onErrorLog });
   }
 }
 
-async function getUpdaterDiagnostics() {
+async function getUpdaterDiagnostics(lastAttempt = {}) {
   const cacheDir = getUpdatesCacheDir();
   let files = [];
   try {
     const names = await fs.readdir(cacheDir);
     files = names.filter((n) => n.toLowerCase().endsWith('.exe'));
   } catch (_) {}
+
+  const latest = await validateLatestReleaseAssets({ currentVersion: app.getVersion() }).catch(() => ({ ok: false, message: 'No disponible' }));
   return {
     version: app.getVersion(),
+    latestVersion: latest?.version || '',
     repo: `${RELEASE_OWNER}/${RELEASE_REPO}`,
     channel: RELEASE_CHANNEL,
     updateUrl: RELEASES_URL,
     cacheDir,
     cacheInstallers: files,
-    logPath: getUpdaterLogPath()
+    logPath: getUpdaterLogPath(),
+    lastUpdateAttempt: lastAttempt
   };
 }
 

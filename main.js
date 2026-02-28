@@ -25,6 +25,7 @@ let currentZoomFactor = 1.0;
 let dbCache = null;
 let dbCacheLoadedAt = 0;
 let downloadedUpdateMeta = null;
+let lastUpdateAttempt = { at: null, stage: 'idle', ok: null, message: '' };
 
 function getDbPath() {
   return path.join(app.getPath('userData'), 'nexo-db.json');
@@ -39,7 +40,7 @@ function getUpdateCacheDir() {
 }
 
 function getCurrentVersionMetaPath() {
-  return path.join(getUpdateCacheDir(), 'current-version.json');
+  return path.join(app.getPath('userData'), 'current-version.json');
 }
 
 async function persistCurrentVersionMeta(extra = {}) {
@@ -519,11 +520,30 @@ async function handleUpdateDownloaded(info) {
   }
 
   const cachedPath = await cacheDownloadedInstaller(downloadedFile, version);
+  if (!cachedPath) {
+    suspicious = true;
+    suspicionReason = 'No se pudo guardar instalador en cache local.';
+  }
+
+  if (!suspicious && cachedPath) {
+    try {
+      downloadedSha512 = await computeFileSha512(cachedPath);
+      if (expectedSha512 && expectedSha512 !== downloadedSha512) {
+        suspicious = true;
+        suspicionReason = 'Hash SHA512 no coincide al validar desde cache local.';
+      }
+    } catch (error) {
+      suspicious = true;
+      suspicionReason = `No se pudo recalcular hash desde cache: ${error?.message || error}`;
+      await appendErrorLog('update-downloaded-cached-hash', error, { cachedPath, version });
+    }
+  }
+
   await pruneCachedInstallers(getUpdateCacheDir(), 3).catch(() => {});
 
   downloadedUpdateMeta = {
     version,
-    downloadedFile,
+    downloadedFile: cachedPath || downloadedFile,
     sizeBytes,
     suspicious,
     suspicionReason,
@@ -565,10 +585,19 @@ function setupAutoUpdater() {
       await handleUpdateDownloaded(info);
     },
     onUpdaterError: async (error) => {
+      const wasInstalling = lastUpdateAttempt?.stage === 'installing';
+      lastUpdateAttempt = { at: new Date().toISOString(), stage: 'updater-error', ok: false, message: error?.message || String(error) };
       const candidate = await resolveRollbackInstaller();
       if (candidate) {
-        await appendErrorLog('updater:auto-rollback-candidate', error, { installer: candidate.fullPath, version: candidate.version });
+        await appendErrorLog('updater:auto-rollback-candidate', error, { installer: candidate.fullPath, version: candidate.version, wasInstalling });
         sendUpdaterStatus('warning', { message: `Updater falló. Hay rollback disponible: ${candidate.version}` });
+        if (wasInstalling) {
+          try {
+            await startInstallerAndQuit(candidate.fullPath);
+          } catch (rollbackError) {
+            await appendErrorLog('updater:auto-rollback-exec', rollbackError, { installer: candidate.fullPath, version: candidate.version });
+          }
+        }
       }
     }
   });
@@ -672,6 +701,7 @@ ipcMain.handle('zoom:in', async () => ({ zoomFactor: applyZoomDelta(0.1) }));
 ipcMain.handle('zoom:out', async () => ({ zoomFactor: applyZoomDelta(-0.1) }));
 ipcMain.handle('zoom:reset', async () => ({ zoomFactor: applyZoomReset() }));
 ipcMain.handle('updater:check', async () => {
+  lastUpdateAttempt = { at: new Date().toISOString(), stage: 'check', ok: null, message: 'checking' };
   if (!app.isPackaged) {
     sendUpdaterStatus('error', { message: 'Auto-update solo funciona en app instalada (NSIS), no en modo desarrollo.' });
     return { ok: false, message: 'Not packaged' };
@@ -681,11 +711,13 @@ ipcMain.handle('updater:check', async () => {
       onErrorLog: async (scope, error, extra = {}) => appendErrorLog(scope, error, extra),
       onStatus: (status, payload = {}) => sendUpdaterStatus(status, payload)
     });
+    lastUpdateAttempt = { at: new Date().toISOString(), stage: 'check', ok: !!result?.ok, message: result?.message || '' };
     return result?.ok ? { ok: true } : { ok: false, message: result?.message || 'Fallback sin éxito' };
   } catch (error) {
     const message = error?.message || String(error);
     await appendErrorLog('updater:check', error);
     sendUpdaterStatus('error', { message: `Error de actualización: ${message}` });
+    lastUpdateAttempt = { at: new Date().toISOString(), stage: 'check', ok: false, message };
     return { ok: false, message };
   }
 });
@@ -700,12 +732,13 @@ ipcMain.handle('updater:install', async (_event, payload) => {
     };
   }
 
-  const installerPath = downloadedUpdateMeta?.downloadedFile || '';
+  const installerPath = downloadedUpdateMeta?.cachedPath || downloadedUpdateMeta?.downloadedFile || '';
   if (!installerPath || !fssync.existsSync(installerPath)) {
     return { ok: false, message: 'No se encontró el instalador descargado para actualizar.' };
   }
 
   try {
+    lastUpdateAttempt = { at: new Date().toISOString(), stage: 'installing', ok: null, message: downloadedUpdateMeta?.version || '' };
     const detached = spawn(process.execPath, [
       '--update-assistant',
       `--installer=${installerPath}`,
@@ -721,9 +754,18 @@ ipcMain.handle('updater:install', async (_event, payload) => {
     return { ok: true };
   } catch (error) {
     await appendErrorLog('updater:install-assistant', error, { installerPath });
+    const candidate = await resolveRollbackInstaller();
+    if (candidate) {
+      await appendErrorLog('updater:auto-rollback-install-failure', error, { installer: candidate.fullPath, version: candidate.version });
+      try {
+        await startInstallerAndQuit(candidate.fullPath);
+      } catch (_) {}
+    }
     return { ok: false, message: `No se pudo abrir asistente de actualización: ${error?.message || error}` };
   }
 });
+
+ipcMain.handle('updater:diagnostics', async () => getUpdaterDiagnostics(lastUpdateAttempt));
 
 ipcMain.handle('updater:rollbackPrevious', async () => {
   try {
@@ -753,8 +795,8 @@ app.whenReady().then(async () => {
   try { await readDb(); } catch (error) { console.warn('No se pudo precalentar cache local:', error?.message || error); }
   createWindow();
   setupAutoUpdater();
-  await persistCurrentVersionMeta({ reason: 'startup' });
-  ensureVersionInstallerCached(app.getVersion(), getUpdateCacheDir(), { onErrorLog: appendErrorLog }).catch(() => {});
+  const cachedCurrent = await ensureVersionInstallerCached(app.getVersion(), getUpdateCacheDir(), { onErrorLog: appendErrorLog }).catch(() => null);
+  await persistCurrentVersionMeta({ reason: 'startup', installer: cachedCurrent ? path.basename(cachedCurrent) : '' });
   if (!app.isPackaged) {
     sendUpdaterStatus('not-available', { message: 'Modo desarrollo: auto-update desactivado.' });
   } else {
