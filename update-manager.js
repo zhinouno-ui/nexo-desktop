@@ -122,7 +122,7 @@ async function validateLatestReleaseAssets({ currentVersion = app.getVersion(), 
     const version = normalizeVersion(release?.tag_name);
     const assets = Array.isArray(release.assets) ? release.assets : [];
     const latestYml = assets.find((a) => String(a.name || '').toLowerCase() === 'latest.yml');
-    const installer = assets.find((a) => String(a.name || '').toLowerCase().endsWith('.exe') && String(a.name || '').includes('-win-'));
+    const installer = assets.find((a) => String(a.name || '').toLowerCase().endsWith('.exe') && !String(a.name || '').toLowerCase().endsWith('.exe.blockmap'));
     const blockmap = assets.find((a) => String(a.name || '').toLowerCase().endsWith('.exe.blockmap'));
 
     if (!latestYml || !installer || !blockmap) {
@@ -131,11 +131,13 @@ async function validateLatestReleaseAssets({ currentVersion = app.getVersion(), 
 
     const ymlText = await requestText(latestYml.browser_download_url);
     const ymlVersion = (ymlText.match(/\bversion:\s*([\w.-]+)/i) || [])[1] || '';
-    const ymlPath = (ymlText.match(/\bpath:\s*([^\n\r]+)/i) || [])[1] || '';
+    const ymlPathRaw = (ymlText.match(/^\s*path:\s*([^\n\r]+)/im) || [])[1] || '';
+    const ymlFileUrl = (ymlText.match(/^\s*url:\s*([^\n\r]+)/im) || [])[1] || '';
+    const ymlPath = (ymlPathRaw || ymlFileUrl || '').trim();
     const hasSha512 = /\bsha512:\s*.+/i.test(ymlText);
 
-    if (!hasSha512 || !ymlPath || !ymlVersion) {
-      return { ok: false, version, message: 'latest.yml inválido: faltan version/path/sha512.' };
+    if (!hasSha512 || !ymlVersion || !ymlPath) {
+      return { ok: false, version, message: `latest.yml inválido: faltan version/path/url/sha512 (v=${ymlVersion||'-'} path=${ymlPath||'-'} sha=${hasSha512?'ok':'no'})` };
     }
 
     if (normalizeVersion(ymlVersion) !== normalizeVersion(version)) {
@@ -146,7 +148,8 @@ async function validateLatestReleaseAssets({ currentVersion = app.getVersion(), 
       return { ok: false, version, message: `latest.yml no tiene una versión mayor a la actual (${currentVersion}).` };
     }
 
-    if (!String(installer.name || '').includes(String(ymlPath).trim())) {
+    const normalizedPath = String(ymlPath).split('/').pop();
+    if (!String(installer.name || '').includes(normalizedPath)) {
       onStatus('warning', { message: 'latest.yml path no coincide exactamente con el asset principal.' });
     }
 
