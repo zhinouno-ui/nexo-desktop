@@ -32,7 +32,8 @@
       {
         "provider": "github",
         "owner": "zhinouno-ui",
-        "repo": "nexo-desktop"
+        "repo": "nexo-desktop",
+        "channel": "latest"
       }
     ],
     "win": {

@@ -150,3 +150,10 @@ npm run release
 
 Ese comando ejecuta: build Windows NSIS, crea tag `v<version>`, hace push y publica release con `gh`.
 
+
+
+## Diagnóstico rápido de updater
+
+- Atajo: `Ctrl+Shift+U` en la ventana principal para ver versión, canal, estado de `latest.yml`, cache y ruta de log.
+- Log persistente del updater: `AppData\Roaming\Nexo\logs\main.log`.
+- Cache de instaladores: se mantiene automáticamente en las **últimas 3 versiones** en `AppData\Roaming\Nexo\updates-cache`.

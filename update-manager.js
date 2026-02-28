@@ -7,12 +7,38 @@ const { app, dialog, shell } = require('electron');
 
 const RELEASE_OWNER = 'zhinouno-ui';
 const RELEASE_REPO = 'nexo-desktop';
+const RELEASE_CHANNEL = 'latest';
 const RELEASES_URL = `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases/latest`;
 
+function getUpdaterLogPath() {
+  return path.join(app.getPath('userData'), 'logs', 'main.log');
+}
+
+async function appendUpdaterLog(level, args) {
+  try {
+    const line = `[${new Date().toISOString()}] [${level}] ${args.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' ')}\n`;
+    const p = getUpdaterLogPath();
+    await fs.mkdir(path.dirname(p), { recursive: true });
+    await fs.appendFile(p, line, 'utf8');
+  } catch (_) {
+    // best effort
+  }
+}
+
 const updaterLogger = {
-  info: (...args) => console.log('[updater]', ...args),
-  warn: (...args) => console.warn('[updater]', ...args),
-  error: (...args) => console.error('[updater]', ...args)
+  transports: { file: { level: 'info' } },
+  info: (...args) => {
+    console.log('[updater]', ...args);
+    appendUpdaterLog('info', args);
+  },
+  warn: (...args) => {
+    console.warn('[updater]', ...args);
+    appendUpdaterLog('warn', args);
+  },
+  error: (...args) => {
+    console.error('[updater]', ...args);
+    appendUpdaterLog('error', args);
+  }
 };
 
 autoUpdater.logger = updaterLogger;
@@ -21,16 +47,23 @@ function githubApi(pathname) {
   return `https://api.github.com/repos/${RELEASE_OWNER}/${RELEASE_REPO}${pathname}`;
 }
 
-function requestJson(url) {
+function requestText(url) {
   return new Promise((resolve, reject) => {
     https.get(url, { headers: { 'User-Agent': 'nexo-desktop-updater' } }, (res) => {
+      if (res.statusCode && res.statusCode >= 400) {
+        reject(new Error(`HTTP ${res.statusCode}`));
+        return;
+      }
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try { resolve(JSON.parse(data || '{}')); } catch (e) { reject(e); }
-      });
+      res.on('end', () => resolve(data));
     }).on('error', reject);
   });
+}
+
+async function requestJson(url) {
+  const text = await requestText(url);
+  return JSON.parse(text || '{}');
 }
 
 function downloadFile(url, destPath) {
@@ -56,6 +89,79 @@ function downloadFile(url, destPath) {
 
 async function openManualReleaseFallback() {
   await shell.openExternal(RELEASES_URL);
+}
+
+function getUpdatesCacheDir() {
+  return path.join(app.getPath('userData'), 'updates-cache');
+}
+
+function normalizeVersion(v) {
+  return String(v || '').trim().replace(/^v/, '');
+}
+
+async function pruneCachedInstallers(cacheDir = getUpdatesCacheDir(), keep = 3) {
+  try {
+    await fs.mkdir(cacheDir, { recursive: true });
+    const names = await fs.readdir(cacheDir);
+    const entries = [];
+    for (const name of names) {
+      if (!name.toLowerCase().endsWith('.exe')) continue;
+      const full = path.join(cacheDir, name);
+      const stat = await fs.stat(full).catch(() => null);
+      if (!stat) continue;
+      entries.push({ name, full, mtime: stat.mtimeMs || 0 });
+    }
+    entries.sort((a, b) => b.mtime - a.mtime);
+    const stale = entries.slice(Math.max(keep, 0));
+    for (const item of stale) {
+      await fs.unlink(item.full).catch(() => {});
+    }
+    return { ok: true, kept: entries.length - stale.length, removed: stale.length };
+  } catch (error) {
+    updaterLogger.warn('pruneCachedInstallers failed', error?.message || String(error));
+    return { ok: false, removed: 0, message: error?.message || String(error) };
+  }
+}
+
+async function validateLatestReleaseAssets({ onStatus = () => {} } = {}) {
+  try {
+    const release = await requestJson(githubApi('/releases/latest'));
+    const version = normalizeVersion(release?.tag_name);
+    const assets = Array.isArray(release.assets) ? release.assets : [];
+    const latestYml = assets.find((a) => String(a.name || '').toLowerCase() === 'latest.yml');
+    const installer = assets.find((a) => String(a.name || '').toLowerCase().endsWith('.exe') && String(a.name || '').includes('-win-'));
+    const blockmap = assets.find((a) => String(a.name || '').toLowerCase().endsWith('.exe.blockmap'));
+
+    if (!latestYml || !installer || !blockmap) {
+      return { ok: false, version, message: 'Release incompleto: faltan latest.yml, instalador .exe o blockmap.' };
+    }
+
+    const ymlUrl = latestYml.browser_download_url;
+    const ymlText = await requestText(ymlUrl);
+    const ymlVersion = (ymlText.match(/\bversion:\s*([\w.-]+)/i) || [])[1] || '';
+    const ymlPath = (ymlText.match(/\bpath:\s*([^\n\r]+)/i) || [])[1] || '';
+    const hasSha512 = /\bsha512:\s*.+/i.test(ymlText);
+
+    if (!hasSha512 || !ymlPath || !ymlVersion) {
+      return { ok: false, version, message: 'latest.yml inválido: faltan version/path/sha512.' };
+    }
+
+    if (normalizeVersion(ymlVersion) !== normalizeVersion(version)) {
+      return { ok: false, version, message: `latest.yml inconsistente: version ${ymlVersion} != tag ${version}` };
+    }
+
+    if (!String(installer.name || '').includes(String(ymlPath).trim())) {
+      onStatus('warning', { message: 'latest.yml path no coincide exactamente con el asset principal.' });
+    }
+
+    return {
+      ok: true,
+      version,
+      assets: { latestYml: latestYml.name, installer: installer.name, blockmap: blockmap.name }
+    };
+  } catch (error) {
+    return { ok: false, message: `No se pudo validar latest.yml: ${error?.message || error}` };
+  }
 }
 
 async function fallbackUpdate({ onStatus = () => {}, onErrorLog = async () => {} } = {}) {
@@ -97,18 +203,17 @@ async function fallbackUpdate({ onStatus = () => {}, onErrorLog = async () => {}
   }
 }
 
-function getUpdatesCacheDir() {
-  return path.join(app.getPath('userData'), 'updates-cache');
-}
-
 async function ensureVersionInstallerCached(version, cacheDir = getUpdatesCacheDir(), { onErrorLog = async () => {} } = {}) {
   try {
-    const safeVersion = String(version || '').trim().replace(/^v/, '');
+    const safeVersion = normalizeVersion(version);
     if (!safeVersion) return null;
 
     await fs.mkdir(cacheDir, { recursive: true });
     const targetPath = path.join(cacheDir, `Nexo-${safeVersion}.exe`);
-    if (fssync.existsSync(targetPath)) return targetPath;
+    if (fssync.existsSync(targetPath)) {
+      await pruneCachedInstallers(cacheDir, 3);
+      return targetPath;
+    }
 
     const release = await requestJson(githubApi(`/releases/tags/v${safeVersion}`));
     const assets = Array.isArray(release.assets) ? release.assets : [];
@@ -116,6 +221,7 @@ async function ensureVersionInstallerCached(version, cacheDir = getUpdatesCacheD
     if (!asset?.browser_download_url) return null;
 
     await downloadFile(asset.browser_download_url, targetPath);
+    await pruneCachedInstallers(cacheDir, 3);
     return targetPath;
   } catch (error) {
     await onErrorLog('ensureVersionInstallerCached', error, { version });
@@ -123,7 +229,7 @@ async function ensureVersionInstallerCached(version, cacheDir = getUpdatesCacheD
   }
 }
 
-function initUpdater({ onStatus = () => {}, onErrorLog = async () => {}, onDownloaded = async () => {}, feed = {} } = {}) {
+function initUpdater({ onStatus = () => {}, onErrorLog = async () => {}, onDownloaded = async () => {}, onUpdaterError = async () => {}, feed = {} } = {}) {
   autoUpdater.allowDowngrade = true;
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = false;
@@ -133,7 +239,8 @@ function initUpdater({ onStatus = () => {}, onErrorLog = async () => {}, onDownl
     provider: 'github',
     owner: feed.owner || RELEASE_OWNER,
     repo: feed.repo || RELEASE_REPO,
-    releaseType: 'release'
+    releaseType: 'release',
+    channel: feed.channel || RELEASE_CHANNEL
   });
 
   autoUpdater.removeAllListeners();
@@ -165,6 +272,7 @@ function initUpdater({ onStatus = () => {}, onErrorLog = async () => {}, onDownl
   autoUpdater.on('error', async (error) => {
     updaterLogger.error('autoUpdater error', error?.message || error);
     await onErrorLog('autoUpdater', error);
+    await onUpdaterError(error);
     onStatus('error', { message: `Updater oficial falló: ${error?.message || error}. Activando fallback…` });
     await fallbackUpdate({ onStatus, onErrorLog });
   });
@@ -172,12 +280,35 @@ function initUpdater({ onStatus = () => {}, onErrorLog = async () => {}, onDownl
 
 async function checkForUpdatesWithFallback({ onErrorLog = async () => {}, onStatus = () => {} } = {}) {
   try {
+    const rel = await validateLatestReleaseAssets({ onStatus });
+    if (!rel.ok) {
+      onStatus('error', { message: rel.message || 'latest.yml inválido en release.' });
+      return { ok: false, message: rel.message || 'latest.yml inválido' };
+    }
     await autoUpdater.checkForUpdates();
-    return { ok: true };
+    return { ok: true, latestVersion: rel.version };
   } catch (error) {
     await onErrorLog('checkForUpdatesWithFallback', error);
     return fallbackUpdate({ onStatus, onErrorLog });
   }
+}
+
+async function getUpdaterDiagnostics() {
+  const cacheDir = getUpdatesCacheDir();
+  let files = [];
+  try {
+    const names = await fs.readdir(cacheDir);
+    files = names.filter((n) => n.toLowerCase().endsWith('.exe'));
+  } catch (_) {}
+  return {
+    version: app.getVersion(),
+    repo: `${RELEASE_OWNER}/${RELEASE_REPO}`,
+    channel: RELEASE_CHANNEL,
+    updateUrl: RELEASES_URL,
+    cacheDir,
+    cacheInstallers: files,
+    logPath: getUpdaterLogPath()
+  };
 }
 
 module.exports = {
@@ -187,7 +318,12 @@ module.exports = {
   checkForUpdatesWithFallback,
   ensureVersionInstallerCached,
   getUpdatesCacheDir,
+  pruneCachedInstallers,
+  validateLatestReleaseAssets,
+  getUpdaterDiagnostics,
   openManualReleaseFallback,
+  getUpdaterLogPath,
   RELEASE_OWNER,
-  RELEASE_REPO
+  RELEASE_REPO,
+  RELEASE_CHANNEL
 };

@@ -4,7 +4,7 @@ const fssync = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
-const { autoUpdater, initUpdater, checkForUpdatesWithFallback, ensureVersionInstallerCached, RELEASE_OWNER, RELEASE_REPO, getUpdatesCacheDir } = require('./update-manager');
+const { autoUpdater, initUpdater, checkForUpdatesWithFallback, ensureVersionInstallerCached, RELEASE_OWNER, RELEASE_REPO, RELEASE_CHANNEL, getUpdatesCacheDir, pruneCachedInstallers, getUpdaterDiagnostics, validateLatestReleaseAssets } = require('./update-manager');
 
 const MIN_UPDATE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_UPDATE_SIZE_BYTES = 500 * 1024 * 1024;
@@ -36,6 +36,28 @@ function getErrorLogPath() {
 
 function getUpdateCacheDir() {
   return getUpdatesCacheDir();
+}
+
+function getCurrentVersionMetaPath() {
+  return path.join(getUpdateCacheDir(), 'current-version.json');
+}
+
+async function persistCurrentVersionMeta(extra = {}) {
+  try {
+    const cacheDir = getUpdateCacheDir();
+    await fs.mkdir(cacheDir, { recursive: true });
+    const payload = {
+      version: app.getVersion(),
+      channel: RELEASE_CHANNEL,
+      savedAt: new Date().toISOString(),
+      ...extra
+    };
+    await fs.writeFile(getCurrentVersionMetaPath(), JSON.stringify(payload, null, 2), 'utf8');
+    return payload;
+  } catch (error) {
+    await appendErrorLog('persistCurrentVersionMeta', error, extra);
+    return null;
+  }
 }
 
 async function appendErrorLog(scope, error, extra = {}) {
@@ -342,6 +364,24 @@ function createWindow() {
     if (!input.control) return;
     if (input.type !== 'keyDown') return;
     const key = String(input.key || '').toLowerCase();
+    if (input.shift && key === 'u') {
+      event.preventDefault();
+      getUpdaterDiagnostics().then(async (diag) => {
+        const latest = await validateLatestReleaseAssets().catch(() => ({ ok: false, message: 'No disponible' }));
+        const lines = [
+          `Versión actual: ${diag.version}`,
+          `Canal: ${diag.channel}`,
+          `Repo: ${diag.repo}`,
+          `Release URL: ${diag.updateUrl}`,
+          `latest.yml: ${latest.ok ? `ok (${latest.version || '-'})` : `error (${latest.message || '-'})`}`,
+          `Cache dir: ${diag.cacheDir}`,
+          `Instaladores cache: ${diag.cacheInstallers.length}`,
+          `Log updater: ${diag.logPath}`
+        ];
+        await dialog.showMessageBox({ type: 'info', title: 'Diagnóstico updater', message: lines.join('\n') });
+      }).catch((e) => appendErrorLog('updater-diagnostics-shortcut', e));
+      return;
+    }
     if (['+', '=', 'plus', 'numadd'].includes(key)) {
       event.preventDefault();
       applyZoomDelta(0.1);
@@ -479,6 +519,8 @@ async function handleUpdateDownloaded(info) {
   }
 
   const cachedPath = await cacheDownloadedInstaller(downloadedFile, version);
+  await pruneCachedInstallers(getUpdateCacheDir(), 3).catch(() => {});
+
   downloadedUpdateMeta = {
     version,
     downloadedFile,
@@ -513,7 +555,7 @@ async function handleUpdateDownloaded(info) {
 
 function setupAutoUpdater() {
   initUpdater({
-    feed: { owner: RELEASE_OWNER, repo: RELEASE_REPO },
+    feed: { owner: RELEASE_OWNER, repo: RELEASE_REPO, channel: RELEASE_CHANNEL },
     onStatus: (status, payload = {}) => sendUpdaterStatus(status, payload),
     onErrorLog: async (scope, error, extra = {}) => {
       const readable = humanUpdaterError(error);
@@ -521,6 +563,13 @@ function setupAutoUpdater() {
     },
     onDownloaded: async (info) => {
       await handleUpdateDownloaded(info);
+    },
+    onUpdaterError: async (error) => {
+      const candidate = await resolveRollbackInstaller();
+      if (candidate) {
+        await appendErrorLog('updater:auto-rollback-candidate', error, { installer: candidate.fullPath, version: candidate.version });
+        sendUpdaterStatus('warning', { message: `Updater falló. Hay rollback disponible: ${candidate.version}` });
+      }
     }
   });
 }
@@ -667,6 +716,7 @@ ipcMain.handle('updater:install', async (_event, payload) => {
       windowsHide: false
     });
     detached.unref();
+    await persistCurrentVersionMeta({ reason: 'before-install', targetVersion: downloadedUpdateMeta?.version || '' });
     setTimeout(() => app.quit(), 120);
     return { ok: true };
   } catch (error) {
@@ -703,6 +753,7 @@ app.whenReady().then(async () => {
   try { await readDb(); } catch (error) { console.warn('No se pudo precalentar cache local:', error?.message || error); }
   createWindow();
   setupAutoUpdater();
+  await persistCurrentVersionMeta({ reason: 'startup' });
   ensureVersionInstallerCached(app.getVersion(), getUpdateCacheDir(), { onErrorLog: appendErrorLog }).catch(() => {});
   if (!app.isPackaged) {
     sendUpdaterStatus('not-available', { message: 'Modo desarrollo: auto-update desactivado.' });
