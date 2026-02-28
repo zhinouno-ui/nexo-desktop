@@ -1,6 +1,6 @@
 {
   "name": "nexo-desktop",
-  "version": "1.1.12-fix",
+  "version": "1.1.16",
   "description": "Nexo desktop app built with Electron",
   "main": "main.js",
   "author": "",
@@ -8,13 +8,15 @@
   "scripts": {
     "dev": "electron .",
     "dist": "electron-builder --publish never",
-    "dist:win": "electron-builder --win nsis --publish never"
+    "dist:win": "electron-builder --win nsis",
+    "release": "node scripts/release.js"
   },
   "devDependencies": {
     "electron": "^31.0.2",
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
+    "electron-log": "^5.4.3",
     "electron-updater": "^6.3.9"
   },
   "build": {
@@ -23,6 +25,7 @@
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "main.js",
+      "update-manager.js",
       "preload.js",
       "renderer/**/*"
     ],
@@ -31,14 +34,11 @@
         "provider": "github",
         "owner": "zhinouno-ui",
         "repo": "nexo-desktop",
-        "releaseType": "release"
+        "channel": "latest"
       }
     ],
     "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ]
+      "target": "nsis"
     },
     "nsis": {
       "oneClick": false,
