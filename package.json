@@ -25,6 +25,7 @@
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "main.js",
+      "update-manager.js",
       "preload.js",
       "renderer/**/*"
     ],
@@ -37,10 +38,7 @@
   }
     ],
     "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ]
+      "target": "nsis"
     },
     "nsis": {
       "oneClick": false,

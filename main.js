@@ -1,15 +1,13 @@
 const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
-const { autoUpdater } = require('electron-updater');
 const fs = require('fs/promises');
 const fssync = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const { autoUpdater, initUpdater, checkForUpdatesWithFallback, ensureVersionInstallerCached, RELEASE_OWNER, RELEASE_REPO } = require('./update-manager');
 
 const MIN_UPDATE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_UPDATE_SIZE_BYTES = 500 * 1024 * 1024;
-const RELEASE_OWNER = 'zhinouno-ui';
-const RELEASE_REPO = 'nexo-desktop';
 const STABLE_TAG = 'v1.1.10';
 
 const DEFAULT_DB = {
@@ -155,6 +153,7 @@ function createUpdateAssistantWindow(meta = {}) {
   <body><div class="card"><h2>Asistente de actualización</h2><div id="m">Preparando actualización…</div><div class="bar"><div id="f" class="fill"></div></div><p id="p">0%</p><pre id="l"></pre><button id="open" style="display:none">Abrir Nexo actualizado</button></div>
   <script>
     const { spawn } = require('child_process');
+const { autoUpdater, initUpdater, checkForUpdatesWithFallback, ensureVersionInstallerCached, RELEASE_OWNER, RELEASE_REPO } = require('./update-manager');
     const installer = ${encodedInstaller};
     const version = ${encodedVersion};
     const msg = document.getElementById('m');
@@ -514,37 +513,16 @@ async function handleUpdateDownloaded(info) {
 }
 
 function setupAutoUpdater() {
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = false;
-
-  autoUpdater.on('checking-for-update', () => sendUpdaterStatus('checking'));
-  autoUpdater.on('update-available', (info) => {
-    sendUpdaterStatus('available', {
-      version: info?.version || '',
-      message: 'Descargando actualización…'
-    });
-  });
-  autoUpdater.on('update-not-available', (info) => {
-    sendUpdaterStatus('not-available', {
-      version: info?.version || app.getVersion(),
-      message: 'Estás en la última versión'
-    });
-  });
-  autoUpdater.on('download-progress', (progress) => {
-    sendUpdaterStatus('download-progress', {
-      percent: Math.round(progress?.percent || 0)
-    });
-  });
-  autoUpdater.on('update-downloaded', (info) => {
-    handleUpdateDownloaded(info).catch(async (error) => {
-      await appendErrorLog('update-downloaded', error, { info: info || {} });
-      sendUpdaterStatus('error', { message: `Error validando update descargada: ${error?.message || error}` });
-    });
-  });
-  autoUpdater.on('error', (error) => {
-    const readable = humanUpdaterError(error);
-    appendErrorLog('autoUpdater', error, { classifiedMessage: readable }).catch(() => {});
-    sendUpdaterStatus('error', { message: `Error de actualización: ${readable}` });
+  initUpdater({
+    feed: { owner: RELEASE_OWNER, repo: RELEASE_REPO },
+    onStatus: (status, payload = {}) => sendUpdaterStatus(status, payload),
+    onErrorLog: async (scope, error, extra = {}) => {
+      const readable = humanUpdaterError(error);
+      await appendErrorLog(scope, error, { classifiedMessage: readable, ...extra });
+    },
+    onDownloaded: async (info) => {
+      await handleUpdateDownloaded(info);
+    }
   });
 }
 
@@ -651,8 +629,11 @@ ipcMain.handle('updater:check', async () => {
     return { ok: false, message: 'Not packaged' };
   }
   try {
-    await autoUpdater.checkForUpdatesAndNotify();
-    return { ok: true };
+    const result = await checkForUpdatesWithFallback({
+      onErrorLog: async (scope, error, extra = {}) => appendErrorLog(scope, error, extra),
+      onStatus: (status, payload = {}) => sendUpdaterStatus(status, payload)
+    });
+    return result?.ok ? { ok: true } : { ok: false, message: result?.message || 'Fallback sin éxito' };
   } catch (error) {
     const message = error?.message || String(error);
     await appendErrorLog('updater:check', error);
@@ -723,11 +704,15 @@ app.whenReady().then(async () => {
   try { await readDb(); } catch (error) { console.warn('No se pudo precalentar cache local:', error?.message || error); }
   createWindow();
   setupAutoUpdater();
+  ensureVersionInstallerCached(app.getVersion(), getUpdateCacheDir(), { onErrorLog: appendErrorLog }).catch(() => {});
   if (!app.isPackaged) {
     sendUpdaterStatus('not-available', { message: 'Modo desarrollo: auto-update desactivado.' });
   } else {
     try {
-      await autoUpdater.checkForUpdatesAndNotify();
+      await checkForUpdatesWithFallback({
+        onErrorLog: async (scope, error, extra = {}) => appendErrorLog(scope, error, extra),
+        onStatus: (status, payload = {}) => sendUpdaterStatus(status, payload)
+      });
     } catch (error) {
       await appendErrorLog('autoUpdater-initial-check', error);
       sendUpdaterStatus('error', { message: `Error de actualización: ${error?.message || error}` });
