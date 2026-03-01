@@ -302,6 +302,9 @@
         }
         .search-input:focus { border-color: var(--accent-primary); outline: none; }
         .search-input.ghost-value { color: #334155; font-style: italic; }
+        .search-input.ghost-value-active { background: linear-gradient(90deg, rgba(15,23,42,.96), rgba(51,65,85,.92)); color:#94a3b8; }
+        .btn-midnight-pulse { animation: pulseMidnight 1s ease-in-out infinite; box-shadow: 0 0 0 2px rgba(239,68,68,.35) inset; }
+        @keyframes pulseMidnight { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.03); opacity:.75; } }
         .search-icon { position: absolute; left: 35px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none; }
 
         .filter-group {
@@ -1594,6 +1597,31 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v { font-size:1.2rem; font-weight:800; margin-top:4px; }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -1685,6 +1713,7 @@
                 <button id="checkUpdatesBtn" class="btn"><i class="fas fa-cloud-download-alt"></i> Buscar updates</button>
                 <button id="settingsBtn" class="btn"><i class="fas fa-cog"></i> Ajustes</button>
                 <button id="importOpsBtn" class="btn" title="Importar agent_operations.csv"><i class="fas fa-chart-line"></i> Operaciones</button>
+                <button id="midnightExportBtn" class="btn" title="Exporte diario de control"><i class="fas fa-file-export"></i> Control 00:00</button>
                 <button id="deleteAllBtn" class="btn btn-danger"><i class="fas fa-trash-alt"></i> Borrar Todo</button>
                 <span id="saveStateBadge" class="save-state-badge pending">● Pendiente</span>
                                 <input type="file" id="opsFileInput" accept=".csv" style="display:none;">
@@ -2000,9 +2029,9 @@
                 <div class="metrics-card"><div class="k">Trabajados hoy</div><div id="metricEditedToday" class="v">0</div></div>
                 <div class="metrics-card"><div class="k">Trabajados ayer</div><div id="metricEditedYesterday" class="v">0</div></div>
                 <div class="metrics-card"><div class="k">Turno más activo</div><div id="metricTopShift" class="v">-</div></div>
-                <div class="metrics-card"><div class="k">Revisado → Contactado</div><div id="metricRevToContact" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Contactado → Jugando</div><div id="metricContactToJugando" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Última subida / anterior</div><div id="metricLastBatchCount" class="v">0 / 0</div></div>
+                <div class="metrics-card"><div class="k">Transiciones 24h</div><div id="metricTransitions24h" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Turno más activo (24h)</div><div id="metricTopShift24h" class="v">-</div></div>
+                <div class="metrics-card"><div class="k">Promedio botones/hora</div><div id="metricButtonsPerHour" class="v">0</div></div>
             </div>
             <div class="metrics-actions">
                 <button id="metricsFilterLastBatchBtn" class="btn"><i class="fas fa-filter"></i> Filtrar última subida</button>
@@ -2011,6 +2040,7 @@
                 <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
             </div>
             <div id="metricTransitionsBreakdown" class="metrics-transitions"></div>
+            <div id="metricShiftBreakdown" class="metrics-wide-grid"></div>
             <div class="modal-actions">
                 <button id="closeMetricsModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
             </div>
@@ -2288,7 +2318,12 @@
             previousImportBatchId: '',
             lastImportFileName: '',
             statusTransitions: [],
-            searchGhostTerm: ''
+            buttonPressEvents: [],
+            shiftSnapshots: [],
+            searchGhostTerm: '',
+            searchGhostActive: false,
+            midnightExportPending: false,
+            lastMidnightExportDate: ''
         };
 
         function ensureReviewMilestonesState() {
@@ -2348,6 +2383,7 @@
             contactHistoryMeta: $('#contactHistoryMeta'),
             deleteAllBtn: $('#deleteAllBtn'),
             importOpsBtn: $('#importOpsBtn'),
+            midnightExportBtn: $('#midnightExportBtn'),
             undoBtn: $('#undoBtn'),
             whatsappTemplateInput: $('#whatsappTemplateInput'),
             saveTemplateBtn: $('#saveTemplateBtn'),
@@ -2362,9 +2398,10 @@
             metricEditedToday: $('#metricEditedToday'),
             metricEditedYesterday: $('#metricEditedYesterday'),
             metricTopShift: $('#metricTopShift'),
-            metricRevToContact: $('#metricRevToContact'),
-            metricContactToJugando: $('#metricContactToJugando'),
-            metricLastBatchCount: $('#metricLastBatchCount'),
+            metricTransitions24h: $('#metricTransitions24h'),
+            metricTopShift24h: $('#metricTopShift24h'),
+            metricButtonsPerHour: $('#metricButtonsPerHour'),
+            metricShiftBreakdown: $('#metricShiftBreakdown'),
             metricsDateLabel: $('#metricsDateLabel'),
             metricsFilterLastBatchBtn: $('#metricsFilterLastBatchBtn'),
             metricsDeleteLastBatchBtn: $('#metricsDeleteLastBatchBtn'),
@@ -3036,6 +3073,14 @@
             saveHistory();
         }
 
+
+        function saveButtonPressEvents() {
+            try { localStorage.setItem('buttonPressEvents', JSON.stringify((AppState.buttonPressEvents || []).slice(0, 20000))); } catch (e) { reportError('saveButtonPressEvents', e); }
+        }
+
+        function saveShiftSnapshots() {
+            try { localStorage.setItem('shiftSnapshots', JSON.stringify((AppState.shiftSnapshots || []).slice(0, 3650))); } catch (e) { reportError('saveShiftSnapshots', e); }
+        }
 
         function saveStatusTransitions() {
             try {
@@ -5250,9 +5295,13 @@
             AppState.lastEditedContact = id;
             const policyNote = (requestedStatus !== newStatus && requestedStatus === 'sin wsp') ? ' (autopolítica 3 recontactos)' : '';
             addToHistory('Estado cambiado', `${contact.name}: ${oldStatus} → ${requestedStatus}${policyNote}`, contact.id);
-            AppState.statusTransitions.unshift({ at: new Date().toISOString(), from: oldStatus, to: requestedStatus, contactId: contact.id, profileId: contact.profileId || 'default', actor: AppState.operatorName || 'PC local' });
+            const eventAt = new Date().toISOString();
+            AppState.statusTransitions.unshift({ at: eventAt, from: oldStatus, to: requestedStatus, contactId: contact.id, profileId: contact.profileId || 'default', actor: AppState.operatorName || 'PC local', shift: contact.shiftReviewedByShift || contact.assignedShift || '' });
             if (AppState.statusTransitions.length > 5000) AppState.statusTransitions = AppState.statusTransitions.slice(0, 5000);
             saveStatusTransitions();
+            AppState.buttonPressEvents.unshift({ at: eventAt, action: 'status-change', from: oldStatus, to: requestedStatus, shift: contact.shiftReviewedByShift || contact.assignedShift || '', profileId: contact.profileId || 'default', actor: AppState.operatorName || 'PC local' });
+            if (AppState.buttonPressEvents.length > 20000) AppState.buttonPressEvents = AppState.buttonPressEvents.slice(0, 20000);
+            saveButtonPressEvents();
             if (oldStatus === 'sin revisar' && requestedStatus !== 'sin revisar') {
                 try {
                     ensureReviewMilestonesState();
@@ -5340,6 +5389,12 @@
                 if (operatorName) AppState.operatorName = operatorName;
                 const statusTransitionsRaw = localStorage.getItem('statusTransitions');
                 if (statusTransitionsRaw) { try { AppState.statusTransitions = JSON.parse(statusTransitionsRaw); } catch (_) { AppState.statusTransitions = []; } }
+                const buttonPressEventsRaw = localStorage.getItem('buttonPressEvents');
+                if (buttonPressEventsRaw) { try { AppState.buttonPressEvents = JSON.parse(buttonPressEventsRaw); } catch (_) { AppState.buttonPressEvents = []; } }
+                const shiftSnapshotsRaw = localStorage.getItem('shiftSnapshots');
+                if (shiftSnapshotsRaw) { try { AppState.shiftSnapshots = JSON.parse(shiftSnapshotsRaw); } catch (_) { AppState.shiftSnapshots = []; } }
+                AppState.lastMidnightExportDate = localStorage.getItem('lastMidnightExportDate') || '';
+                AppState.midnightExportPending = localStorage.getItem('midnightExportPending') === '1';
                 const backupMode = localStorage.getItem('autoBackupStorageMode');
                 if (backupMode === 'download' || backupMode === 'file' || backupMode === 'ask') {
                     AppState.autoBackupStorageMode = backupMode === 'ask' ? 'download' : backupMode;
@@ -6222,27 +6277,114 @@
                     const parsed = JSON.parse(text);
                     const state = parsed?.state || parsed;
                     if (!Array.isArray(state.contacts)) throw new Error('El snapshot no incluye contactos válidos');
-                    if (!confirm(`Se reemplazarán los datos actuales por ${state.contacts.length} contactos. ¿Continuar?`)) return;
-                    AppState.contacts = state.contacts;
-                    AppState.history = Array.isArray(state.history) ? state.history : [];
-                    AppState.profiles = Array.isArray(state.profiles) && state.profiles.length ? state.profiles : [{ id: 'default', name: 'Base principal' }];
-                    AppState.activeProfileId = state.activeProfileId || 'default';
-                    AppState.statusTransitions = Array.isArray(state.statusTransitions) ? state.statusTransitions : [];
+                    const sourceName = (parsed?.sourceDevice || parsed?.deviceName || 'Equipo importado').slice(0, 40);
+                    const profileBase = `import-${Date.now()}`;
+                    const incomingProfiles = Array.isArray(state.profiles) && state.profiles.length ? state.profiles : [{ id: 'default', name: 'Base principal' }];
+                    const profileMap = new Map();
+                    incomingProfiles.forEach((p, idx) => {
+                        const newId = `${profileBase}-${idx}`;
+                        profileMap.set(p.id || 'default', newId);
+                        AppState.profiles.push({ id: newId, name: `${sourceName} · ${p.name || `Perfil ${idx+1}`}` });
+                    });
+                    const importedContacts = (Array.isArray(state.contacts) ? state.contacts : []).map((c) => ({ ...c, id: Date.now() + Math.floor(Math.random()*1000000), profileId: profileMap.get(c.profileId || 'default') || profileBase }));
+                    AppState.contacts = AppState.contacts.concat(importedContacts);
+                    const importedHistory = (Array.isArray(state.history) ? state.history : []).map((h) => ({ ...h, details: `[${sourceName}] ${h.details || ''}` }));
+                    AppState.history = importedHistory.concat(AppState.history);
+                    const importedTransitions = (Array.isArray(state.statusTransitions) ? state.statusTransitions : []).map((t) => ({ ...t, profileId: profileMap.get(t.profileId || 'default') || profileBase }));
+                    AppState.statusTransitions = importedTransitions.concat(AppState.statusTransitions);
                     if (state.preferences) {
                         AppState.whatsappTemplate = state.preferences.whatsappTemplate || AppState.whatsappTemplate;
                         AppState.duplicateMergeMode = state.preferences.duplicateMergeMode || AppState.duplicateMergeMode;
                         AppState.splitImportByFile = !!state.preferences.splitImportByFile;
                         AppState.operatorName = state.preferences.operatorName || AppState.operatorName;
                     }
+                    AppState.buttonPressEvents = (Array.isArray(state.buttonPressEvents) ? state.buttonPressEvents : []).concat(AppState.buttonPressEvents);
+                    AppState.shiftSnapshots = (Array.isArray(state.shiftSnapshots) ? state.shiftSnapshots : []).concat(AppState.shiftSnapshots);
                     saveStatusTransitions();
+                    saveButtonPressEvents();
+                    saveShiftSnapshots();
                     saveHistory();
                     saveData();
                     render();
-                    showNotification('Snapshot completo importado correctamente', 'success');
+                    showNotification(`Snapshot importado en perfiles separados (${sourceName})`, 'success');
                 } catch (e) {
                     reportError('importFullSnapshot', e);
                     showNotification(`No se pudo importar snapshot: ${e?.message || e}`, 'error');
                 }
+            };
+
+            const withinLastHours = (iso, hours = 24) => {
+                if (!iso) return false;
+                const t = new Date(iso).getTime();
+                if (!Number.isFinite(t)) return false;
+                return (Date.now() - t) <= (hours * 60 * 60 * 1000);
+            };
+
+            const createControlExportPayload = () => {
+                const transitions24h = (AppState.statusTransitions || []).filter((t) => withinLastHours(t.at, 24));
+                const buttons24h = (AppState.buttonPressEvents || []).filter((t) => withinLastHours(t.at, 24));
+                const shiftTotals = {};
+                transitions24h.forEach((t) => {
+                    const key = String(t.shift || 'sin-turno').toLowerCase();
+                    if (!shiftTotals[key]) shiftTotals[key] = { shift: key, reviewedOut: 0, sentOut: 0, total: 0 };
+                    shiftTotals[key].total += 1;
+                    if (t.from === 'sin revisar') shiftTotals[key].reviewedOut += 1;
+                    if (['contactado', 'jugando'].includes(t.to)) shiftTotals[key].sentOut += 1;
+                });
+                const topShift = Object.values(shiftTotals).sort((a,b) => b.total - a.total)[0] || null;
+                const buttonsPerHour = Math.round(((buttons24h.length / 24) + Number.EPSILON) * 100) / 100;
+                return {
+                    exportedAt: new Date().toISOString(),
+                    exportType: 'control-update-1.1.19',
+                    sourceDevice: navigator.userAgent || 'Nexo',
+                    profiles: AppState.profiles || [],
+                    activeProfileId: AppState.activeProfileId || 'default',
+                    contacts: AppState.contacts || [],
+                    history: AppState.history || [],
+                    statusTransitions: AppState.statusTransitions || [],
+                    buttonPressEvents: AppState.buttonPressEvents || [],
+                    shiftSnapshots: AppState.shiftSnapshots || [],
+                    summary24h: {
+                        transitionsCount: transitions24h.length,
+                        buttonsCount: buttons24h.length,
+                        buttonsPerHour,
+                        topShift,
+                        shiftTotals: Object.values(shiftTotals)
+                    }
+                };
+            };
+
+            const exportControlFile = (reason = 'manual') => {
+                const payload = createControlExportPayload();
+                const stamp = new Date().toISOString().replace(/[:]/g, '-').slice(0, 19);
+                downloadFile(JSON.stringify(payload, null, 2), `nexo_control_${stamp}.json`, 'application/json;charset=utf-8;');
+                AppState.midnightExportPending = false;
+                AppState.lastMidnightExportDate = new Date().toISOString().slice(0, 10);
+                localStorage.setItem('midnightExportPending', '0');
+                localStorage.setItem('lastMidnightExportDate', AppState.lastMidnightExportDate);
+                if (elements.midnightExportBtn) elements.midnightExportBtn.classList.remove('btn-midnight-pulse');
+                showNotification(reason === 'auto' ? 'Exporte de control 00:00 generado automáticamente' : 'Exporte de control generado', 'success');
+            };
+
+            const updateMidnightButtonState = () => {
+                if (!elements.midnightExportBtn) return;
+                if (AppState.midnightExportPending) elements.midnightExportBtn.classList.add('btn-midnight-pulse');
+                else elements.midnightExportBtn.classList.remove('btn-midnight-pulse');
+            };
+
+            const startMidnightControlScheduler = () => {
+                updateMidnightButtonState();
+                setInterval(() => {
+                    const now = new Date();
+                    const dateKey = now.toISOString().slice(0, 10);
+                    const isMidnight = now.getHours() === 0 && now.getMinutes() === 0;
+                    if (isMidnight && AppState.lastMidnightExportDate !== dateKey) {
+                        AppState.midnightExportPending = true;
+                        localStorage.setItem('midnightExportPending', '1');
+                        updateMidnightButtonState();
+                        exportControlFile('auto');
+                    }
+                }, 30000);
             };
 
             if (elements.showQuickMetricsOption) {
@@ -6265,34 +6407,32 @@
                         if (byShift[shiftKey] !== undefined && day === today) byShift[shiftKey]++;
                     });
 
-                    let revToContact = 0;
-                    let contactToJugando = 0;
-                    (AppState.history || []).forEach((entry) => {
-                        const day = dayFromIso(entry.timestamp);
-                        if (day !== today) return;
-                        const details = String(entry.details || '').toLowerCase();
-                        if (details.includes('revisado') && details.includes('→') && details.includes('contactado')) revToContact++;
-                        if (details.includes('contactado') && details.includes('→') && details.includes('jugando')) contactToJugando++;
+                    const transitions24h = (AppState.statusTransitions || []).filter((t) => withinLastHours(t.at, 24));
+                    const buttons24h = (AppState.buttonPressEvents || []).filter((t) => withinLastHours(t.at, 24));
+                    const shiftTotals = {};
+                    transitions24h.forEach((t) => {
+                        const key = String(t.shift || 'sin-turno').toLowerCase();
+                        if (!shiftTotals[key]) shiftTotals[key] = { shift: key, reviewedOut: 0, sentOut: 0, total: 0 };
+                        shiftTotals[key].total += 1;
+                        if (t.from === 'sin revisar') shiftTotals[key].reviewedOut += 1;
+                        if (['contactado', 'jugando'].includes(t.to)) shiftTotals[key].sentOut += 1;
                     });
+                    const topShift = Object.values(shiftTotals).sort((a,b) => b.total-a.total)[0] || null;
+                    const topShiftText = topShift ? `${String(topShift.shift).toUpperCase()} (${topShift.total})` : 'sin datos';
+                    const buttonsPerHour = Math.round(((buttons24h.length / 24) + Number.EPSILON) * 100) / 100;
 
-                    const lastBatchCount = AppState.lastImportBatchId
-                        ? AppState.contacts.filter(c => getContactBatchId(c) === AppState.lastImportBatchId).length
-                        : 0;
-                    const prevBatchCount = AppState.previousImportBatchId
-                        ? AppState.contacts.filter(c => getContactBatchId(c) === AppState.previousImportBatchId).length
-                        : 0;
-
-                    const topShift = Object.entries(byShift).sort((a,b) => b[1]-a[1])[0];
-                    const topShiftText = topShift ? `${topShift[0].toUpperCase()} (${topShift[1]})` : 'sin datos';
-
-                    if (elements.metricsDateLabel) elements.metricsDateLabel.textContent = `Métricas del día ${today}`;
+                    if (elements.metricsDateLabel) elements.metricsDateLabel.textContent = `Métricas de las últimas 24h`;
                     if (elements.metricEditedToday) elements.metricEditedToday.textContent = String(editedToday);
                     if (elements.metricEditedYesterday) elements.metricEditedYesterday.textContent = String(editedYesterday);
                     if (elements.metricTopShift) elements.metricTopShift.textContent = topShiftText;
-                    if (elements.metricRevToContact) elements.metricRevToContact.textContent = String(revToContact);
-                    if (elements.metricContactToJugando) elements.metricContactToJugando.textContent = String(contactToJugando);
-                    if (elements.metricLastBatchCount) elements.metricLastBatchCount.textContent = `${lastBatchCount} / ${prevBatchCount}`;
-                    renderTransitionTable(buildTransitionSummary(today));
+                    if (elements.metricTransitions24h) elements.metricTransitions24h.textContent = String(transitions24h.length);
+                    if (elements.metricTopShift24h) elements.metricTopShift24h.textContent = topShiftText;
+                    if (elements.metricButtonsPerHour) elements.metricButtonsPerHour.textContent = String(buttonsPerHour);
+                    renderTransitionTable(buildTransitionSummary());
+                    if (elements.metricShiftBreakdown) {
+                        const cards = Object.values(shiftTotals).sort((a,b)=>b.total-a.total).map((row)=>`<div class="metrics-card"><div class="k">Turno ${String(row.shift).toUpperCase()}</div><div class="v">${row.total}</div><div class="k">Revisó: ${row.reviewedOut} · Envió: ${row.sentOut}</div></div>`);
+                        elements.metricShiftBreakdown.innerHTML = cards.length ? cards.join('') : '<div style="color:var(--text-secondary)">Sin datos por turno en 24h.</div>';
+                    }
 
                     if (elements.metricsModal) elements.metricsModal.classList.add('active');
                 };
@@ -6310,6 +6450,12 @@
 
             if (elements.exportFullSnapshotBtn) elements.exportFullSnapshotBtn.onclick = exportFullSnapshot;
             if (elements.importFullSnapshotBtn) elements.importFullSnapshotBtn.onclick = importFullSnapshot;
+
+            if (elements.midnightExportBtn) {
+                elements.midnightExportBtn.onclick = () => exportControlFile('manual');
+                updateMidnightButtonState();
+            }
+            startMidnightControlScheduler();
 
             if (elements.metricsDeleteLastBatchBtn) {
                 elements.metricsDeleteLastBatchBtn.onclick = () => {
@@ -6339,28 +6485,29 @@
             $('#closeUserOptionsModal').onclick = () => elements.userOptionsModal.classList.remove('active');
 
             const clearSearchGhost = () => {
-                AppState.searchGhostTerm = '';
-                elements.searchInput.classList.remove('ghost-value');
+                AppState.searchGhostActive = false;
+                elements.searchInput.classList.remove('ghost-value', 'ghost-value-active');
                 elements.searchInput.placeholder = 'Buscar... (ej: pepe, 11, estado:jugando, turno:tm, origen:csv)';
             };
             elements.searchInput.onfocus = () => {
                 if (AppState.searchGhostTerm) {
+                    AppState.searchGhostActive = true;
                     elements.searchInput.value = '';
-                    elements.searchInput.classList.add('ghost-value');
+                    elements.searchInput.classList.add('ghost-value', 'ghost-value-active');
                     elements.searchInput.placeholder = AppState.searchGhostTerm;
                 }
             };
             elements.searchInput.onblur = () => {
-                const raw = (elements.searchInput.value || '').trim();
-                if (!raw && AppState.searchTerm) {
+                if (AppState.searchTerm) {
                     AppState.searchGhostTerm = AppState.searchTerm;
-                    elements.searchInput.classList.add('ghost-value');
-                    elements.searchInput.placeholder = AppState.searchGhostTerm;
+                    AppState.searchGhostActive = true;
+                    elements.searchInput.value = AppState.searchGhostTerm;
+                    elements.searchInput.classList.add('ghost-value', 'ghost-value-active');
                 }
             };
             elements.searchInput.oninput = (e) => {
                 const value = e.target.value;
-                if (AppState.searchGhostTerm) {
+                if (AppState.searchGhostActive) {
                     clearSearchGhost();
                 }
                 AppState.searchTerm = value;

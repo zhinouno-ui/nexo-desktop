@@ -43,7 +43,7 @@ function getDbPath() {
 }
 
 function getErrorLogPath() {
-  return path.join(app.getPath('userData'), 'nexo-error.log');
+  return path.join(app.getPath('userData'), 'logs', 'main.log');
 }
 
 function getUpdateCacheDir() {
@@ -76,6 +76,7 @@ async function appendErrorLog(scope, error, extra = {}) {
   try {
     const err = normalizeError(error);
     const at = new Date().toISOString();
+    await fs.mkdir(path.dirname(getErrorLogPath()), { recursive: true });
     const pretty = [
       '============================================================',
       `[${at}] ${scope}`,
@@ -789,6 +790,7 @@ ipcMain.handle('app:getRuntimeHash', async () => {
 ipcMain.handle('app:getErrorLogPath', async () => getErrorLogPath());
 ipcMain.handle('app:openErrorLog', async () => {
   const p = getErrorLogPath();
+  await fs.mkdir(path.dirname(p), { recursive: true });
   if (!fssync.existsSync(p)) await fs.writeFile(p, '', 'utf8');
   await shell.openPath(p);
   return p;
