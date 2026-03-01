@@ -1622,6 +1622,31 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v { font-size:1.2rem; font-weight:800; margin-top:4px; }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -2040,7 +2065,9 @@
                 <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
             </div>
             <div id="metricTransitionsBreakdown" class="metrics-transitions"></div>
+            <div id="metricTransitionSummary" class="metrics-transitions" style="margin-top:8px;"></div>
             <div id="metricShiftBreakdown" class="metrics-wide-grid"></div>
+            <div id="metricShiftRanking" class="metrics-transitions" style="margin-top:8px;"></div>
             <div class="modal-actions">
                 <button id="closeMetricsModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
             </div>
@@ -2402,6 +2429,8 @@
             metricTopShift24h: $('#metricTopShift24h'),
             metricButtonsPerHour: $('#metricButtonsPerHour'),
             metricShiftBreakdown: $('#metricShiftBreakdown'),
+            metricTransitionSummary: $('#metricTransitionSummary'),
+            metricShiftRanking: $('#metricShiftRanking'),
             metricsDateLabel: $('#metricsDateLabel'),
             metricsFilterLastBatchBtn: $('#metricsFilterLastBatchBtn'),
             metricsDeleteLastBatchBtn: $('#metricsDeleteLastBatchBtn'),
@@ -2870,8 +2899,15 @@
             const suggested = contact.ops.suggestedStatus;
             const nextStatus = getHigherPriorityStatus(contact.status, suggested);
             if (nextStatus !== contact.status) {
+                const oldStatus = contact.status;
                 contact.status = nextStatus;
                 touchContactEdit(contact, 'ops_sync');
+                const opsAt = contact?.ops?.lastCargaAt || new Date().toISOString();
+                const opsShift = inferShiftFromIso(opsAt);
+                AppState.statusTransitions.unshift({ at: opsAt, from: oldStatus, to: nextStatus, contactId: contact.id, profileId: contact.profileId || 'default', actor: 'ops-import', shift: opsShift || contact.assignedShift || '' });
+                AppState.buttonPressEvents.unshift({ at: opsAt, action: 'ops-sync', from: oldStatus, to: nextStatus, shift: opsShift || contact.assignedShift || '', profileId: contact.profileId || 'default', actor: 'ops-import' });
+                saveStatusTransitions();
+                saveButtonPressEvents();
             }
         }
 
@@ -4489,7 +4525,14 @@
             return 'tn';
         }
 
-        function updateCompetitionCredit(contact, newStatus, source = 'common', { forceTransfer = false } = {}) {
+        function inferShiftFromIso(isoString) {
+            if (!isoString) return '';
+            const dt = new Date(isoString);
+            if (Number.isNaN(dt.getTime())) return '';
+            return getLocalCompetitionShift(dt);
+        }
+
+        function updateCompetitionCredit(contact, newStatus, source = 'common', { forceTransfer = false, shiftOverride = '', atOverride = '' } = {}) {
             if (!contact) return false;
 
             if (newStatus === 'sin revisar') {
@@ -4500,11 +4543,11 @@
                 return changed;
             }
 
-            const localShift = getLocalCompetitionShift(new Date());
+            const localShift = shiftOverride || getLocalCompetitionShift(new Date());
             const changed = forceTransfer || !contact.shiftReviewed || contact.shiftReviewedByShift !== localShift;
             contact.shiftReviewed = true;
             contact.shiftReviewedByShift = localShift;
-            if (changed) contact.shiftReviewedAt = new Date().toISOString();
+            if (changed) contact.shiftReviewedAt = atOverride || new Date().toISOString();
             return changed;
         }
 
@@ -4598,7 +4641,7 @@
             return 'tn';
         }
 
-        function updateCompetitionCredit(contact, newStatus, source = 'common', { forceTransfer = false } = {}) {
+        function updateCompetitionCredit(contact, newStatus, source = 'common', { forceTransfer = false, shiftOverride = '', atOverride = '' } = {}) {
             if (!contact) return false;
 
             if (newStatus === 'sin revisar') {
@@ -4609,11 +4652,11 @@
                 return changed;
             }
 
-            const localShift = getLocalCompetitionShift(new Date());
+            const localShift = shiftOverride || getLocalCompetitionShift(new Date());
             const changed = forceTransfer || !contact.shiftReviewed || contact.shiftReviewedByShift !== localShift;
             contact.shiftReviewed = true;
             contact.shiftReviewedByShift = localShift;
-            if (changed) contact.shiftReviewedAt = new Date().toISOString();
+            if (changed) contact.shiftReviewedAt = atOverride || new Date().toISOString();
             return changed;
         }
 
@@ -5266,7 +5309,7 @@
         };
 
 
-        window.changeContactStatus = (id, newStatus, event, source = 'common') => {
+        window.changeContactStatus = (id, newStatus, event, source = 'common', meta = {}) => {
             try {
             if (event) event.stopPropagation();
             const contact = AppState.contacts.find(c => c.id === id);
@@ -5277,8 +5320,10 @@
             if (contact.ops?.suggestedStatus) {
                 requestedStatus = getHigherPriorityStatus(requestedStatus, contact.ops.suggestedStatus);
             }
+            const eventAt = meta?.at || new Date().toISOString();
+            const shiftByEvent = meta?.shift || inferShiftFromIso(eventAt) || '';
             if (oldStatus === requestedStatus) {
-                const moved = updateCompetitionCredit(contact, requestedStatus, source, { forceTransfer: true });
+                const moved = updateCompetitionCredit(contact, requestedStatus, source, { forceTransfer: true, shiftOverride: shiftByEvent, atOverride: eventAt });
                 if (!moved) return;
                 touchContactEdit(contact, source === 'shift' ? 'turno_transfer' : 'status_transfer');
                 addToHistory('Crédito de competencia transferido', `${contact.name}: ahora cuenta para ${String(contact.shiftReviewedByShift || '-').toUpperCase()}`, contact.id);
@@ -5289,17 +5334,16 @@
             }
 
             contact.status = requestedStatus;
-            updateCompetitionCredit(contact, requestedStatus, source);
+            updateCompetitionCredit(contact, requestedStatus, source, { shiftOverride: shiftByEvent, atOverride: eventAt });
             try { setReviewMetadata(contact, requestedStatus); } catch (e) { console.error('Error metadata estado:', e); }
             touchContactEdit(contact, source === 'shift' ? 'turno_status' : 'status_change');
             AppState.lastEditedContact = id;
             const policyNote = (requestedStatus !== newStatus && requestedStatus === 'sin wsp') ? ' (autopolítica 3 recontactos)' : '';
             addToHistory('Estado cambiado', `${contact.name}: ${oldStatus} → ${requestedStatus}${policyNote}`, contact.id);
-            const eventAt = new Date().toISOString();
-            AppState.statusTransitions.unshift({ at: eventAt, from: oldStatus, to: requestedStatus, contactId: contact.id, profileId: contact.profileId || 'default', actor: AppState.operatorName || 'PC local', shift: contact.shiftReviewedByShift || contact.assignedShift || '' });
+            AppState.statusTransitions.unshift({ at: eventAt, from: oldStatus, to: requestedStatus, contactId: contact.id, profileId: contact.profileId || 'default', actor: AppState.operatorName || 'PC local', shift: shiftByEvent || contact.shiftReviewedByShift || contact.assignedShift || '' });
             if (AppState.statusTransitions.length > 5000) AppState.statusTransitions = AppState.statusTransitions.slice(0, 5000);
             saveStatusTransitions();
-            AppState.buttonPressEvents.unshift({ at: eventAt, action: 'status-change', from: oldStatus, to: requestedStatus, shift: contact.shiftReviewedByShift || contact.assignedShift || '', profileId: contact.profileId || 'default', actor: AppState.operatorName || 'PC local' });
+            AppState.buttonPressEvents.unshift({ at: eventAt, action: 'status-change', from: oldStatus, to: requestedStatus, shift: shiftByEvent || contact.shiftReviewedByShift || contact.assignedShift || '', profileId: contact.profileId || 'default', actor: AppState.operatorName || 'PC local' });
             if (AppState.buttonPressEvents.length > 20000) AppState.buttonPressEvents = AppState.buttonPressEvents.slice(0, 20000);
             saveButtonPressEvents();
             if (oldStatus === 'sin revisar' && requestedStatus !== 'sin revisar') {
@@ -5331,7 +5375,7 @@
             if (event) event.stopPropagation();
             const contact = AppState.contacts.find(c => c.id === id);
             if (!contact || !contact.ops?.suggestedStatus) return;
-            changeContactStatus(id, contact.ops.suggestedStatus);
+            changeContactStatus(id, contact.ops.suggestedStatus, null, 'ops', { at: contact.ops?.lastCargaAt || new Date().toISOString(), shift: inferShiftFromIso(contact.ops?.lastCargaAt) });
             showNotification(`Sugerencia aplicada a ${contact.name}`, 'success');
         };
 
@@ -6428,10 +6472,38 @@
                     if (elements.metricTransitions24h) elements.metricTransitions24h.textContent = String(transitions24h.length);
                     if (elements.metricTopShift24h) elements.metricTopShift24h.textContent = topShiftText;
                     if (elements.metricButtonsPerHour) elements.metricButtonsPerHour.textContent = String(buttonsPerHour);
-                    renderTransitionTable(buildTransitionSummary());
+                    const allTransitions = buildTransitionSummary();
+                    renderTransitionTable(allTransitions);
+                    const wanted = [
+                        ['sin revisar', 'contactado'],
+                        ['contactado', 'no interesado'],
+                        ['contactado', 'jugando'],
+                        ['sin revisar', 'jugando'],
+                        ['sin revisar', 'revisado'],
+                        ['sin revisar', 'no interesado']
+                    ];
+                    if (elements.metricTransitionSummary) {
+                        const lines = wanted.map(([a,b]) => {
+                            const key = `${a}=>${b}`;
+                            const found = allTransitions.find(([k]) => k === key);
+                            const count = found ? found[1] : 0;
+                            return `<div><strong>${a}</strong> >>>> <strong>${b}</strong> x${count}</div>`;
+                        }).join('');
+                        elements.metricTransitionSummary.innerHTML = lines || '<div style="color:var(--text-secondary)">Sin resumen de transiciones</div>';
+                    }
                     if (elements.metricShiftBreakdown) {
                         const cards = Object.values(shiftTotals).sort((a,b)=>b.total-a.total).map((row)=>`<div class="metrics-card"><div class="k">Turno ${String(row.shift).toUpperCase()}</div><div class="v">${row.total}</div><div class="k">Revisó: ${row.reviewedOut} · Envió: ${row.sentOut}</div></div>`);
+                        const sorted = Object.values(shiftTotals).sort((a,b)=>b.total-a.total);
                         elements.metricShiftBreakdown.innerHTML = cards.length ? cards.join('') : '<div style="color:var(--text-secondary)">Sin datos por turno en 24h.</div>';
+                        if (elements.metricShiftRanking) {
+                            if (!sorted.length) {
+                                elements.metricShiftRanking.innerHTML = '<div style="color:var(--text-secondary)">Sin ranking de turnos en 24h.</div>';
+                            } else {
+                                const top = sorted[0];
+                                const lines = sorted.map((row, idx) => `${idx+1}º puesto ${String(row.shift).toUpperCase()}: Jugando ${row.sentOut}, Revisiones ${row.reviewedOut}, total ${row.total}`);
+                                elements.metricShiftRanking.innerHTML = `<div><strong>${String(top.shift).toUpperCase()} 1er puesto de revisión/jugando:</strong> ${top.total} usuarios</div><div style="margin-top:6px">${lines.join('<br>')}</div>`;
+                            }
+                        }
                     }
 
                     if (elements.metricsModal) elements.metricsModal.classList.add('active');

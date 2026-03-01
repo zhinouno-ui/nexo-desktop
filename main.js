@@ -481,6 +481,13 @@ function createWindow() {
     if (pendingImportDeepLink) mainWindow.webContents.send('deep-link:import', pendingImportDeepLink);
   });
 
+  mainWindow.on('close', () => {
+    if (!isQuitting && process.platform !== 'darwin') {
+      isQuitting = true;
+      app.quit();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
