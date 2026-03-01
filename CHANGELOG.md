@@ -10,6 +10,7 @@
 - Refuerzo de cache local de versión actual al iniciar para garantizar rollback.
 - Rollback conserva solo versiones inferiores y la limpieza mantiene máximo 3 instaladores.
 - Ajustes de `latest.yml` parsing para evitar falsos inválidos (`path`/`url` + `sha512`).
+- Fix crítico: `requestText` y `downloadFile` ahora siguen redirects HTTP (302/307...) de GitHub Releases hacia objects.githubusercontent.com.
 
 ### Desktop integration
 - Agregado Tray icon con menú rápido (abrir, buscar update, rollback y salir).

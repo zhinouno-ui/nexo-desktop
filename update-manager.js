@@ -24,13 +24,24 @@ function githubApi(pathname) {
   return `https://api.github.com/repos/${RELEASE_OWNER}/${RELEASE_REPO}${pathname}`;
 }
 
-function requestText(url) {
+function requestText(url, maxRedirects = 5) {
   return new Promise((resolve, reject) => {
     https.get(url, { headers: { 'User-Agent': 'nexo-desktop-updater' } }, (res) => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+        if (maxRedirects <= 0) {
+          reject(new Error('Too many redirects'));
+          return;
+        }
+        res.resume();
+        resolve(requestText(res.headers.location, maxRedirects - 1));
+        return;
+      }
+
       if (res.statusCode && res.statusCode >= 400) {
         reject(new Error(`HTTP ${res.statusCode}`));
         return;
       }
+
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
       res.on('end', () => resolve(data));
@@ -43,24 +54,40 @@ async function requestJson(url) {
   return JSON.parse(text || '{}');
 }
 
-function downloadFile(url, destPath) {
+function downloadFile(url, destPath, maxRedirects = 5) {
   return new Promise((resolve, reject) => {
     const file = fssync.createWriteStream(destPath);
-    https.get(url, { headers: { 'User-Agent': 'nexo-desktop-updater' } }, (res) => {
-      if (res.statusCode && res.statusCode >= 400) {
+
+    const doGet = (targetUrl, redirectsLeft) => {
+      https.get(targetUrl, { headers: { 'User-Agent': 'nexo-desktop-updater' } }, (res) => {
+        if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+          if (redirectsLeft <= 0) {
+            file.close();
+            reject(new Error('Too many redirects downloading file'));
+            return;
+          }
+          res.resume();
+          doGet(res.headers.location, redirectsLeft - 1);
+          return;
+        }
+
+        if (res.statusCode && res.statusCode >= 400) {
+          file.close();
+          reject(new Error(`HTTP ${res.statusCode} al descargar instalador`));
+          return;
+        }
+
+        res.pipe(file);
+        file.on('finish', () => {
+          file.close(() => resolve(destPath));
+        });
+      }).on('error', (error) => {
         file.close();
-        reject(new Error(`HTTP ${res.statusCode} al descargar instalador`));
-        return;
-      }
-      res.pipe(file);
-      file.on('finish', () => {
-        file.close();
-        resolve(destPath);
+        reject(error);
       });
-    }).on('error', (error) => {
-      file.close();
-      reject(error);
-    });
+    };
+
+    doGet(url, maxRedirects);
   });
 }
 
@@ -171,7 +198,7 @@ async function fallbackUpdate({ onStatus = () => {}, onErrorLog = async () => {}
     }
 
     const assets = Array.isArray(release.assets) ? release.assets : [];
-    const asset = assets.find((a) => String(a.name || '').toLowerCase().includes('win-x64') && String(a.name || '').toLowerCase().endsWith('.exe'));
+    const asset = assets.find((a) => String(a.name || '').toLowerCase().endsWith('.exe') && !String(a.name || '').toLowerCase().endsWith('.exe.blockmap'));
 
     onStatus('fallback-available', { latest, current, message: `Nueva versión ${latest} detectada por fallback.` });
 
@@ -211,7 +238,7 @@ async function ensureVersionInstallerCached(version, cacheDir = getUpdatesCacheD
 
     const release = await requestJson(githubApi(`/releases/tags/v${safeVersion}`));
     const assets = Array.isArray(release.assets) ? release.assets : [];
-    const asset = assets.find((a) => String(a.name || '').toLowerCase().includes('win-x64') && String(a.name || '').toLowerCase().endsWith('.exe'));
+    const asset = assets.find((a) => String(a.name || '').toLowerCase().endsWith('.exe') && !String(a.name || '').toLowerCase().endsWith('.exe.blockmap'));
     if (!asset?.browser_download_url) return null;
 
     await downloadFile(asset.browser_download_url, targetPath);
