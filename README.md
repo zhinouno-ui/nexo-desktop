@@ -53,12 +53,12 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 ## Flujo correcto de publicación (OBLIGATORIO para updater)
 
-1. Subir versión en `package.json` (ej. `1.1.17`).
+1. Subir versión en `package.json` (ej. `1.1.18`).
 2. Commit y push a rama principal.
 3. Crear y subir tag de release:
    ```bash
-   git tag v1.1.17
-   git push origin v1.1.17
+   git tag v1.1.18
+   git push origin v1.1.18
    ```
 4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest` y genera/publica el Release automáticamente desde la versión definida en `package.json`.
 5. Verificar que el Release tenga assets:
@@ -82,7 +82,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 ## Release automatizado con GitHub Actions
 
 - Workflow: `.github/workflows/release.yml`.
-- Trigger: push de tags `v*.*.*` (ej. `v1.1.17`).
+- Trigger: push de tags `v*.*.*` (ej. `v1.1.18`).
 - Build en `windows-latest` para generar NSIS real para Windows.
 - Publica Release con nombre `Nexo vX.Y.Z` y sube automáticamente los assets de `nexo-desktop/dist`.
 
@@ -161,5 +161,5 @@ Ese comando ejecuta: build Windows NSIS, crea tag `v<version>`, hace push y publ
 
 ## Registro de cambios por versión
 
-- A partir de `1.1.17` cada actualización debe documentar **qué cambió vs la versión anterior** en `CHANGELOG.md`.
+- A partir de `1.1.18` cada actualización debe documentar **qué cambió vs la versión anterior** en `CHANGELOG.md`.
 - Objetivo: facilitar pruebas regresivas y saber exactamente qué validar antes de publicar el próximo release.

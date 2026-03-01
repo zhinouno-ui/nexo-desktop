@@ -28,6 +28,7 @@ let downloadedUpdateMeta = null;
 let appTray = null;
 let pendingImportDeepLink = null;
 let lastUpdateAttempt = { at: null, stage: 'idle', ok: null, message: '' };
+let isQuitting = false;
 
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
@@ -176,7 +177,7 @@ function createTray() {
       if (candidate) await startInstallerAndQuit(candidate.fullPath);
     } },
     { type: 'separator' },
-    { label: 'Salir', click: () => app.quit() }
+    { label: 'Salir', click: () => { isQuitting = true; app.quit(); } }
   ]);
   appTray.setContextMenu(menu);
   appTray.on('double-click', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } });
@@ -470,11 +471,15 @@ function createWindow() {
     if (pendingImportDeepLink) mainWindow.webContents.send('deep-link:import', pendingImportDeepLink);
   });
 
-  mainWindow.on('minimize', (event) => {
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return;
     event.preventDefault();
-    mainWindow.hide();
+    mainWindow.minimize();
+  });
+
+  mainWindow.on('minimize', () => {
     if (Notification.isSupported()) {
-      new Notification({ title: 'Nexo', body: 'Nexo se minimizó a la bandeja del sistema.' }).show();
+      new Notification({ title: 'Nexo', body: 'Nexo sigue activo en segundo plano.' }).show();
     }
   });
 }
@@ -800,6 +805,10 @@ ipcMain.handle('updater:check', async () => {
       onStatus: (status, payload = {}) => sendUpdaterStatus(status, payload)
     });
     lastUpdateAttempt = { at: new Date().toISOString(), stage: 'check', ok: !!result?.ok, message: result?.message || '' };
+    if (!result?.ok && /no tiene una versión mayor|ya estás en la última versión/i.test(String(result?.message || ''))) {
+      sendUpdaterStatus('not-available', { message: 'No hay una actualización nueva disponible en este momento.' });
+      return { ok: false, message: 'No hay una actualización nueva disponible en este momento.' };
+    }
     return result?.ok ? { ok: true } : { ok: false, message: result?.message || 'Fallback sin éxito' };
   } catch (error) {
     const message = error?.message || String(error);
@@ -859,7 +868,7 @@ ipcMain.handle('updater:rollbackPrevious', async () => {
   try {
     const candidate = await resolveRollbackInstaller();
     if (!candidate) {
-      return { ok: false, message: 'No hay instalador anterior en cache para rollback.' };
+      return { ok: false, message: 'No hay una versión anterior disponible para volver atrás en este momento.' };
     }
     await appendErrorLog('rollback', new Error('Rollback requested'), { targetVersion: candidate.version, installer: candidate.fullPath });
     await startInstallerAndQuit(candidate.fullPath);
@@ -943,5 +952,5 @@ app.on('open-url', (event, url) => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // mantener proceso vivo para tareas en segundo plano/tray
 });

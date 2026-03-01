@@ -1,6 +1,6 @@
 {
   "name": "nexo-desktop",
-  "version": "1.1.17",
+  "version": "1.1.18",
   "description": "Nexo desktop app built with Electron",
   "main": "main.js",
   "author": "",
@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "electron .",
     "dist": "electron-builder --publish never",
-    "dist:win": "electron-builder --win nsis",
+    "dist:win": "electron-builder --win nsis && node scripts/health-check-update.js",
     "release": "node scripts/release.js"
   },
   "devDependencies": {

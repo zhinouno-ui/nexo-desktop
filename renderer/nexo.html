@@ -491,6 +491,8 @@
         .status-revisado { background: rgba(52, 211, 153, 0.2); color: #34d399; }
         .card-status-inline { min-width: 150px; display: inline-block; position: relative; z-index: 30; }
         .card-status-inline .status-badge { cursor: pointer; }
+        .card-status-trigger { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:10px; cursor:pointer; }
+        .card-status-trigger:hover { background: rgba(148,163,184,.12); }
 
         .card-status-menu {
             position: absolute;
@@ -1483,6 +1485,27 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v { font-size:1.2rem; font-weight:800; margin-top:4px; }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -1952,6 +1975,34 @@
         <button id="cancelImportBtn" class="btn" style="display:none;"><i class="fas fa-ban"></i> Cancelar importación</button>
     </div>
 
+
+    <div class="modal" id="importDiagnosticsModal">
+        <div class="modal-content" style="max-width:900px;">
+            <div class="modal-header"><i class="fas fa-stethoscope"></i> Diagnóstico de importación</div>
+            <div id="importDiagSummary" style="color:var(--text-secondary);margin-bottom:10px;"></div>
+            <div class="import-diag-grid">
+                <div class="import-diag-card">
+                    <h4>Preview (primeras 20 filas)</h4>
+                    <div id="importDiagTableWrap" style="max-height:260px;overflow:auto;"></div>
+                </div>
+                <div class="import-diag-card">
+                    <h4>Mapeo de columnas</h4>
+                    <div style="display:grid;gap:8px;">
+                        <label>Nombre <select id="importMapName" class="filter-select"></select></label>
+                        <label>Teléfono <select id="importMapPhone" class="filter-select"></select></label>
+                        <label>Etiqueta/Origen <select id="importMapTag" class="filter-select"></select></label>
+                    </div>
+                    <h4 style="margin-top:12px;">Validación</h4>
+                    <div id="importDiagIssues" class="import-diag-list"></div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="importDiagCancel" class="btn"><i class="fas fa-times"></i> Cancelar archivo</button>
+                <button id="importDiagContinue" class="btn btn-success"><i class="fas fa-check"></i> Continuar importación</button>
+            </div>
+        </div>
+    </div>
+
     <script>
     (() => {
         const hasBridge = !!(window.nexoStore && typeof window.nexoStore.getAll === 'function');
@@ -2078,6 +2129,7 @@
         })();
     })();
     </script>
+
 
     <script>
     (() => {
@@ -2223,6 +2275,15 @@
             metricsDateLabel: $('#metricsDateLabel'),
             metricsFilterLastBatchBtn: $('#metricsFilterLastBatchBtn'),
             metricsDeleteLastBatchBtn: $('#metricsDeleteLastBatchBtn'),
+            importDiagnosticsModal: $('#importDiagnosticsModal'),
+            importDiagSummary: $('#importDiagSummary'),
+            importDiagTableWrap: $('#importDiagTableWrap'),
+            importMapName: $('#importMapName'),
+            importMapPhone: $('#importMapPhone'),
+            importMapTag: $('#importMapTag'),
+            importDiagIssues: $('#importDiagIssues'),
+            importDiagCancel: $('#importDiagCancel'),
+            importDiagContinue: $('#importDiagContinue'),
             profilesModal: $('#profilesModal'),
             profilesList: $('#profilesList'),
             newProfileName: $('#newProfileName'),
@@ -3170,6 +3231,107 @@
             return true;
         }
 
+
+        function detectDelimiter(text) {
+            const lines = String(text || '').split(/
+?
+/).slice(0, 8).filter(Boolean);
+            const candidates = [',', ';', '\t'];
+            let best = ',';
+            let bestScore = -1;
+            candidates.forEach((d) => {
+                const score = lines.reduce((acc, line) => acc + (line.split(d).length - 1), 0);
+                if (score > bestScore) { bestScore = score; best = d; }
+            });
+            return best;
+        }
+
+        async function showImportDiagnosticsPanel(fileName, text, profileName) {
+            const delimiter = detectDelimiter(text);
+            const lines = String(text || '').split(/
+?
+/).filter(Boolean);
+            const parsePreviewRow = (line) => {
+                if (delimiter === ',') return parseCsvRow(line);
+                return String(line || '').split(delimiter).map((v) => v.trim());
+            };
+            const rows = lines.slice(0, 21).map((l) => parsePreviewRow(l));
+            const header = rows[0] || [];
+            const dataRows = rows.slice(1, 21);
+
+            const colOptions = ['(vacío)', ...header];
+            const fillSelect = (el, preferredRegex) => {
+                if (!el) return;
+                el.innerHTML = colOptions.map((c, i) => `<option value="${i-1}">${c}</option>`).join('');
+                const idx = header.findIndex((h) => preferredRegex.test(String(h || '').toLowerCase()));
+                el.value = String(idx);
+            };
+            fillSelect(elements.importMapName, /nombre|name|usuario/);
+            fillSelect(elements.importMapPhone, /tel|phone|cel|whatsapp|wsp/);
+            fillSelect(elements.importMapTag, /origen|tag|etiqueta|label/);
+
+            const getMapped = (row, selectEl) => {
+                const idx = parseInt(selectEl?.value || '-1', 10);
+                return idx >= 0 ? String(row[idx] || '').trim() : '';
+            };
+
+            const evaluate = () => {
+                const phones = new Map();
+                let invalidPhones = 0;
+                let emptyNames = 0;
+                let duplicates = 0;
+                dataRows.forEach((row) => {
+                    const name = getMapped(row, elements.importMapName);
+                    const phone = normalizePhoneNumber(getMapped(row, elements.importMapPhone));
+                    if (!name) emptyNames += 1;
+                    if (phone && phone.length < 8) invalidPhones += 1;
+                    if (phone) {
+                        const prev = phones.get(phone) || 0;
+                        phones.set(phone, prev + 1);
+                    }
+                });
+                phones.forEach((v) => { if (v > 1) duplicates += (v - 1); });
+                return { invalidPhones, emptyNames, duplicates };
+            };
+
+            const renderTable = () => {
+                const head = header.map((h) => `<th>${h || '(columna)'}</th>`).join('');
+                const body = dataRows.map((row) => `<tr>${header.map((_,i)=>`<td>${(row[i]||'').toString().replace(/</g,'&lt;')}</td>`).join('')}</tr>`).join('');
+                elements.importDiagTableWrap.innerHTML = `<table class="import-diag-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+            };
+
+            const renderIssues = () => {
+                const r = evaluate();
+                elements.importDiagIssues.innerHTML = `
+                    <div>• Delimitador detectado: <strong>${delimiter === '\t' ? 'tab' : delimiter}</strong></div>
+                    <div>• Nombres vacíos: <strong>${r.emptyNames}</strong></div>
+                    <div>• Teléfonos inválidos: <strong>${r.invalidPhones}</strong></div>
+                    <div>• Duplicados en preview: <strong>${r.duplicates}</strong></div>
+                `;
+            };
+
+            renderTable();
+            renderIssues();
+            elements.importDiagSummary.textContent = `Archivo: ${fileName} · Perfil: ${profileName} · Filas analizadas: ${dataRows.length}`;
+            elements.importDiagnosticsModal.classList.add('active');
+
+            [elements.importMapName, elements.importMapPhone, elements.importMapTag].forEach((el) => {
+                if (!el) return;
+                el.onchange = () => renderIssues();
+            });
+
+            return new Promise((resolve) => {
+                elements.importDiagCancel.onclick = () => {
+                    elements.importDiagnosticsModal.classList.remove('active');
+                    resolve(false);
+                };
+                elements.importDiagContinue.onclick = () => {
+                    elements.importDiagnosticsModal.classList.remove('active');
+                    resolve(true);
+                };
+            });
+        }
+
         async function loadFiles() {
             const origin = elements.originInput.value.trim() || 'Sin especificar';
             let totalNewContacts = 0;
@@ -3194,13 +3356,9 @@
                 batchFiles.push(file.name);
                 const text = await file.text();
                 const profileIdForFile = AppState.splitImportByFile && selectedFiles.length > 1 ? ensureProfileByName((file.name || '').replace(/\.[^.]+$/, '')) : (AppState.activeProfileId || 'default');
-                const linesPreview = String(text || '').split(/\r?\n/).slice(0, 11);
-                if (linesPreview.length > 1) {
-                    const previewCols = parseCsvRow(linesPreview[0] || '');
-                    const previewRows = linesPreview.slice(1).filter(Boolean).slice(0, 3).join('\n');
-                    const okPreview = confirm(`Vista previa de importación\nArchivo: ${file.name}\nPerfil destino: ${(AppState.profiles.find(p => p.id === profileIdForFile)?.name || 'Base principal')}\nColumnas detectadas: ${previewCols.join(' | ')}\n\nEjemplo:\n${previewRows}\n\n¿Continuar?`);
-                    if (!okPreview) continue;
-                }
+                const profileLabel = (AppState.profiles.find(p => p.id === profileIdForFile)?.name || 'Base principal');
+                const okPreview = await showImportDiagnosticsPanel(file.name, text, profileLabel);
+                if (!okPreview) continue;
                 if (AppState.importCancelRequested) break;
 
                 setLoadingState(true, `Parseando… ${file.name}`, 10, true);
@@ -4749,7 +4907,7 @@
                         <div class="detail-item"><i class="fas fa-tag"></i><span>${contact.origin}</span></div>
                         <div class="detail-item">
                             <i class="fas fa-circle-notch"></i>
-                            <span class="card-status-inline" id="cardStatusInline-${contact.id}"><span class="status-badge status-${contact.status.replace(/ /g, '-')}" onclick="openCardStatusMenu(${contact.id}, event)">${statusOption.label}</span></span>
+                            <span class="card-status-inline" id="cardStatusInline-${contact.id}"><span class="card-status-trigger" onclick="openCardStatusMenu(${contact.id}, event)"><span class="status-badge status-${contact.status.replace(/ /g, '-')}">${statusOption.label}</span><i class="fas fa-chevron-down"></i></span></span>
                         </div>
                     </div>
                     ${opsMini}
@@ -5810,9 +5968,13 @@
                         showNotification(payload.message || 'Actualización lista. Reiniciar ahora', 'success');
                     }
                     if (status === 'error') {
-                        elements.updateStatusText.textContent = payload.message || 'Error de actualización';
+                        const raw = String(payload.message || '');
+                        const friendly = /no tiene una versión mayor|ya estás en la última versión|no hay una actualización nueva/i.test(raw)
+                            ? 'No hay una actualización nueva disponible en este momento.'
+                            : (payload.message || 'Error de actualización');
+                        elements.updateStatusText.textContent = friendly;
                         if (elements.updateProgressFill) elements.updateProgressFill.style.width = '0%';
-                        showNotification(payload.message || 'Error de actualización', 'error');
+                        showNotification(friendly, /No hay una actualización nueva/.test(friendly) ? 'info' : 'error');
                     }
                 });
             }

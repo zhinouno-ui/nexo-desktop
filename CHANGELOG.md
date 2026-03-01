@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.18
+
+### Blindaje del updater
+- Nuevo health-check automático post build (`dist:win`) que valida `latest.yml` local y remoto, existencia/peso del `.exe` y lectura con redirects.
+- Mensajes de estado de actualización más claros para usuario final cuando no hay versión nueva disponible.
+
+### Importador premium y diagnóstico
+- Reemplazo del preview por `confirm()` con panel de diagnóstico visual: preview (20 filas), mapeo de columnas y validaciones legibles (vacíos, inválidos, duplicados, delimitador).
+
+### UX y desktop
+- Corrección de progreso/conteos por perfil activo para evitar mezcla entre bases.
+- Aumento de hitbox en flecha/opciones de tarjeta.
+- Cerrar ventana ahora minimiza a barra de tareas (app permanece activa para tareas de fondo/tray).
+
 ## 1.1.17
 
 ### Perfiles, UX y productividad
