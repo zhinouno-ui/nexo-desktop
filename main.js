@@ -471,17 +471,6 @@ function createWindow() {
     if (pendingImportDeepLink) mainWindow.webContents.send('deep-link:import', pendingImportDeepLink);
   });
 
-  mainWindow.on('close', (event) => {
-    if (isQuitting) return;
-    event.preventDefault();
-    mainWindow.minimize();
-  });
-
-  mainWindow.on('minimize', () => {
-    if (Notification.isSupported()) {
-      new Notification({ title: 'Nexo', body: 'Nexo sigue activo en segundo plano.' }).show();
-    }
-  });
 }
 
 function versionToParts(version) {
@@ -549,6 +538,7 @@ async function startInstallerAndQuit(installerPath) {
     windowsHide: true
   });
   child.unref();
+  isQuitting = true;
   setTimeout(() => app.quit(), 100);
 }
 
@@ -847,6 +837,7 @@ ipcMain.handle('updater:install', async (_event, payload) => {
     });
     detached.unref();
     await persistCurrentVersionMeta({ reason: 'before-install', targetVersion: downloadedUpdateMeta?.version || '' });
+    isQuitting = true;
     setTimeout(() => app.quit(), 120);
     return { ok: true };
   } catch (error) {
@@ -949,6 +940,10 @@ app.on('second-instance', (_event, argv) => {
 app.on('open-url', (event, url) => {
   event.preventDefault();
   applyDeepLinkPayload(parseDeepLink(url));
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
 });
 
 app.on('window-all-closed', () => {
