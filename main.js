@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, Notification } = require('electron');
 const fs = require('fs/promises');
 const fssync = require('fs');
 const path = require('path');
@@ -25,7 +25,14 @@ let currentZoomFactor = 1.0;
 let dbCache = null;
 let dbCacheLoadedAt = 0;
 let downloadedUpdateMeta = null;
+let appTray = null;
+let pendingImportDeepLink = null;
 let lastUpdateAttempt = { at: null, stage: 'idle', ok: null, message: '' };
+
+const singleInstanceLock = app.requestSingleInstanceLock();
+if (!singleInstanceLock) {
+  app.quit();
+}
 
 function getDbPath() {
   return path.join(app.getPath('userData'), 'nexo-db.json');
@@ -145,6 +152,59 @@ async function computeFileSha512(filePath) {
 
 function getStableReleaseUrl() {
   return `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases/tag/${STABLE_TAG}`;
+}
+
+
+function getTrayIcon() {
+  const base64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAcElEQVR4nGP8z8Dwn4GKgImaho0aOGrgqIGjBo4aOKoA0QYGBv7///8zMDAwQWQxMTEwGmB0QxA2g8HhP4YGBgYGBjAqQhQmBiYgQmYGRkZGRgYIhSg1QxQGkA0gNQFQg0gNQDQk0A0QxY1g0A0M2PAAAwD4D0S9M7v7nQAAAABJRU5ErkJggg==';
+  return nativeImage.createFromDataURL(`data:image/png;base64,${base64}`);
+}
+
+function createTray() {
+  if (appTray) return;
+  appTray = new Tray(getTrayIcon());
+  appTray.setToolTip(`Nexo v${app.getVersion()}`);
+  const menu = Menu.buildFromTemplate([
+    { label: `Nexo v${app.getVersion()}`, enabled: false },
+    { type: 'separator' },
+    { label: 'Abrir Nexo', click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } } },
+    { label: 'Buscar actualizaciones', click: async () => {
+      try { await checkForUpdatesWithFallback({ onErrorLog: appendErrorLog, onStatus: sendUpdaterStatus }); } catch (_) {}
+    } },
+    { label: 'Rollback versión anterior', click: async () => {
+      const candidate = await resolveRollbackInstaller();
+      if (candidate) await startInstallerAndQuit(candidate.fullPath);
+    } },
+    { type: 'separator' },
+    { label: 'Salir', click: () => app.quit() }
+  ]);
+  appTray.setContextMenu(menu);
+  appTray.on('double-click', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } });
+}
+
+function parseDeepLink(url) {
+  try {
+    if (!url || typeof url !== 'string' || !url.startsWith('nexo://')) return null;
+    const parsed = new URL(url);
+    if (parsed.hostname === 'import') {
+      const file = parsed.searchParams.get('file') || '';
+      return { type: 'import', file };
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function applyDeepLinkPayload(payload) {
+  if (!payload || payload.type !== 'import') return;
+  pendingImportDeepLink = payload;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('deep-link:import', payload);
+    if (payload.file) {
+      new Notification({ title: 'Nexo import', body: `Solicitud de importación recibida: ${path.basename(payload.file)}` }).show();
+    }
+  }
 }
 
 function parseArgValue(flag) {
@@ -405,6 +465,18 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'nexo.html'));
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (pendingImportDeepLink) mainWindow.webContents.send('deep-link:import', pendingImportDeepLink);
+  });
+
+  mainWindow.on('minimize', (event) => {
+    event.preventDefault();
+    mainWindow.hide();
+    if (Notification.isSupported()) {
+      new Notification({ title: 'Nexo', body: 'Nexo se minimizó a la bandeja del sistema.' }).show();
+    }
+  });
 }
 
 function versionToParts(version) {
@@ -692,6 +764,22 @@ ipcMain.handle('app:exportBackup', async () => {
   await fs.copyFile(getDbPath(), target.filePath);
   return { canceled: false, filePath: target.filePath };
 });
+ipcMain.handle('dialog:openImportFiles', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Seleccionar archivos para importar',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'Contactos', extensions: ['csv', 'vcf', 'json'] }]
+  });
+  return result.canceled ? [] : (result.filePaths || []);
+});
+ipcMain.handle('app:notify', async (_event, payload) => {
+  if (!Notification.isSupported()) return { ok: false };
+  const title = String(payload?.title || 'Nexo');
+  const body = String(payload?.body || '');
+  new Notification({ title, body }).show();
+  return { ok: true };
+});
+
 ipcMain.handle('external:open', async (_event, url) => {
   if (!url || typeof url !== 'string') throw new Error('URL inválida');
   await shell.openExternal(url);
@@ -783,6 +871,12 @@ ipcMain.handle('updater:rollbackPrevious', async () => {
 });
 
 app.whenReady().then(async () => {
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.nexo.desktop');
+    app.setAsDefaultProtocolClient('nexo');
+    app.setLoginItemSettings({ openAtLogin: true, path: process.execPath });
+  }
+
   const installerArg = parseArgValue('--installer');
   const versionArg = parseArgValue('--version');
   const updateAssistantMode = process.argv.includes('--update-assistant');
@@ -794,8 +888,23 @@ app.whenReady().then(async () => {
 
   try { await readDb(); } catch (error) { console.warn('No se pudo precalentar cache local:', error?.message || error); }
   createWindow();
+  createTray();
+
+  const deepArg = process.argv.find((a) => typeof a === 'string' && a.startsWith('nexo://'));
+  if (deepArg) applyDeepLinkPayload(parseDeepLink(deepArg));
   setupAutoUpdater();
-  const cachedCurrent = await ensureVersionInstallerCached(app.getVersion(), getUpdateCacheDir(), { onErrorLog: appendErrorLog }).catch(() => null);
+  let cachedCurrent = await ensureVersionInstallerCached(app.getVersion(), getUpdateCacheDir(), { onErrorLog: appendErrorLog }).catch(() => null);
+  if (!cachedCurrent && app.isPackaged) {
+    try {
+      const target = path.join(getUpdateCacheDir(), `Nexo-${app.getVersion()}.exe`);
+      await fs.mkdir(getUpdateCacheDir(), { recursive: true });
+      await fs.copyFile(process.execPath, target);
+      cachedCurrent = target;
+      await pruneCachedInstallers(getUpdateCacheDir(), 3).catch(() => {});
+    } catch (copyErr) {
+      await appendErrorLog('cache-current-installer', copyErr);
+    }
+  }
   await persistCurrentVersionMeta({ reason: 'startup', installer: cachedCurrent ? path.basename(cachedCurrent) : '' });
   if (!app.isPackaged) {
     sendUpdaterStatus('not-available', { message: 'Modo desarrollo: auto-update desactivado.' });
@@ -820,6 +929,17 @@ process.on('uncaughtException', (error) => {
 });
 process.on('unhandledRejection', (reason) => {
   appendErrorLog('process-unhandledRejection', reason).catch(() => {});
+});
+
+app.on('second-instance', (_event, argv) => {
+  const deepArg = (argv || []).find((a) => typeof a === 'string' && a.startsWith('nexo://'));
+  if (deepArg) applyDeepLinkPayload(parseDeepLink(deepArg));
+  if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
+});
+
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  applyDeepLinkPayload(parseDeepLink(url));
 });
 
 app.on('window-all-closed', () => {

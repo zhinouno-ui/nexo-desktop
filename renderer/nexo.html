@@ -1457,6 +1457,19 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v { font-size:1.2rem; font-weight:800; margin-top:4px; }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -2807,6 +2820,36 @@
             if (contact.timeline.length > 500) contact.timeline = contact.timeline.slice(0, 500);
         }
 
+        const motivationalPhrases = [
+            '🔥 Excelente ritmo, seguí así.',
+            '🎯 Estás en modo pro, impecable.',
+            '😎 Alto laburo, el CRM te aplaude.',
+            '💪 Tremenda consistencia, crack.',
+            '🧠 Productividad desbloqueada.'
+        ];
+
+        function currentShiftWindowKey() {
+            const now = new Date();
+            const block = Math.floor(now.getHours() / 8);
+            return `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}-${block}`;
+        }
+
+        function ensureMotivationWindow() {
+            const key = currentShiftWindowKey();
+            if (AppState.motivationWindowKey !== key) {
+                AppState.motivationWindowKey = key;
+                AppState.reviewPositiveCounter = 0;
+                AppState.reviewMilestonesShown = {};
+            }
+        }
+
+        async function sendNativeMotivation(count) {
+            const phrase = motivationalPhrases[Math.floor(Math.random() * motivationalPhrases.length)];
+            const body = `${phrase} Ya llevás ${count} revisiones en este bloque de 8h.`;
+            showNotification(body, 'success');
+            if (window.electronAPI?.notify) await window.electronAPI.notify({ title: 'Nexo · Felicitaciones', body });
+        }
+
         function addToHistory(action, details, contactId = null) {
             const historyEntry = {
                 timestamp: new Date().toISOString(),
@@ -4035,8 +4078,10 @@
         }
 
         function updateStats() {
+            const activeProfile = AppState.activeProfileId || 'default';
+            const profileContacts = AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile);
             const totals = {
-                total: AppState.contacts.length,
+                total: profileContacts.length,
                 unreviewed: 0,
                 contactado: 0,
                 revisado: 0,
@@ -4047,7 +4092,7 @@
             };
             const originSet = new Set();
 
-            AppState.contacts.forEach(c => {
+            profileContacts.forEach(c => {
                 if (c.origin) originSet.add(c.origin);
                 if (c.status !== 'sin revisar') totals.reviewed++;
                 if (c.status === 'sin revisar') totals.unreviewed++;
@@ -4067,7 +4112,7 @@
             $('#sinWspCount').textContent = totals.sinWsp;
             $('#noInteresadoCount').textContent = totals.noInteresado;
 
-            const totalDuplicateEntries = (AppState.duplicates || []).reduce((sum, group) => sum + group.contacts.length, 0);
+            const totalDuplicateEntries = (AppState.duplicates || []).reduce((sum, group) => sum + group.contacts.filter(c => (c.profileId || 'default') === activeProfile).length, 0);
             $('#duplicatesCount').textContent = totalDuplicateEntries;
 
             updateExportUrgencyBadge();
@@ -4148,14 +4193,17 @@
 
         function assignShifts() {
             const rr = { i: 0 };
-            AppState.contacts.forEach(c => {
+            const activeProfile = AppState.activeProfileId || 'default';
+            AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile).forEach(c => {
                 if (!c.assignedShift) c.assignedShift = inferShiftForContact(c, rr);
             });
         }
 
         function getShiftStats(shift) {
-            const pendientes = AppState.contacts.filter(c => c.assignedShift === shift && c.status === 'sin revisar').length;
-            const revisados = AppState.contacts.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift && c.status !== 'sin revisar').length;
+            const activeProfile = AppState.activeProfileId || 'default';
+            const scoped = AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile);
+            const pendientes = scoped.filter(c => c.assignedShift === shift && c.status === 'sin revisar').length;
+            const revisados = scoped.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift && c.status !== 'sin revisar').length;
             const total = revisados + pendientes;
             const pct = total ? Math.min(100, Math.round((revisados / total) * 100)) : 0;
             return { total, revisados, pendientes, pct };
@@ -4254,14 +4302,17 @@
 
         function assignShifts() {
             const rr = { i: 0 };
-            AppState.contacts.forEach(c => {
+            const activeProfile = AppState.activeProfileId || 'default';
+            AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile).forEach(c => {
                 if (!c.assignedShift) c.assignedShift = inferShiftForContact(c, rr);
             });
         }
 
         function getShiftStats(shift) {
-            const pendientes = AppState.contacts.filter(c => c.assignedShift === shift && c.status === 'sin revisar').length;
-            const revisados = AppState.contacts.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift && c.status !== 'sin revisar').length;
+            const activeProfile = AppState.activeProfileId || 'default';
+            const scoped = AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile);
+            const pendientes = scoped.filter(c => c.assignedShift === shift && c.status === 'sin revisar').length;
+            const revisados = scoped.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift && c.status !== 'sin revisar').length;
             const total = revisados + pendientes;
             const pct = total ? Math.min(100, Math.round((revisados / total) * 100)) : 0;
             return { total, revisados, pendientes, pct };
@@ -4930,13 +4981,13 @@
             if (oldStatus === 'sin revisar' && requestedStatus !== 'sin revisar') {
                 try {
                     ensureReviewMilestonesState();
+                    ensureMotivationWindow();
                     AppState.reviewPositiveCounter += 1;
-                    const milestones = [100, 250, 500, 1000, 1500, 2500, 5000];
+                    const milestones = [200, 400, 600, 800, 1000, 1500, 2000];
                     const nearest = milestones.find(v => v === AppState.reviewPositiveCounter);
                     if (nearest && !AppState.reviewMilestonesShown[nearest]) {
                         AppState.reviewMilestonesShown[nearest] = true;
-                        const msg = `🚀 Tremendo laburo: ${nearest} usuarios revisados.`;
-                        showNotification(msg, 'success');
+                        sendNativeMotivation(nearest).catch(() => {});
                     }
                 } catch (moralErr) {
                     console.warn('No se pudo procesar notificación motivacional:', moralErr);
@@ -5544,7 +5595,16 @@
         }
 
         function setupEventListeners() {
-            elements.uploadArea.onclick = () => elements.fileInput.click();
+            elements.uploadArea.onclick = async () => {
+                if (window.electronAPI?.openImportDialog) {
+                    const picked = await window.electronAPI.openImportDialog();
+                    if (Array.isArray(picked) && picked.length) {
+                        showNotification(`Seleccionados ${picked.length} archivos (abrilos por arrastre o selector interno para importar).`, 'info');
+                        return;
+                    }
+                }
+                elements.fileInput.click();
+            };
             elements.uploadArea.ondragover = (e) => { e.preventDefault(); elements.uploadArea.style.borderColor = 'var(--accent-primary)'; };
             elements.uploadArea.ondragleave = () => elements.uploadArea.style.borderColor = 'var(--border-color)';
             elements.uploadArea.ondrop = (e) => {
@@ -6638,6 +6698,13 @@
                 });
                 elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
                 setupEventListeners();
+                if (window.electronAPI?.onDeepLinkImport) {
+                    window.electronAPI.onDeepLinkImport((payload) => {
+                        const filePath = String(payload?.file || '');
+                        elements.uploadScreen.classList.remove('hidden');
+                        showNotification(filePath ? `Deep link import recibido: ${filePath}` : 'Deep link import recibido', 'info');
+                    });
+                }
 
                 window.nexoUpdaterDiagnostics = async () => {
                     const diag = await window.electronAPI?.getUpdaterDiagnostics?.();

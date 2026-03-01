@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.17
+
+### Perfiles, UX y productividad
+- Corregido el progreso y conteos para que se calculen por perfil activo y no se mezclen entre bases.
+- Mejoras de integración de notificaciones motivacionales nativas con reset automático por bloques de 8 horas.
+
+### Updater, rollback y cache
+- Refuerzo de cache local de versión actual al iniciar para garantizar rollback.
+- Rollback conserva solo versiones inferiores y la limpieza mantiene máximo 3 instaladores.
+- Ajustes de `latest.yml` parsing para evitar falsos inválidos (`path`/`url` + `sha512`).
+
+### Desktop integration
+- Agregado Tray icon con menú rápido (abrir, buscar update, rollback y salir).
+- Auto-launch en Windows y handler de protocolo `nexo://` con soporte inicial para deep link de import.
+- Nuevo bridge de diálogos nativos (`dialog.showOpenDialog`) y notificaciones nativas vía main process.
+
 ## 1.1.16
 
 ### Update system hardening
