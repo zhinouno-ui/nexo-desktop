@@ -1548,6 +1548,27 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v { font-size:1.2rem; font-weight:800; margin-top:4px; }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">

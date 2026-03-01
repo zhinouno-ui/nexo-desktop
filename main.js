@@ -161,6 +161,14 @@ function getTrayIcon() {
   return nativeImage.createFromDataURL(`data:image/png;base64,${base64}`);
 }
 
+function showOrCreateMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
 function createTray() {
   if (appTray) return;
   appTray = new Tray(getTrayIcon());
@@ -168,7 +176,7 @@ function createTray() {
   const menu = Menu.buildFromTemplate([
     { label: `Nexo v${app.getVersion()}`, enabled: false },
     { type: 'separator' },
-    { label: 'Abrir Nexo', click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } } },
+    { label: 'Abrir Nexo', click: () => { showOrCreateMainWindow(); } },
     { label: 'Buscar actualizaciones', click: async () => {
       try { await checkForUpdatesWithFallback({ onErrorLog: appendErrorLog, onStatus: sendUpdaterStatus }); } catch (_) {}
     } },
@@ -180,7 +188,7 @@ function createTray() {
     { label: 'Salir', click: () => { isQuitting = true; app.quit(); } }
   ]);
   appTray.setContextMenu(menu);
-  appTray.on('double-click', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } });
+  appTray.on('double-click', () => { showOrCreateMainWindow(); });
 }
 
 function parseDeepLink(url) {
@@ -469,6 +477,10 @@ function createWindow() {
 
   mainWindow.webContents.on('did-finish-load', () => {
     if (pendingImportDeepLink) mainWindow.webContents.send('deep-link:import', pendingImportDeepLink);
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
   });
 
 }
@@ -874,7 +886,7 @@ app.whenReady().then(async () => {
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.nexo.desktop');
     app.setAsDefaultProtocolClient('nexo');
-    app.setLoginItemSettings({ openAtLogin: true, path: process.execPath });
+    app.setLoginItemSettings({ openAtLogin: false, path: process.execPath });
   }
 
   const installerArg = parseArgValue('--installer');
@@ -934,7 +946,7 @@ process.on('unhandledRejection', (reason) => {
 app.on('second-instance', (_event, argv) => {
   const deepArg = (argv || []).find((a) => typeof a === 'string' && a.startsWith('nexo://'));
   if (deepArg) applyDeepLinkPayload(parseDeepLink(deepArg));
-  if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
+  showOrCreateMainWindow();
 });
 
 app.on('open-url', (event, url) => {
