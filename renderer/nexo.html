@@ -1677,6 +1677,36 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v { font-size:1.2rem; font-weight:800; margin-top:4px; }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -2091,10 +2121,9 @@
             <div class="metrics-actions">
                 <button id="metricsFilterLastBatchBtn" class="btn"><i class="fas fa-filter"></i> Filtrar última subida</button>
                 <button id="metricsDeleteLastBatchBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Borrar última subida</button>
-                <button id="exportFullSnapshotBtn" class="btn"><i class="fas fa-file-export"></i> Exportar TODO</button>
+                <button id="exportFullSnapshotBtn" class="btn" title="Exporta snapshot completo (usuarios + historial global)"><i class="fas fa-file-export"></i> Exportar Snapshot <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo pesado para auditoría periódica. Incluye usuarios e historial global."></i></button>
                 <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
-                <button id="importControlBtn" class="btn"><i class="fas fa-shield-alt"></i> Importar archivo de control</button>
-                <input id="controlFileInput" type="file" accept=".json" style="display:none;">
+                <button id="importControlBtn" class="btn" title="Importa control diario/mensual"><i class="fas fa-shield-alt"></i> Importar Control <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo liviano para seguimiento diario/mensual de métricas y turnos."></i></button>
             </div>
             <div id="metricTransitionsBreakdown" class="metrics-transitions"></div>
             <div id="metricTransitionSummary" class="metrics-transitions" style="margin-top:8px;"></div>
@@ -2104,6 +2133,7 @@
             </details>
             <div id="metricShiftBreakdown" class="metrics-wide-grid"></div>
             <div id="metricShiftRanking" class="metrics-transitions" style="margin-top:8px;"></div>
+            <div id="controlReportsSummary" class="metrics-transitions" style="margin-top:8px;"></div>
             <div id="controlPasswordPanel" class="metrics-password-panel" style="display:none;">
                 <div style="font-weight:700;margin-bottom:6px;">Seguridad archivo de control</div>
                 <div style="color:var(--text-secondary);font-size:.85rem;margin-bottom:8px;">Después del primer ingreso podés cambiar la clave de importación.</div>
@@ -2397,7 +2427,8 @@
             lastMidnightExportDate: '',
             controlImportUnlocked: false,
             controlPasswordHash: '',
-            controlLastImportedAt: ''
+            controlLastImportedAt: '',
+            controlReports: []
         };
 
         function ensureReviewMilestonesState() {
@@ -2478,13 +2509,13 @@
             metricShiftBreakdown: $('#metricShiftBreakdown'),
             metricTransitionSummary: $('#metricTransitionSummary'),
             metricShiftRanking: $('#metricShiftRanking'),
+            controlReportsSummary: $('#controlReportsSummary'),
             metricsDateLabel: $('#metricsDateLabel'),
             metricsFilterLastBatchBtn: $('#metricsFilterLastBatchBtn'),
             metricsDeleteLastBatchBtn: $('#metricsDeleteLastBatchBtn'),
             exportFullSnapshotBtn: $('#exportFullSnapshotBtn'),
             importFullSnapshotBtn: $('#importFullSnapshotBtn'),
             importControlBtn: $('#importControlBtn'),
-            controlFileInput: $('#controlFileInput'),
             controlPasswordPanel: $('#controlPasswordPanel'),
             controlPasswordNew: $('#controlPasswordNew'),
             controlPasswordSaveBtn: $('#controlPasswordSaveBtn'),
@@ -5496,6 +5527,8 @@
                 AppState.controlImportUnlocked = localStorage.getItem('controlImportUnlocked') === '1';
                 AppState.controlPasswordHash = localStorage.getItem('controlPasswordHash') || '';
                 AppState.controlLastImportedAt = localStorage.getItem('controlLastImportedAt') || '';
+                const controlReportsRaw = localStorage.getItem('controlReports');
+                if (controlReportsRaw) { try { AppState.controlReports = JSON.parse(controlReportsRaw); } catch (_) { AppState.controlReports = []; } }
                 const backupMode = localStorage.getItem('autoBackupStorageMode');
                 if (backupMode === 'download' || backupMode === 'file' || backupMode === 'ask') {
                     AppState.autoBackupStorageMode = backupMode === 'ask' ? 'download' : backupMode;
@@ -5521,6 +5554,7 @@
                 localStorage.setItem('controlImportUnlocked', AppState.controlImportUnlocked ? '1' : '0');
                 if (AppState.controlPasswordHash) localStorage.setItem('controlPasswordHash', AppState.controlPasswordHash);
                 if (AppState.controlLastImportedAt) localStorage.setItem('controlLastImportedAt', AppState.controlLastImportedAt);
+                localStorage.setItem('controlReports', JSON.stringify((AppState.controlReports || []).slice(0, 180)));
             } catch (e) {
                 console.error('Error al guardar preferencias:', e);
             }
@@ -6373,12 +6407,21 @@
             };
 
             const exportFullSnapshot = () => {
+                const perContactHistory = {};
+                (AppState.history || []).forEach((item) => {
+                    if (!item?.contactId) return;
+                    const key = String(item.contactId);
+                    if (!perContactHistory[key]) perContactHistory[key] = [];
+                    if (perContactHistory[key].length < 15) perContactHistory[key].push(item);
+                });
                 const payload = {
                     exportedAt: new Date().toISOString(),
                     appVersion: '1.1.19',
+                    exportType: 'nexo-snapshot-full-v1',
                     state: {
                         contacts: AppState.contacts || [],
                         history: AppState.history || [],
+                        perContactHistory,
                         profiles: AppState.profiles || [],
                         activeProfileId: AppState.activeProfileId || 'default',
                         statusTransitions: AppState.statusTransitions || [],
@@ -6448,7 +6491,9 @@
 
             const createControlExportPayload = () => {
                 const transitions24h = (AppState.statusTransitions || []).filter((t) => withinLastHours(t.at, 24));
+                const transitions30d = (AppState.statusTransitions || []).filter((t) => withinLastHours(t.at, 24 * 30));
                 const buttons24h = (AppState.buttonPressEvents || []).filter((t) => withinLastHours(t.at, 24));
+                const buttons30d = (AppState.buttonPressEvents || []).filter((t) => withinLastHours(t.at, 24 * 30));
                 const shiftTotals = {};
                 transitions24h.forEach((t) => {
                     const key = String(t.shift || 'sin-turno').toLowerCase();
@@ -6459,23 +6504,34 @@
                 });
                 const topShift = Object.values(shiftTotals).sort((a,b) => b.total - a.total)[0] || null;
                 const buttonsPerHour = Math.round(((buttons24h.length / 24) + Number.EPSILON) * 100) / 100;
+                const monthByShift = {};
+                transitions30d.forEach((t) => {
+                    const key = String(t.shift || 'sin-turno').toLowerCase();
+                    monthByShift[key] = (monthByShift[key] || 0) + 1;
+                });
                 return {
                     exportedAt: new Date().toISOString(),
-                    exportType: 'control-update-1.1.19',
+                    exportType: 'nexo-control-daily-v1',
                     sourceDevice: navigator.userAgent || 'Nexo',
-                    profiles: AppState.profiles || [],
                     activeProfileId: AppState.activeProfileId || 'default',
-                    contacts: AppState.contacts || [],
-                    history: AppState.history || [],
-                    statusTransitions: AppState.statusTransitions || [],
-                    buttonPressEvents: AppState.buttonPressEvents || [],
-                    shiftSnapshots: AppState.shiftSnapshots || [],
+                    reportScope: {
+                        profiles: (AppState.profiles || []).map((p) => ({ id: p.id, name: p.name })),
+                        contactsTotal: (AppState.contacts || []).length,
+                        historyTotal: (AppState.history || []).length
+                    },
+                    dailyTransitions: transitions24h,
+                    dailyButtons: buttons24h,
                     summary24h: {
                         transitionsCount: transitions24h.length,
                         buttonsCount: buttons24h.length,
                         buttonsPerHour,
                         topShift,
                         shiftTotals: Object.values(shiftTotals)
+                    },
+                    summary30d: {
+                        transitionsCount: transitions30d.length,
+                        buttonsCount: buttons30d.length,
+                        shifts: monthByShift
                     }
                 };
             };
@@ -6506,49 +6562,32 @@
             };
 
             const importControlPayload = (payload) => {
-                const state = payload || {};
-                if (!Array.isArray(state.contacts)) throw new Error('Archivo de control inválido: faltan contactos');
-                const sourceName = String(state?.sourceDevice || state?.deviceName || state?.machineName || 'Control importado').slice(0, 40);
-                const profileBase = `control-${Date.now()}`;
-                const incomingProfiles = Array.isArray(state.profiles) && state.profiles.length ? state.profiles : [{ id: 'default', name: 'Base principal' }];
-                const profileMap = new Map();
-                incomingProfiles.forEach((p, idx) => {
-                    const newId = `${profileBase}-${idx}`;
-                    profileMap.set(p.id || 'default', newId);
-                    AppState.profiles.push({ id: newId, name: `${sourceName} · ${p.name || `Perfil ${idx + 1}`}` });
-                });
-                const importedContacts = state.contacts.map((c) => ({
-                    ...c,
-                    id: Date.now() + Math.floor(Math.random() * 1000000),
-                    profileId: profileMap.get(c.profileId || 'default') || profileBase
-                }));
-                const importedHistory = (Array.isArray(state.history) ? state.history : []).map((h) => ({
-                    ...h,
-                    details: `[${sourceName}] ${h.details || ''}`
-                }));
-                const importedTransitions = (Array.isArray(state.statusTransitions) ? state.statusTransitions : []).map((t) => ({
-                    ...t,
-                    profileId: profileMap.get(t.profileId || 'default') || profileBase
-                }));
-                const importedButtons = (Array.isArray(state.buttonPressEvents) ? state.buttonPressEvents : []).map((b) => ({
-                    ...b,
-                    profileId: profileMap.get(b.profileId || 'default') || profileBase
-                }));
-                AppState.contacts = AppState.contacts.concat(importedContacts);
-                AppState.history = importedHistory.concat(AppState.history);
-                AppState.statusTransitions = importedTransitions.concat(AppState.statusTransitions).slice(0, 15000);
-                AppState.buttonPressEvents = importedButtons.concat(AppState.buttonPressEvents).slice(0, 30000);
-                AppState.shiftSnapshots = (Array.isArray(state.shiftSnapshots) ? state.shiftSnapshots : []).concat(AppState.shiftSnapshots).slice(0, 5000);
-                AppState.controlLastImportedAt = new Date().toISOString();
-                addToHistory('Control importado', `Se importaron ${importedContacts.length} contactos de ${sourceName}`);
-                saveStatusTransitions();
-                saveButtonPressEvents();
-                saveShiftSnapshots();
+                const report = payload || {};
+                const kind = String(report.exportType || '').toLowerCase();
+                if (kind.includes('snapshot') || Array.isArray(report?.state?.contacts) || Array.isArray(report?.contacts)) {
+                    throw new Error('Este archivo es un snapshot completo. Usá "Importar TODO" para ese formato.');
+                }
+                if (!kind.includes('control') && !Array.isArray(report.dailyTransitions) && !report.summary24h) {
+                    throw new Error('Archivo de control inválido o no compatible');
+                }
+                const sourceName = String(report?.sourceDevice || report?.deviceName || report?.machineName || 'Control importado').slice(0, 60);
+                const importedAt = new Date().toISOString();
+                const compact = {
+                    id: `ctrl-${Date.now()}`,
+                    importedAt,
+                    sourceName,
+                    exportedAt: report.exportedAt || '',
+                    summary24h: report.summary24h || null,
+                    summary30d: report.summary30d || null,
+                    transitionsCount: Array.isArray(report.dailyTransitions) ? report.dailyTransitions.length : (report.summary24h?.transitionsCount || 0)
+                };
+                AppState.controlReports = [compact].concat(AppState.controlReports || []).slice(0, 180);
+                AppState.controlLastImportedAt = importedAt;
+                addToHistory('Control importado', `${sourceName}: ${compact.transitionsCount} transiciones diarias`);
                 saveHistory();
-                saveData();
                 savePreferences();
                 render();
-                showNotification(`Archivo de control importado (${sourceName})`, 'success');
+                showNotification(`Control importado (${sourceName})`, 'success');
             };
 
             const updateMidnightButtonState = () => {
@@ -6676,6 +6715,20 @@
                         }
                     }
 
+                    if (elements.controlReportsSummary) {
+                        const reports = (AppState.controlReports || []).slice(0, 5);
+                        if (!reports.length) {
+                            elements.controlReportsSummary.innerHTML = '<div style="color:var(--text-secondary)">Sin controles importados todavía.</div>';
+                        } else {
+                            const rows = reports.map((r, idx) => {
+                                const d24 = r?.summary24h?.transitionsCount ?? r.transitionsCount ?? 0;
+                                const d30 = r?.summary30d?.transitionsCount ?? 0;
+                                return `<div><strong>${idx + 1}.</strong> ${r.sourceName} · 24h: ${d24} · 30d: ${d30} · importado: ${new Date(r.importedAt).toLocaleString('es-ES')}</div>`;
+                            }).join('');
+                            elements.controlReportsSummary.innerHTML = `<div style="font-weight:700;margin-bottom:6px;">Controles importados recientes</div>${rows}`;
+                        }
+                    }
+
                     if (elements.metricsModal) elements.metricsModal.classList.add('active');
                 };
             }
@@ -6692,20 +6745,19 @@
 
             if (elements.exportFullSnapshotBtn) elements.exportFullSnapshotBtn.onclick = exportFullSnapshot;
             if (elements.importFullSnapshotBtn) elements.importFullSnapshotBtn.onclick = importFullSnapshot;
-            if (elements.importControlBtn && elements.controlFileInput) {
-                elements.importControlBtn.onclick = () => {
+            if (elements.importControlBtn) {
+                elements.importControlBtn.onclick = async () => {
                     if (!ensureControlPasswordAccess()) return;
-                    elements.controlFileInput.value = '';
-                    elements.controlFileInput.click();
-                };
-                elements.controlFileInput.onchange = async (ev) => {
                     try {
-                        const f = ev?.target?.files?.[0];
-                        if (!f) return;
-                        const text = await f.text();
+                        const files = await window.electronAPI?.openImportDialog?.();
+                        const selected = Array.isArray(files) ? files.find((f) => /\.json$/i.test(f)) : null;
+                        if (!selected) {
+                            showNotification('Seleccioná un archivo JSON de control', 'warning');
+                            return;
+                        }
+                        const text = await window.electronAPI.readTextFile(selected);
                         const parsed = JSON.parse(text);
-                        const source = parsed?.state || parsed;
-                        importControlPayload(source);
+                        importControlPayload(parsed);
                     } catch (e) {
                         reportError('importControlFile', e);
                         showNotification(`No se pudo importar archivo de control: ${e?.message || e}`, 'error');
