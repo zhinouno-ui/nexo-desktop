@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('nexoStore', {
 contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => ipcRenderer.invoke('external:open', url),
   openImportDialog: () => ipcRenderer.invoke('dialog:openImportFiles'),
+  readTextFile: (filePath) => ipcRenderer.invoke('file:readText', filePath),
   notify: (payload) => ipcRenderer.invoke('app:notify', payload || {}),
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   installUpdate: (options) => ipcRenderer.invoke('updater:install', options || {}),

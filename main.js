@@ -4,11 +4,14 @@ const fssync = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
-const { autoUpdater, initUpdater, checkForUpdatesWithFallback, ensureVersionInstallerCached, RELEASE_OWNER, RELEASE_REPO, RELEASE_CHANNEL, getUpdatesCacheDir, pruneCachedInstallers, getUpdaterDiagnostics, validateLatestReleaseAssets } = require('./update-manager');
+const { autoUpdater } = require('electron-updater');
 
 const MIN_UPDATE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_UPDATE_SIZE_BYTES = 500 * 1024 * 1024;
 const STABLE_TAG = 'v1.1.10';
+const RELEASE_OWNER = 'zhinouno-ui';
+const RELEASE_REPO = 'nexo-desktop';
+const RELEASE_CHANNEL = 'latest';
 
 const DEFAULT_DB = {
   contactsData: [],
@@ -44,7 +47,7 @@ function getErrorLogPath() {
 }
 
 function getUpdateCacheDir() {
-  return getUpdatesCacheDir();
+  return path.join(app.getPath('userData'), 'updates-cache');
 }
 
 function getCurrentVersionMetaPath() {
@@ -437,16 +440,14 @@ function createWindow() {
     if (input.shift && key === 'u') {
       event.preventDefault();
       getUpdaterDiagnostics().then(async (diag) => {
-        const latest = await validateLatestReleaseAssets().catch(() => ({ ok: false, message: 'No disponible' }));
         const lines = [
           `Versión actual: ${diag.version}`,
           `Canal: ${diag.channel}`,
           `Repo: ${diag.repo}`,
           `Release URL: ${diag.updateUrl}`,
-          `latest.yml: ${latest.ok ? `ok (${latest.version || '-'})` : `error (${latest.message || '-'})`}`,
+          `Último intento: ${diag.lastAttempt?.stage || '-'} ${diag.lastAttempt?.message || ''}`,
           `Cache dir: ${diag.cacheDir}`,
-          `Instaladores cache: ${diag.cacheInstallers.length}`,
-          `Log updater: ${diag.logPath}`
+          `Instaladores cache: ${diag.cacheInstallers.length}`
         ];
         await dialog.showMessageBox({ type: 'info', title: 'Diagnóstico updater', message: lines.join('\n') });
       }).catch((e) => appendErrorLog('updater-diagnostics-shortcut', e));
@@ -653,33 +654,69 @@ async function handleUpdateDownloaded(info) {
 }
 
 function setupAutoUpdater() {
-  initUpdater({
-    feed: { owner: RELEASE_OWNER, repo: RELEASE_REPO, channel: RELEASE_CHANNEL },
-    onStatus: (status, payload = {}) => sendUpdaterStatus(status, payload),
-    onErrorLog: async (scope, error, extra = {}) => {
-      const readable = humanUpdaterError(error);
-      await appendErrorLog(scope, error, { classifiedMessage: readable, ...extra });
-    },
-    onDownloaded: async (info) => {
-      await handleUpdateDownloaded(info);
-    },
-    onUpdaterError: async (error) => {
-      const wasInstalling = lastUpdateAttempt?.stage === 'installing';
-      lastUpdateAttempt = { at: new Date().toISOString(), stage: 'updater-error', ok: false, message: error?.message || String(error) };
-      const candidate = await resolveRollbackInstaller();
-      if (candidate) {
-        await appendErrorLog('updater:auto-rollback-candidate', error, { installer: candidate.fullPath, version: candidate.version, wasInstalling });
-        sendUpdaterStatus('warning', { message: `Updater falló. Hay rollback disponible: ${candidate.version}` });
-        if (wasInstalling) {
-          try {
-            await startInstallerAndQuit(candidate.fullPath);
-          } catch (rollbackError) {
-            await appendErrorLog('updater:auto-rollback-exec', rollbackError, { installer: candidate.fullPath, version: candidate.version });
-          }
-        }
-      }
-    }
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = false;
+  if (typeof autoUpdater.setFeedURL === 'function') {
+    autoUpdater.setFeedURL({ provider: 'github', owner: RELEASE_OWNER, repo: RELEASE_REPO });
+  }
+
+  autoUpdater.removeAllListeners();
+  autoUpdater.on('checking-for-update', () => sendUpdaterStatus('checking', { message: 'Comprobando actualizaciones…' }));
+  autoUpdater.on('update-available', (info) => sendUpdaterStatus('available', { version: info?.version || '', message: `Nueva versión detectada: ${info?.version || '-'}. Descargando…` }));
+  autoUpdater.on('update-not-available', () => sendUpdaterStatus('not-available', { message: 'No hay una actualización nueva disponible en este momento.' }));
+  autoUpdater.on('download-progress', (progress) => sendUpdaterStatus('download-progress', { percent: Math.round(progress?.percent || 0) }));
+  autoUpdater.on('update-downloaded', (info) => handleUpdateDownloaded(info).catch((e) => appendErrorLog('update-downloaded', e)));
+  autoUpdater.on('error', async (error) => {
+    lastUpdateAttempt = { at: new Date().toISOString(), stage: 'updater-error', ok: false, message: error?.message || String(error) };
+    await appendErrorLog('autoUpdater-error', error);
+    sendUpdaterStatus('error', { message: humanUpdaterError(error) });
   });
+}
+
+async function checkForUpdatesWithFallback() {
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { ok: true, message: result?.updateInfo?.version ? `Update ${result.updateInfo.version}` : 'Check OK' };
+  } catch (error) {
+    await appendErrorLog('checkForUpdates', error);
+    await shell.openExternal(`https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases`);
+    return { ok: false, message: error?.message || String(error) };
+  }
+}
+
+async function ensureVersionInstallerCached(version, cacheDir) {
+  try {
+    const expected = path.join(cacheDir, `Nexo-${version}.exe`);
+    return fssync.existsSync(expected) ? expected : null;
+  } catch { return null; }
+}
+
+async function pruneCachedInstallers(cacheDir, keep = 3) {
+  try {
+    const files = (await fs.readdir(cacheDir)).filter((n) => n.toLowerCase().endsWith('.exe'));
+    const ordered = files
+      .map((name) => ({ name, version: detectVersionFromName(name) }))
+      .sort((a, b) => compareVersions(b.version, a.version));
+    const toDelete = ordered.slice(Math.max(keep, 0));
+    await Promise.all(toDelete.map((x) => fs.unlink(path.join(cacheDir, x.name)).catch(() => {})));
+  } catch (_) {}
+}
+
+async function getUpdaterDiagnostics(lastAttempt = lastUpdateAttempt) {
+  const cacheDir = getUpdateCacheDir();
+  let cacheInstallers = [];
+  try {
+    cacheInstallers = (await fs.readdir(cacheDir)).filter((n) => n.toLowerCase().endsWith('.exe'));
+  } catch (_) {}
+  return {
+    version: app.getVersion(),
+    channel: RELEASE_CHANNEL,
+    repo: `${RELEASE_OWNER}/${RELEASE_REPO}`,
+    updateUrl: `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases`,
+    cacheDir,
+    cacheInstallers,
+    lastAttempt
+  };
 }
 
 ipcMain.handle('store:getAll', async () => readDb());
@@ -778,6 +815,10 @@ ipcMain.handle('dialog:openImportFiles', async () => {
     filters: [{ name: 'Contactos', extensions: ['csv', 'vcf', 'json'] }]
   });
   return result.canceled ? [] : (result.filePaths || []);
+});
+ipcMain.handle('file:readText', async (_event, filePath) => {
+  if (!filePath || typeof filePath !== 'string') throw new Error('Ruta inválida');
+  return fs.readFile(filePath, 'utf8');
 });
 ipcMain.handle('app:notify', async (_event, payload) => {
   if (!Notification.isSupported()) return { ok: false };

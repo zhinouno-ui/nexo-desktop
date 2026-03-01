@@ -301,6 +301,7 @@
             position: relative;
         }
         .search-input:focus { border-color: var(--accent-primary); outline: none; }
+        .search-input.ghost-value { color: #334155; font-style: italic; }
         .search-icon { position: absolute; left: 35px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none; }
 
         .filter-group {
@@ -1569,6 +1570,30 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v { font-size:1.2rem; font-weight:800; margin-top:4px; }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -1982,7 +2007,10 @@
             <div class="metrics-actions">
                 <button id="metricsFilterLastBatchBtn" class="btn"><i class="fas fa-filter"></i> Filtrar última subida</button>
                 <button id="metricsDeleteLastBatchBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Borrar última subida</button>
+                <button id="exportFullSnapshotBtn" class="btn"><i class="fas fa-file-export"></i> Exportar TODO</button>
+                <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
             </div>
+            <div id="metricTransitionsBreakdown" class="metrics-transitions"></div>
             <div class="modal-actions">
                 <button id="closeMetricsModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
             </div>
@@ -2258,7 +2286,9 @@
             operatorName: 'PC local',
             lastImportBatchId: '',
             previousImportBatchId: '',
-            lastImportFileName: ''
+            lastImportFileName: '',
+            statusTransitions: [],
+            searchGhostTerm: ''
         };
 
         function ensureReviewMilestonesState() {
@@ -2338,6 +2368,9 @@
             metricsDateLabel: $('#metricsDateLabel'),
             metricsFilterLastBatchBtn: $('#metricsFilterLastBatchBtn'),
             metricsDeleteLastBatchBtn: $('#metricsDeleteLastBatchBtn'),
+            exportFullSnapshotBtn: $('#exportFullSnapshotBtn'),
+            importFullSnapshotBtn: $('#importFullSnapshotBtn'),
+            metricTransitionsBreakdown: $('#metricTransitionsBreakdown'),
             importDiagnosticsModal: $('#importDiagnosticsModal'),
             importDiagSummary: $('#importDiagSummary'),
             importDiagTableWrap: $('#importDiagTableWrap'),
@@ -3001,6 +3034,15 @@
             }
             if (contactId) addContactTimeline(contactId, action, details);
             saveHistory();
+        }
+
+
+        function saveStatusTransitions() {
+            try {
+                localStorage.setItem('statusTransitions', JSON.stringify((AppState.statusTransitions || []).slice(0, 5000)));
+            } catch (e) {
+                reportError('saveStatusTransitions', e);
+            }
         }
 
         function saveHistory() {
@@ -5208,6 +5250,9 @@
             AppState.lastEditedContact = id;
             const policyNote = (requestedStatus !== newStatus && requestedStatus === 'sin wsp') ? ' (autopolítica 3 recontactos)' : '';
             addToHistory('Estado cambiado', `${contact.name}: ${oldStatus} → ${requestedStatus}${policyNote}`, contact.id);
+            AppState.statusTransitions.unshift({ at: new Date().toISOString(), from: oldStatus, to: requestedStatus, contactId: contact.id, profileId: contact.profileId || 'default', actor: AppState.operatorName || 'PC local' });
+            if (AppState.statusTransitions.length > 5000) AppState.statusTransitions = AppState.statusTransitions.slice(0, 5000);
+            saveStatusTransitions();
             if (oldStatus === 'sin revisar' && requestedStatus !== 'sin revisar') {
                 try {
                     ensureReviewMilestonesState();
@@ -5293,6 +5338,8 @@
                 AppState.splitImportByFile = localStorage.getItem('splitImportByFile') === '1';
                 const operatorName = localStorage.getItem('operatorName');
                 if (operatorName) AppState.operatorName = operatorName;
+                const statusTransitionsRaw = localStorage.getItem('statusTransitions');
+                if (statusTransitionsRaw) { try { AppState.statusTransitions = JSON.parse(statusTransitionsRaw); } catch (_) { AppState.statusTransitions = []; } }
                 const backupMode = localStorage.getItem('autoBackupStorageMode');
                 if (backupMode === 'download' || backupMode === 'file' || backupMode === 'ask') {
                     AppState.autoBackupStorageMode = backupMode === 'ask' ? 'download' : backupMode;
@@ -6119,6 +6166,85 @@
                 };
             }
 
+
+            const buildTransitionSummary = (dayFilter) => {
+                const summary = new Map();
+                (AppState.statusTransitions || []).forEach((t) => {
+                    if (!t?.from || !t?.to) return;
+                    if (dayFilter) {
+                        const d = new Date(t.at || 0).toISOString().slice(0, 10);
+                        if (d !== dayFilter) return;
+                    }
+                    const key = `${t.from}=>${t.to}`;
+                    summary.set(key, (summary.get(key) || 0) + 1);
+                });
+                return Array.from(summary.entries()).sort((a,b) => b[1]-a[1]);
+            };
+
+            const renderTransitionTable = (rows) => {
+                if (!elements.metricTransitionsBreakdown) return;
+                if (!rows.length) {
+                    elements.metricTransitionsBreakdown.innerHTML = '<div style="color:var(--text-secondary)">Sin transiciones registradas para el período.</div>';
+                    return;
+                }
+                const body = rows.map(([k,v]) => { const parts=k.split('=>'); return `<tr><td>${parts[0]}</td><td>${parts[1]}</td><td>${v}</td></tr>`; }).join('');
+                elements.metricTransitionsBreakdown.innerHTML = `<table><thead><tr><th>Desde</th><th>Hacia</th><th>Cantidad</th></tr></thead><tbody>${body}</tbody></table>`;
+            };
+
+            const exportFullSnapshot = () => {
+                const payload = {
+                    exportedAt: new Date().toISOString(),
+                    appVersion: '1.1.19',
+                    state: {
+                        contacts: AppState.contacts || [],
+                        history: AppState.history || [],
+                        profiles: AppState.profiles || [],
+                        activeProfileId: AppState.activeProfileId || 'default',
+                        statusTransitions: AppState.statusTransitions || [],
+                        preferences: {
+                            whatsappTemplate: AppState.whatsappTemplate,
+                            duplicateMergeMode: AppState.duplicateMergeMode,
+                            splitImportByFile: !!AppState.splitImportByFile,
+                            operatorName: AppState.operatorName || 'PC local'
+                        }
+                    }
+                };
+                downloadFile(JSON.stringify(payload, null, 2), `nexo_full_snapshot_${new Date().toISOString().slice(0,10)}.json`, 'application/json;charset=utf-8;');
+                showNotification('Snapshot completo exportado', 'success');
+            };
+
+            const importFullSnapshot = async () => {
+                try {
+                    const files = await window.electronAPI?.openImportDialog?.();
+                    const selected = Array.isArray(files) ? files.find((f) => /\.json$/i.test(f)) : null;
+                    if (!selected) { showNotification('Seleccioná un archivo JSON exportado', 'warning'); return; }
+                    const text = await window.electronAPI.readTextFile(selected);
+                    const parsed = JSON.parse(text);
+                    const state = parsed?.state || parsed;
+                    if (!Array.isArray(state.contacts)) throw new Error('El snapshot no incluye contactos válidos');
+                    if (!confirm(`Se reemplazarán los datos actuales por ${state.contacts.length} contactos. ¿Continuar?`)) return;
+                    AppState.contacts = state.contacts;
+                    AppState.history = Array.isArray(state.history) ? state.history : [];
+                    AppState.profiles = Array.isArray(state.profiles) && state.profiles.length ? state.profiles : [{ id: 'default', name: 'Base principal' }];
+                    AppState.activeProfileId = state.activeProfileId || 'default';
+                    AppState.statusTransitions = Array.isArray(state.statusTransitions) ? state.statusTransitions : [];
+                    if (state.preferences) {
+                        AppState.whatsappTemplate = state.preferences.whatsappTemplate || AppState.whatsappTemplate;
+                        AppState.duplicateMergeMode = state.preferences.duplicateMergeMode || AppState.duplicateMergeMode;
+                        AppState.splitImportByFile = !!state.preferences.splitImportByFile;
+                        AppState.operatorName = state.preferences.operatorName || AppState.operatorName;
+                    }
+                    saveStatusTransitions();
+                    saveHistory();
+                    saveData();
+                    render();
+                    showNotification('Snapshot completo importado correctamente', 'success');
+                } catch (e) {
+                    reportError('importFullSnapshot', e);
+                    showNotification(`No se pudo importar snapshot: ${e?.message || e}`, 'error');
+                }
+            };
+
             if (elements.showQuickMetricsOption) {
                 elements.showQuickMetricsOption.onclick = () => {
                     const now = new Date();
@@ -6166,6 +6292,7 @@
                     if (elements.metricRevToContact) elements.metricRevToContact.textContent = String(revToContact);
                     if (elements.metricContactToJugando) elements.metricContactToJugando.textContent = String(contactToJugando);
                     if (elements.metricLastBatchCount) elements.metricLastBatchCount.textContent = `${lastBatchCount} / ${prevBatchCount}`;
+                    renderTransitionTable(buildTransitionSummary(today));
 
                     if (elements.metricsModal) elements.metricsModal.classList.add('active');
                 };
@@ -6180,6 +6307,9 @@
                     showNotification('Filtro aplicado: última subida', 'info');
                 };
             }
+
+            if (elements.exportFullSnapshotBtn) elements.exportFullSnapshotBtn.onclick = exportFullSnapshot;
+            if (elements.importFullSnapshotBtn) elements.importFullSnapshotBtn.onclick = importFullSnapshot;
 
             if (elements.metricsDeleteLastBatchBtn) {
                 elements.metricsDeleteLastBatchBtn.onclick = () => {
@@ -6208,8 +6338,32 @@
             if ($('#closeMetricsModal')) $('#closeMetricsModal').onclick = () => $('#metricsModal').classList.remove('active');
             $('#closeUserOptionsModal').onclick = () => elements.userOptionsModal.classList.remove('active');
 
+            const clearSearchGhost = () => {
+                AppState.searchGhostTerm = '';
+                elements.searchInput.classList.remove('ghost-value');
+                elements.searchInput.placeholder = 'Buscar... (ej: pepe, 11, estado:jugando, turno:tm, origen:csv)';
+            };
+            elements.searchInput.onfocus = () => {
+                if (AppState.searchGhostTerm) {
+                    elements.searchInput.value = '';
+                    elements.searchInput.classList.add('ghost-value');
+                    elements.searchInput.placeholder = AppState.searchGhostTerm;
+                }
+            };
+            elements.searchInput.onblur = () => {
+                const raw = (elements.searchInput.value || '').trim();
+                if (!raw && AppState.searchTerm) {
+                    AppState.searchGhostTerm = AppState.searchTerm;
+                    elements.searchInput.classList.add('ghost-value');
+                    elements.searchInput.placeholder = AppState.searchGhostTerm;
+                }
+            };
             elements.searchInput.oninput = (e) => {
-                AppState.searchTerm = e.target.value;
+                const value = e.target.value;
+                if (AppState.searchGhostTerm) {
+                    clearSearchGhost();
+                }
+                AppState.searchTerm = value;
                 AppState.currentPage = 1;
                 render();
             };
