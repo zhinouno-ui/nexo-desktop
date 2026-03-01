@@ -1647,6 +1647,36 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v { font-size:1.2rem; font-weight:800; margin-top:4px; }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -2063,11 +2093,25 @@
                 <button id="metricsDeleteLastBatchBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Borrar última subida</button>
                 <button id="exportFullSnapshotBtn" class="btn"><i class="fas fa-file-export"></i> Exportar TODO</button>
                 <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
+                <button id="importControlBtn" class="btn"><i class="fas fa-shield-alt"></i> Importar archivo de control</button>
+                <input id="controlFileInput" type="file" accept=".json" style="display:none;">
             </div>
             <div id="metricTransitionsBreakdown" class="metrics-transitions"></div>
             <div id="metricTransitionSummary" class="metrics-transitions" style="margin-top:8px;"></div>
+            <details id="metricRareTransitions" class="metrics-collapsible" style="display:none;">
+                <summary>Ver combinaciones raras</summary>
+                <div id="metricRareTransitionsBody" class="inner"></div>
+            </details>
             <div id="metricShiftBreakdown" class="metrics-wide-grid"></div>
             <div id="metricShiftRanking" class="metrics-transitions" style="margin-top:8px;"></div>
+            <div id="controlPasswordPanel" class="metrics-password-panel" style="display:none;">
+                <div style="font-weight:700;margin-bottom:6px;">Seguridad archivo de control</div>
+                <div style="color:var(--text-secondary);font-size:.85rem;margin-bottom:8px;">Después del primer ingreso podés cambiar la clave de importación.</div>
+                <div class="metrics-password-grid">
+                    <input id="controlPasswordNew" type="password" class="origin-input" style="margin-top:0;" placeholder="Nueva clave de control">
+                    <button id="controlPasswordSaveBtn" class="btn btn-success"><i class="fas fa-key"></i> Guardar clave</button>
+                </div>
+            </div>
             <div class="modal-actions">
                 <button id="closeMetricsModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
             </div>
@@ -2350,7 +2394,10 @@
             searchGhostTerm: '',
             searchGhostActive: false,
             midnightExportPending: false,
-            lastMidnightExportDate: ''
+            lastMidnightExportDate: '',
+            controlImportUnlocked: false,
+            controlPasswordHash: '',
+            controlLastImportedAt: ''
         };
 
         function ensureReviewMilestonesState() {
@@ -2436,7 +2483,14 @@
             metricsDeleteLastBatchBtn: $('#metricsDeleteLastBatchBtn'),
             exportFullSnapshotBtn: $('#exportFullSnapshotBtn'),
             importFullSnapshotBtn: $('#importFullSnapshotBtn'),
+            importControlBtn: $('#importControlBtn'),
+            controlFileInput: $('#controlFileInput'),
+            controlPasswordPanel: $('#controlPasswordPanel'),
+            controlPasswordNew: $('#controlPasswordNew'),
+            controlPasswordSaveBtn: $('#controlPasswordSaveBtn'),
             metricTransitionsBreakdown: $('#metricTransitionsBreakdown'),
+            metricRareTransitions: $('#metricRareTransitions'),
+            metricRareTransitionsBody: $('#metricRareTransitionsBody'),
             importDiagnosticsModal: $('#importDiagnosticsModal'),
             importDiagSummary: $('#importDiagSummary'),
             importDiagTableWrap: $('#importDiagTableWrap'),
@@ -5439,6 +5493,9 @@
                 if (shiftSnapshotsRaw) { try { AppState.shiftSnapshots = JSON.parse(shiftSnapshotsRaw); } catch (_) { AppState.shiftSnapshots = []; } }
                 AppState.lastMidnightExportDate = localStorage.getItem('lastMidnightExportDate') || '';
                 AppState.midnightExportPending = localStorage.getItem('midnightExportPending') === '1';
+                AppState.controlImportUnlocked = localStorage.getItem('controlImportUnlocked') === '1';
+                AppState.controlPasswordHash = localStorage.getItem('controlPasswordHash') || '';
+                AppState.controlLastImportedAt = localStorage.getItem('controlLastImportedAt') || '';
                 const backupMode = localStorage.getItem('autoBackupStorageMode');
                 if (backupMode === 'download' || backupMode === 'file' || backupMode === 'ask') {
                     AppState.autoBackupStorageMode = backupMode === 'ask' ? 'download' : backupMode;
@@ -5461,9 +5518,34 @@
                 localStorage.setItem('activeProfileId', AppState.activeProfileId || 'default');
                 localStorage.setItem('splitImportByFile', AppState.splitImportByFile ? '1' : '0');
                 localStorage.setItem('operatorName', AppState.operatorName || 'PC local');
+                localStorage.setItem('controlImportUnlocked', AppState.controlImportUnlocked ? '1' : '0');
+                if (AppState.controlPasswordHash) localStorage.setItem('controlPasswordHash', AppState.controlPasswordHash);
+                if (AppState.controlLastImportedAt) localStorage.setItem('controlLastImportedAt', AppState.controlLastImportedAt);
             } catch (e) {
                 console.error('Error al guardar preferencias:', e);
             }
+        }
+
+        function hashControlPassword(raw) {
+            const value = String(raw || '');
+            const seed = String.fromCharCode(110, 101, 120, 111, 45, 99, 111, 110, 116, 114, 111, 108, 45, 115, 97, 108, 116);
+            let hash = 0;
+            const merged = `${seed}:${value}`;
+            for (let i = 0; i < merged.length; i++) {
+                hash = ((hash << 5) - hash) + merged.charCodeAt(i);
+                hash |= 0;
+            }
+            return `nexo-${Math.abs(hash).toString(36)}`;
+        }
+
+        function getDefaultControlPasswordHash() {
+            const hiddenDefault = [109, 97, 115, 116, 101, 114, 49, 50, 51].map((c) => String.fromCharCode(c)).join('');
+            return hashControlPassword(hiddenDefault);
+        }
+
+        function verifyControlPassword(rawPassword) {
+            const currentHash = AppState.controlPasswordHash || getDefaultControlPasswordHash();
+            return hashControlPassword(rawPassword) === currentHash;
         }
 
         function buildWhatsAppMessage(contactName) {
@@ -6410,6 +6492,65 @@
                 showNotification(reason === 'auto' ? 'Exporte de control 00:00 generado automáticamente' : 'Exporte de control generado', 'success');
             };
 
+            const ensureControlPasswordAccess = () => {
+                const typed = window.prompt('Clave de archivo de control');
+                if (!typed) return false;
+                if (!verifyControlPassword(typed)) {
+                    showNotification('Clave incorrecta para importar archivo de control', 'error');
+                    return false;
+                }
+                AppState.controlImportUnlocked = true;
+                savePreferences();
+                if (elements.controlPasswordPanel) elements.controlPasswordPanel.style.display = '';
+                return true;
+            };
+
+            const importControlPayload = (payload) => {
+                const state = payload || {};
+                if (!Array.isArray(state.contacts)) throw new Error('Archivo de control inválido: faltan contactos');
+                const sourceName = String(state?.sourceDevice || state?.deviceName || state?.machineName || 'Control importado').slice(0, 40);
+                const profileBase = `control-${Date.now()}`;
+                const incomingProfiles = Array.isArray(state.profiles) && state.profiles.length ? state.profiles : [{ id: 'default', name: 'Base principal' }];
+                const profileMap = new Map();
+                incomingProfiles.forEach((p, idx) => {
+                    const newId = `${profileBase}-${idx}`;
+                    profileMap.set(p.id || 'default', newId);
+                    AppState.profiles.push({ id: newId, name: `${sourceName} · ${p.name || `Perfil ${idx + 1}`}` });
+                });
+                const importedContacts = state.contacts.map((c) => ({
+                    ...c,
+                    id: Date.now() + Math.floor(Math.random() * 1000000),
+                    profileId: profileMap.get(c.profileId || 'default') || profileBase
+                }));
+                const importedHistory = (Array.isArray(state.history) ? state.history : []).map((h) => ({
+                    ...h,
+                    details: `[${sourceName}] ${h.details || ''}`
+                }));
+                const importedTransitions = (Array.isArray(state.statusTransitions) ? state.statusTransitions : []).map((t) => ({
+                    ...t,
+                    profileId: profileMap.get(t.profileId || 'default') || profileBase
+                }));
+                const importedButtons = (Array.isArray(state.buttonPressEvents) ? state.buttonPressEvents : []).map((b) => ({
+                    ...b,
+                    profileId: profileMap.get(b.profileId || 'default') || profileBase
+                }));
+                AppState.contacts = AppState.contacts.concat(importedContacts);
+                AppState.history = importedHistory.concat(AppState.history);
+                AppState.statusTransitions = importedTransitions.concat(AppState.statusTransitions).slice(0, 15000);
+                AppState.buttonPressEvents = importedButtons.concat(AppState.buttonPressEvents).slice(0, 30000);
+                AppState.shiftSnapshots = (Array.isArray(state.shiftSnapshots) ? state.shiftSnapshots : []).concat(AppState.shiftSnapshots).slice(0, 5000);
+                AppState.controlLastImportedAt = new Date().toISOString();
+                addToHistory('Control importado', `Se importaron ${importedContacts.length} contactos de ${sourceName}`);
+                saveStatusTransitions();
+                saveButtonPressEvents();
+                saveShiftSnapshots();
+                saveHistory();
+                saveData();
+                savePreferences();
+                render();
+                showNotification(`Archivo de control importado (${sourceName})`, 'success');
+            };
+
             const updateMidnightButtonState = () => {
                 if (!elements.midnightExportBtn) return;
                 if (AppState.midnightExportPending) elements.midnightExportBtn.classList.add('btn-midnight-pulse');
@@ -6474,34 +6615,63 @@
                     if (elements.metricButtonsPerHour) elements.metricButtonsPerHour.textContent = String(buttonsPerHour);
                     const allTransitions = buildTransitionSummary();
                     renderTransitionTable(allTransitions);
-                    const wanted = [
+                    const transitionRows = allTransitions.map(([key, count]) => {
+                        const [from, to] = key.split('=>');
+                        return { from, to, count };
+                    });
+                    const transitionMap = new Map(transitionRows.map((row) => [`${row.from}=>${row.to}`, row.count]));
+                    const highlightedCombos = [
                         ['sin revisar', 'contactado'],
                         ['contactado', 'no interesado'],
                         ['contactado', 'jugando'],
                         ['sin revisar', 'jugando'],
                         ['sin revisar', 'revisado'],
                         ['sin revisar', 'no interesado']
-                    ];
+                    ].map(([from, to]) => ({ from, to, count: transitionMap.get(`${from}=>${to}`) || 0 }));
+                    const topTransitions = transitionRows.filter((row) => row.count > 0).slice(0, 6);
+                    const mainTransitions = topTransitions.length ? topTransitions : highlightedCombos.filter((row) => row.count > 0);
+                    const rareTransitions = transitionRows.filter((row) => row.count > 0 && !mainTransitions.find((it) => it.from === row.from && it.to === row.to));
                     if (elements.metricTransitionSummary) {
-                        const lines = wanted.map(([a,b]) => {
-                            const key = `${a}=>${b}`;
-                            const found = allTransitions.find(([k]) => k === key);
-                            const count = found ? found[1] : 0;
-                            return `<div><strong>${a}</strong> >>>> <strong>${b}</strong> x${count}</div>`;
-                        }).join('');
+                        const lines = (mainTransitions.length ? mainTransitions : highlightedCombos).map(({ from, to, count }) => (
+                            `<div><strong>${from}</strong> >>>> <strong>${to}</strong> x${count}</div>`
+                        )).join('');
                         elements.metricTransitionSummary.innerHTML = lines || '<div style="color:var(--text-secondary)">Sin resumen de transiciones</div>';
                     }
+                    if (elements.metricRareTransitions && elements.metricRareTransitionsBody) {
+                        if (!rareTransitions.length) {
+                            elements.metricRareTransitions.style.display = 'none';
+                            elements.metricRareTransitions.open = false;
+                            elements.metricRareTransitionsBody.innerHTML = '';
+                        } else {
+                            elements.metricRareTransitions.style.display = '';
+                            elements.metricRareTransitionsBody.innerHTML = rareTransitions.map((row) => `<div>${row.from} >>>> ${row.to} x${row.count}</div>`).join('');
+                        }
+                    }
                     if (elements.metricShiftBreakdown) {
-                        const cards = Object.values(shiftTotals).sort((a,b)=>b.total-a.total).map((row)=>`<div class="metrics-card"><div class="k">Turno ${String(row.shift).toUpperCase()}</div><div class="v">${row.total}</div><div class="k">Revisó: ${row.reviewedOut} · Envió: ${row.sentOut}</div></div>`);
-                        const sorted = Object.values(shiftTotals).sort((a,b)=>b.total-a.total);
+                        const shiftRich = {};
+                        transitions24h.forEach((row) => {
+                            const key = String(row.shift || 'sin-turno').toLowerCase();
+                            if (!shiftRich[key]) shiftRich[key] = { shift: key, total: 0, byTo: {} };
+                            shiftRich[key].total += 1;
+                            shiftRich[key].byTo[row.to] = (shiftRich[key].byTo[row.to] || 0) + 1;
+                        });
+                        const sorted = Object.values(shiftRich).sort((a, b) => b.total - a.total);
+                        const cards = sorted.map((row) => {
+                            const topStates = Object.entries(row.byTo).sort((a, b) => b[1] - a[1]).slice(0, 3);
+                            const lines = topStates.map(([status, amount]) => `${status}: ${amount}`).join(' · ');
+                            return `<div class="metrics-card"><div class="k">${String(row.shift).toUpperCase()} ${row.total} usuarios</div><div class="v">${row.total}</div><div class="k">${lines || 'Sin cambios'}</div></div>`;
+                        });
                         elements.metricShiftBreakdown.innerHTML = cards.length ? cards.join('') : '<div style="color:var(--text-secondary)">Sin datos por turno en 24h.</div>';
                         if (elements.metricShiftRanking) {
                             if (!sorted.length) {
                                 elements.metricShiftRanking.innerHTML = '<div style="color:var(--text-secondary)">Sin ranking de turnos en 24h.</div>';
                             } else {
                                 const top = sorted[0];
-                                const lines = sorted.map((row, idx) => `${idx+1}º puesto ${String(row.shift).toUpperCase()}: Jugando ${row.sentOut}, Revisiones ${row.reviewedOut}, total ${row.total}`);
-                                elements.metricShiftRanking.innerHTML = `<div><strong>${String(top.shift).toUpperCase()} 1er puesto de revisión/jugando:</strong> ${top.total} usuarios</div><div style="margin-top:6px">${lines.join('<br>')}</div>`;
+                                const lines = sorted.map((row, idx) => {
+                                    const topStates = Object.entries(row.byTo).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([st, qty]) => `${st} ${qty}`).join(', ');
+                                    return `${idx + 1}º ${String(row.shift).toUpperCase()} ${row.total} usuarios${topStates ? ` — ${topStates}` : ''}`;
+                                });
+                                elements.metricShiftRanking.innerHTML = `<div><strong>${String(top.shift).toUpperCase()} 1er puesto:</strong> ${top.total} usuarios</div><div style="margin-top:6px">${lines.join('<br>')}</div>`;
                             }
                         }
                     }
@@ -6522,10 +6692,51 @@
 
             if (elements.exportFullSnapshotBtn) elements.exportFullSnapshotBtn.onclick = exportFullSnapshot;
             if (elements.importFullSnapshotBtn) elements.importFullSnapshotBtn.onclick = importFullSnapshot;
+            if (elements.importControlBtn && elements.controlFileInput) {
+                elements.importControlBtn.onclick = () => {
+                    if (!ensureControlPasswordAccess()) return;
+                    elements.controlFileInput.value = '';
+                    elements.controlFileInput.click();
+                };
+                elements.controlFileInput.onchange = async (ev) => {
+                    try {
+                        const f = ev?.target?.files?.[0];
+                        if (!f) return;
+                        const text = await f.text();
+                        const parsed = JSON.parse(text);
+                        const source = parsed?.state || parsed;
+                        importControlPayload(source);
+                    } catch (e) {
+                        reportError('importControlFile', e);
+                        showNotification(`No se pudo importar archivo de control: ${e?.message || e}`, 'error');
+                    }
+                };
+            }
+
+            if (elements.controlPasswordSaveBtn && elements.controlPasswordNew) {
+                elements.controlPasswordSaveBtn.onclick = () => {
+                    if (!AppState.controlImportUnlocked) {
+                        showNotification('Primero ingresá la clave actual para habilitar el cambio', 'warning');
+                        return;
+                    }
+                    const nextPassword = String(elements.controlPasswordNew.value || '').trim();
+                    if (nextPassword.length < 6) {
+                        showNotification('La nueva clave debe tener al menos 6 caracteres', 'warning');
+                        return;
+                    }
+                    AppState.controlPasswordHash = hashControlPassword(nextPassword);
+                    elements.controlPasswordNew.value = '';
+                    savePreferences();
+                    showNotification('Clave del archivo de control actualizada', 'success');
+                };
+            }
 
             if (elements.midnightExportBtn) {
                 elements.midnightExportBtn.onclick = () => exportControlFile('manual');
                 updateMidnightButtonState();
+            }
+            if (elements.controlPasswordPanel) {
+                elements.controlPasswordPanel.style.display = AppState.controlImportUnlocked ? '' : 'none';
             }
             startMidnightControlScheduler();
 

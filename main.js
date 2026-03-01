@@ -798,7 +798,14 @@ ipcMain.handle('app:getErrorLogPath', async () => getErrorLogPath());
 ipcMain.handle('app:openErrorLog', async () => {
   const p = getErrorLogPath();
   await fs.mkdir(path.dirname(p), { recursive: true });
-  if (!fssync.existsSync(p)) await fs.writeFile(p, '', 'utf8');
+  if (!fssync.existsSync(p)) {
+    await fs.writeFile(p, '[Nexo] Log de errores inicializado.\nTodavía no hay errores registrados.\n', 'utf8');
+  } else {
+    const current = await fs.readFile(p, 'utf8').catch(() => '');
+    if (!String(current || '').trim()) {
+      await fs.writeFile(p, '[Nexo] Log de errores vacío.\nTodavía no hay errores registrados.\n', 'utf8');
+    }
+  }
   await shell.openPath(p);
   return p;
 });

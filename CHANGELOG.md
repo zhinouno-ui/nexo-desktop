@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.19 - actualización del control
+
+### Control import/export protegido
+- Nuevo input dedicado para importar archivo de control desde el Centro de métricas.
+- Importación protegida por clave (base inicial `master123`) sin exponerla en texto plano en la UI.
+- Después del primer ingreso correcto, se habilita un apartado para cambiar la clave del archivo de control.
+
+### Métricas de transiciones y turnos
+- Resumen principal de transiciones mostrando primero cambios reales (no líneas en cero).
+- Combinaciones raras (por ejemplo `jugando -> no interesado`) se muestran bajo un desplegable sólo cuando existen.
+- Ranking de turnos compactado y ordenado automáticamente por volumen (`TM/TT/TN`) con desglose de estados más marcados.
+
+### Logs y legibilidad
+- Apertura del log de errores con contenido guía cuando está vacío para evitar pantallas en blanco y mejorar lectura operativa.
+
 ## 1.1.18
 
 ### Blindaje del updater
