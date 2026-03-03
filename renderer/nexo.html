@@ -1777,6 +1777,41 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v { font-size:1.2rem; font-weight:800; margin-top:4px; }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -3453,9 +3488,11 @@
             const phoneMap = new Map();
             const duplicateGroups = [];
             const duplicateIds = new Set();
+            const activeProfileId = AppState.activeProfileId || 'default';
+            const contactsInProfile = (AppState.contacts || []).filter((c) => (c.profileId || 'default') === activeProfileId);
 
             // Agrupar por nombre normalizado
-            AppState.contacts.forEach(contact => {
+            contactsInProfile.forEach(contact => {
                 const normalizedName = normalizeUsername(contact.name);
                 if (!nameMap.has(normalizedName)) {
                     nameMap.set(normalizedName, []);
@@ -3464,7 +3501,7 @@
             });
 
             // Agrupar por teléfono
-            AppState.contacts.forEach(contact => {
+            contactsInProfile.forEach(contact => {
                 if (contact.phone) {
                     const normalizedPhone = normalizePhoneNumber(contact.phone);
                     if (!phoneMap.has(normalizedPhone)) {
@@ -3505,7 +3542,8 @@
             
             // Marcar contactos duplicados
             AppState.contacts.forEach(contact => {
-                contact.isDuplicate = duplicateIds.has(contact.id);
+                const profileId = contact.profileId || 'default';
+                contact.isDuplicate = profileId === activeProfileId ? duplicateIds.has(contact.id) : false;
             });
 
             return duplicateGroups;
@@ -6460,14 +6498,7 @@
         }
 
         function setupEventListeners() {
-            elements.uploadArea.onclick = async () => {
-                if (window.electronAPI?.openImportDialog) {
-                    const picked = await window.electronAPI.openImportDialog();
-                    if (Array.isArray(picked) && picked.length) {
-                        showNotification(`Seleccionados ${picked.length} archivos (abrilos por arrastre o selector interno para importar).`, 'info');
-                        return;
-                    }
-                }
+            elements.uploadArea.onclick = () => {
                 elements.fileInput.click();
             };
             elements.uploadArea.ondragover = (e) => { e.preventDefault(); elements.uploadArea.style.borderColor = 'var(--accent-primary)'; };
