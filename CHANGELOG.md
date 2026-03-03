@@ -9,10 +9,6 @@
 - Subida restringida por clave (`Master123`) con desbloqueo temporal y cola local `uploads_queue`.
 - Modal de temas tipo Whaticket con presets, tema personalizado e import/export `themes.json`.
 
-### Fix UX importación (bloqueo visual)
-- Al abrir el diagnóstico de importación se desactiva el overlay de carga para no bloquear menú/modal de confirmación.
-- Overlay de carga ahora muestra preview de usuarios (usuario/teléfono/estado) con scroll vertical tipo "pantalla de inicio" mientras procesa.
-
 ### Control import/export protegido
 - Nuevo input dedicado para importar archivo de control desde el Centro de métricas.
 - Importación protegida por clave (base inicial `master123`) sin exponerla en texto plano en la UI.
