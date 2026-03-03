@@ -1591,6 +1591,8 @@
                     <option value="all">Teléfono: todos</option>
                     <option value="with">Con teléfono</option>
                     <option value="without">Sin teléfono</option>
+                    <option value="missing-user">Sin usuario (solo número)</option>
+                    <option value="suspicious">Teléfono sospechoso</option>
                 </select>
                 <select id="editActivityFilter" class="filter-select">
                     <option value="all">Ediciones: todas</option>
@@ -2254,7 +2256,8 @@
             queuedUploads: [],
             themeCatalog: {},
             activeThemeId: 'whaticket-blue',
-            lightMode: false
+            lightMode: false,
+            profilePageMap: {}
         };
 
         function ensureReviewMilestonesState() {
@@ -2421,6 +2424,30 @@
         function normalizePhoneNumber(phone) {
             if (!phone) return '';
             return phone.toString().replace(/\D/g, '');
+        }
+
+        function hasMissingUsername(contact) {
+            const rawName = String(contact?.name || '').trim();
+            const nameDigits = rawName.replace(/\D/g, '');
+            const phoneDigits = normalizePhoneNumber(contact?.phone || '');
+            if (!rawName) return true;
+            if (/^\d+$/.test(rawName)) return true;
+            if (nameDigits && phoneDigits && nameDigits === phoneDigits) return true;
+            return false;
+        }
+
+        function isApocryphalPhone(phone) {
+            const digits = normalizePhoneNumber(phone || '');
+            if (!digits) return false;
+            if (/^(\d)\1{7,}$/.test(digits)) return true;
+            if (/^(012345|123456|987654|000000)/.test(digits)) return true;
+            if (digits.startsWith('54')) {
+                if (digits.length < 12 || digits.length > 13) return true;
+            } else if (digits.length < 10 || digits.length > 15) {
+                return true;
+            }
+            if (digits.includes('0000000')) return true;
+            return false;
         }
 
         function normalizeUsername(name) {
@@ -3182,10 +3209,12 @@
 
             AppState.duplicates = duplicateGroups;
             
-            // Marcar contactos duplicados
+            // Marcar contactos duplicados + alertas de teléfono sospechoso
             AppState.contacts.forEach(contact => {
                 const profileId = contact.profileId || 'default';
-                contact.isDuplicate = profileId === activeProfileId ? duplicateIds.has(contact.id) : false;
+                const inActiveProfile = profileId === activeProfileId;
+                contact.isDuplicate = inActiveProfile ? duplicateIds.has(contact.id) : false;
+                contact.phoneAlert = inActiveProfile ? isApocryphalPhone(contact.phone) : false;
             });
 
             return duplicateGroups;
@@ -4353,6 +4382,7 @@
         window.switchProfile = (profileId) => {
             AppState.activeProfileId = profileId;
             localStorage.setItem('activeProfileId', AppState.activeProfileId);
+            AppState.currentPage = Math.max(1, Number(AppState.profilePageMap?.[profileId] || 1));
             refreshProfilesUI();
             render();
             if (elements.profilesModal) elements.profilesModal.classList.remove('active');
@@ -4415,6 +4445,8 @@
                 let matchesPhone = true;
                 if (AppState.phoneFilter === 'with') matchesPhone = !!(contact.phone || '').trim();
                 else if (AppState.phoneFilter === 'without') matchesPhone = !(contact.phone || '').trim();
+                else if (AppState.phoneFilter === 'missing-user') matchesPhone = hasMissingUsername(contact);
+                else if (AppState.phoneFilter === 'suspicious') matchesPhone = !!contact.phoneAlert;
 
                 let matchesOps = true;
                 if (AppState.opsFilter === 'matched') matchesOps = !!contact.ops;
@@ -5074,14 +5106,14 @@
             
             return `
                 <div class="contact-card ${AppState.selectedContacts.has(contact.id) ? 'selected' : ''} ${contact.isDuplicate ? 'duplicate' : ''}" style="--status-rgb: ${statusOption.rgb};" data-id="${contact.id}">
-                    ${contact.isDuplicate ? '<span class="duplicate-badge"><i class="fas fa-exclamation-triangle"></i> DUP</span>' : ''}
+                    ${contact.isDuplicate ? '<span class="duplicate-badge"><i class="fas fa-exclamation-triangle"></i> DUP</span>' : ''}${contact.phoneAlert ? '<span class="duplicate-badge" style="right:8px;left:auto;background:rgba(245,158,11,.22);border-color:rgba(245,158,11,.45);" title="Teléfono sospechoso"><i class="fas fa-exclamation-circle"></i> ALERTA</span>' : ''}
                     <input type="checkbox" class="card-checkbox" ${AppState.selectedContacts.has(contact.id) ? 'checked' : ''}>
                     <div class="card-header">
                         <div class="card-icon" style="color: ${statusOption.color};">
                             <i class="fas ${statusOption.icon}"></i>
                         </div>
                         <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
-                            <span class="card-name" onclick="copyToClipboard('${escapedName}', event)" style="cursor: pointer; flex: 1;" title="Click para copiar">${contact.pinned ? '📌 ' : ''}${contact.name}</span>${AppState.currentView === 'shifts' && contact.assignedShift ? `<span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}${urgency ? `<span class=\"urgency-badge urgency-l${urgency.level}\" title=\"${urgency.title}\"><i class=\"fas fa-clock\"></i>${urgency.label}</span>` : ''}
+                            <span class="card-name" onclick="copyToClipboard('${escapedName}', event)" style="cursor: pointer; flex: 1;" title="Click para copiar">${contact.pinned ? '📌 ' : ''}${contact.phoneAlert ? '⚠️ ' : ''}${contact.name}</span>${AppState.currentView === 'shifts' && contact.assignedShift ? `<span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}${urgency ? `<span class=\"urgency-badge urgency-l${urgency.level}\" title=\"${urgency.title}\"><i class=\"fas fa-clock\"></i>${urgency.label}</span>` : ''}
                             <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="editContactField(${contact.id}, 'name', event)" title="Editar nombre">
                                 <i class="fas fa-pencil-alt"></i>
                             </button>
@@ -5134,7 +5166,7 @@
                         <i class="fas ${statusOption.icon} list-status-bg-icon"></i>
                         <div class="list-name-row">
                             <span onclick="copyToClipboard('${escapedName}', event)" style="flex: 1; cursor: pointer;" title="Click para copiar">
-                                ${contact.isDuplicate ? '<i class=\"fas fa-exclamation-triangle\" style=\"color: var(--accent-warning);\"></i> ' : ''}${contact.name}${AppState.currentView === 'shifts' && contact.assignedShift ? ` <span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}
+                                ${contact.isDuplicate ? '<i class=\"fas fa-exclamation-triangle\" style=\"color: var(--accent-warning);\"></i> ' : ''}${contact.phoneAlert ? '<i class=\"fas fa-exclamation-circle\" style=\"color: var(--accent-warning);\" title=\"Teléfono sospechoso\"></i> ' : ''}${contact.name}${AppState.currentView === 'shifts' && contact.assignedShift ? ` <span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}
                             </span>
                             <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="editContactField(${contact.id}, 'name', event)" title="Editar">
                                 <i class="fas fa-pencil-alt"></i>
@@ -5206,7 +5238,8 @@
             const pageContacts = AppState.filteredContacts.slice(start, end);
             
             if (pageContacts.length === 0 && AppState.filteredContacts.length > 0 && AppState.currentPage > 1) {
-                AppState.currentPage = 1;
+                const totalPages = Math.max(1, Math.ceil(AppState.filteredContacts.length / AppState.itemsPerPage));
+                AppState.currentPage = Math.min(AppState.currentPage, totalPages);
                 renderPaginatedView(renderFunc);
                 return;
             }
@@ -5279,13 +5312,26 @@
 
             html += `<button ${AppState.currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${AppState.currentPage + 1})"><i class="fas fa-chevron-right"></i></button>`;
             html += `<span class="page-info">Página ${AppState.currentPage} de ${totalPages} (${AppState.filteredContacts.length} contactos)</span>`;
+            html += `<input id="pageJumpInput" class="origin-input" style="margin-top:0;width:90px;" type="number" min="1" max="${totalPages}" value="${AppState.currentPage}" />`;
+            html += `<button onclick="jumpToPage()" title="Ir a página">Ir</button>`;
             
             elements.pagination.innerHTML = html;
         }
 
+        window.jumpToPage = () => {
+            const input = document.getElementById('pageJumpInput');
+            if (!input) return;
+            const page = parseInt(input.value || '1', 10);
+            if (Number.isNaN(page)) return;
+            changePage(page);
+        };
+
         window.changePage = (page) => {
             if (page < 1 || page > Math.ceil(AppState.filteredContacts.length / AppState.itemsPerPage)) return;
             AppState.currentPage = page;
+            const pid = AppState.activeProfileId || 'default';
+            AppState.profilePageMap[pid] = page;
+            savePreferences();
             if (AppState.currentView === 'shifts') {
                 elements.cardsView.style.display = 'none';
                 elements.listView.style.display = 'none';
@@ -5478,6 +5524,8 @@
                 if (themeCatalogRaw) { try { AppState.themeCatalog = JSON.parse(themeCatalogRaw); } catch (_) { AppState.themeCatalog = {}; } }
                 AppState.activeThemeId = localStorage.getItem('activeThemeId') || AppState.activeThemeId || 'whaticket-blue';
                 AppState.lightMode = localStorage.getItem('lightMode') === '1';
+                const profilePageMapRaw = localStorage.getItem('profilePageMap');
+                if (profilePageMapRaw) { try { AppState.profilePageMap = JSON.parse(profilePageMapRaw); } catch (_) { AppState.profilePageMap = {}; } }
                 const backupMode = localStorage.getItem('autoBackupStorageMode');
                 if (backupMode === 'download' || backupMode === 'file' || backupMode === 'ask') {
                     AppState.autoBackupStorageMode = backupMode === 'ask' ? 'download' : backupMode;
@@ -5513,6 +5561,7 @@
                 localStorage.setItem('themeCatalog', JSON.stringify(AppState.themeCatalog || {}));
                 localStorage.setItem('activeThemeId', AppState.activeThemeId || 'whaticket-blue');
                 localStorage.setItem('lightMode', AppState.lightMode ? '1' : '0');
+                localStorage.setItem('profilePageMap', JSON.stringify(AppState.profilePageMap || {}));
             } catch (e) {
                 console.error('Error al guardar preferencias:', e);
             }
@@ -5889,6 +5938,7 @@
             applyFilters();
             AppState.filteredContacts.sort((a, b) => {
                 if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+                if (!!a.phoneAlert !== !!b.phoneAlert) return a.phoneAlert ? 1 : -1;
                 if (AppState.opsFilter === 'top50' || AppState.opsFilter === 'top100') return (b.ops?.score || 0) - (a.ops?.score || 0);
                 buildContactDerivedFields(a);
                 buildContactDerivedFields(b);
@@ -8049,6 +8099,7 @@
                 };
                 loadHistory();
                 loadPreferences();
+                AppState.currentPage = Math.max(1, Number(AppState.profilePageMap?.[AppState.activeProfileId || 'default'] || AppState.currentPage || 1));
                 AppState.themeCatalog = { ...getDefaultThemes(), ...(AppState.themeCatalog || {}) };
                 if (!AppState.themeCatalog[AppState.activeThemeId]) AppState.activeThemeId = 'whaticket-blue';
                 applyTheme(AppState.activeThemeId);

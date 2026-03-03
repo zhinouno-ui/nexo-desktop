@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.21 - filtros y fluidez de revisión
+
+### Búsqueda y revisión más práctica
+- Nuevo filtro `Sin usuario (solo número)` para encontrar rápido contactos cuyo “nombre” es numérico o igual al teléfono.
+- Nuevo filtro `Teléfono sospechoso` para revisar líneas potencialmente apócrifas.
+- Contactos con teléfono sospechoso ahora muestran alerta visual (`⚠️` / `ALERTA`) y se ordenan al final para no molestar en el flujo principal.
+
+### Paginación más usable
+- La app ahora recuerda página por perfil (se conserva al cambiar perfil y al recargar).
+- Se agregó selector rápido de página (`Ir`) en la barra de paginación.
+
+### Rendimiento operativo
+- Ajuste de detección para marcar teléfonos sospechosos durante el ciclo de duplicados sin bloquear el flujo de edición.
+
 ## 1.1.20 - foco rendimiento + gestión
 
 ### Gestión de perfiles y temas
