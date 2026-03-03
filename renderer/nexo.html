@@ -11,6 +11,7 @@
             --bg-secondary: #1e293b;
             --bg-card: #334155;
             --accent-primary: #3b82f6;
+            --accent-secondary: #10b981;
             --accent-success: #10b981;
             --accent-warning: #f59e0b;
             --accent-danger: #ef4444;
@@ -21,6 +22,17 @@
             --border-color: #475569;
             --hover-color: #475569;
             --selection-bg: rgba(59, 130, 246, 0.2);
+        }
+
+        body.light-mode {
+            --bg-primary: #e9eef5;
+            --bg-secondary: #f7f9fc;
+            --bg-card: #dfe8f3;
+            --text-primary: #1e293b;
+            --text-secondary: #475569;
+            --border-color: #b8c6db;
+            --hover-color: #cfdcee;
+            --selection-bg: rgba(59,130,246,.16);
         }
 
         * {
@@ -204,10 +216,10 @@
             gap:10px;
             margin-right:12px;
             padding:8px 12px;
-            border:1px solid rgba(59,130,246,.35);
+            border:1px solid color-mix(in srgb, var(--accent-primary) 45%, transparent);
             border-radius:12px;
-            background:linear-gradient(90deg, rgba(30,64,175,.24), rgba(15,23,42,.3));
-            box-shadow: inset 0 0 0 1px rgba(125,211,252,.08);
+            background:linear-gradient(90deg, color-mix(in srgb, var(--accent-primary) 22%, transparent), color-mix(in srgb, var(--bg-primary) 90%, transparent));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 22%, transparent);
         }
         .nexo-brand-logo {
             width:28px;
@@ -218,7 +230,7 @@
             justify-content:center;
             font-weight:900;
             color:#0b1220;
-            background:linear-gradient(135deg,#60a5fa,#34d399);
+            background:linear-gradient(135deg,var(--accent-primary),var(--accent-secondary));
         }
         .nexo-brand-text { font-weight:800; letter-spacing:.4px; }
         .nexo-brand-sub { font-size:.72rem; color:var(--text-secondary); }
@@ -255,8 +267,42 @@
             justify-content: center;
             flex-direction: column;
             gap: 10px;
+            overflow: hidden;
         }
         .app-loading-overlay.active { display: flex; }
+        .loading-preview-bg {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: .4;
+            mask-image: linear-gradient(to top, transparent, black 24%, black 76%, transparent);
+            -webkit-mask-image: linear-gradient(to top, transparent, black 24%, black 76%, transparent);
+        }
+        .loading-preview-track {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(900px, 92vw);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            animation: loadingPreviewScroll 26s linear infinite;
+        }
+        .loading-preview-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 180px;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: rgba(30,41,59,.4);
+            border: 1px solid rgba(148,163,184,.2);
+            color: #cbd5e1;
+            font-size: .84rem;
+        }
+        @keyframes loadingPreviewScroll {
+            from { transform: translate(-50%, 100%); }
+            to { transform: translate(-50%, -100%); }
+        }
         .app-loading-overlay .progress-bar {
             width: min(520px, 82vw);
             height: 10px;
@@ -301,6 +347,10 @@
             position: relative;
         }
         .search-input:focus { border-color: var(--accent-primary); outline: none; }
+        .search-input.ghost-value { color: #334155; font-style: italic; }
+        .search-input.ghost-value-active { background: linear-gradient(90deg, rgba(15,23,42,.96), rgba(51,65,85,.92)); color:#94a3b8; }
+        .btn-midnight-pulse { animation: pulseMidnight 1s ease-in-out infinite; box-shadow: 0 0 0 2px rgba(239,68,68,.35) inset; }
+        @keyframes pulseMidnight { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.03); opacity:.75; } }
         .search-icon { position: absolute; left: 35px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none; }
 
         .filter-group {
@@ -491,6 +541,8 @@
         .status-revisado { background: rgba(52, 211, 153, 0.2); color: #34d399; }
         .card-status-inline { min-width: 150px; display: inline-block; position: relative; z-index: 30; }
         .card-status-inline .status-badge { cursor: pointer; }
+        .card-status-trigger { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:10px; cursor:pointer; }
+        .card-status-trigger:hover { background: rgba(148,163,184,.12); }
 
         .card-status-menu {
             position: absolute;
@@ -1317,6 +1369,9 @@
         .review-quick { margin-top:16px; background:linear-gradient(180deg, rgba(30,41,59,.98), rgba(15,23,42,.92)); border:1px solid rgba(148,163,184,.22); border-radius:16px; padding:18px; display:none; }
         .quick-layout { display:grid; grid-template-columns: minmax(260px, 340px) 1fr; gap:14px; }
         .quick-profile { background:rgba(15,23,42,.45); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:14px; }
+        .profiles-art { position:relative; overflow:hidden; }
+        .profiles-art::before { content:''; position:absolute; inset:-40% -10% auto auto; width:320px; height:320px; border-radius:999px; background:radial-gradient(circle at center, rgba(56,189,248,.18), rgba(56,189,248,0)); transform:translate(30px,-30px); pointer-events:none; }
+        .profiles-art::after { content:''; position:absolute; inset:auto auto -45% -12%; width:280px; height:280px; border-radius:999px; background:radial-gradient(circle at center, rgba(99,102,241,.16), rgba(99,102,241,0)); pointer-events:none; }
         .quick-profile-head { display:flex; gap:12px; align-items:center; }
         .quick-avatar { width:52px; height:52px; border-radius:50%; background:linear-gradient(135deg, rgba(59,130,246,.25), rgba(16,185,129,.2)); border:1px solid rgba(96,165,250,.4); display:flex; align-items:center; justify-content:center; font-weight:800; color:#bfdbfe; font-size:1rem; }
         .quick-name { font-size:1.25rem; font-weight:800; line-height:1.1; }
@@ -1343,10 +1398,59 @@
         .quick-tools .btn { padding: 10px 12px; font-size: .9rem; }
         .shift-tag { font-size:.72rem; padding:2px 8px; border-radius:999px; border:1px solid rgba(148,163,184,.35); color:#cbd5e1; }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
-    <a class="failsafe-downgrade-btn" href="https://github.com/zhinouno-ui/Nexo.exe/releases/tag/v1.1.10" target="_blank" rel="noopener noreferrer">⛑️ Downgrade estable 1.1.10</a>
+    <a class="failsafe-downgrade-btn" href="nexo://rollback-previous" target="_blank" rel="noopener noreferrer">⛑️ Volver a versión anterior (cache local)</a>
     <div class="upload-screen" id="uploadScreen">
         <div class="upload-card">
             <i class="fas fa-cloud-upload-alt"></i>
@@ -1420,6 +1524,10 @@
                     <div class="stat-label">Duplicados</div>
                 </div>
             </div>
+            <div class="view-actions" style="margin-right:8px;">
+                <select id="profileSelect" class="filter-select" style="min-width:200px;"></select>
+                <button id="manageProfilesBtn" class="btn"><i class="fas fa-layer-group"></i> Perfiles</button>
+            </div>
             <div class="view-actions">
                 <button id="viewCardsBtn" class="btn active"><i class="fas fa-th"></i> Tarjetas</button>
                 <button id="viewListBtn" class="btn"><i class="fas fa-list"></i> Lista</button>
@@ -1430,6 +1538,7 @@
                 <button id="checkUpdatesBtn" class="btn"><i class="fas fa-cloud-download-alt"></i> Buscar updates</button>
                 <button id="settingsBtn" class="btn"><i class="fas fa-cog"></i> Ajustes</button>
                 <button id="importOpsBtn" class="btn" title="Importar agent_operations.csv"><i class="fas fa-chart-line"></i> Operaciones</button>
+                <button id="midnightExportBtn" class="btn" title="Exporte diario de control"><i class="fas fa-file-export"></i> Control 00:00</button>
                 <button id="deleteAllBtn" class="btn btn-danger"><i class="fas fa-trash-alt"></i> Borrar Todo</button>
                 <span id="saveStateBadge" class="save-state-badge pending">● Pendiente</span>
                                 <input type="file" id="opsFileInput" accept=".csv" style="display:none;">
@@ -1482,6 +1591,8 @@
                     <option value="all">Teléfono: todos</option>
                     <option value="with">Con teléfono</option>
                     <option value="without">Sin teléfono</option>
+                    <option value="missing-user">Sin usuario (solo número)</option>
+                    <option value="suspicious">Teléfono sospechoso</option>
                 </select>
                 <select id="editActivityFilter" class="filter-select">
                     <option value="all">Ediciones: todas</option>
@@ -1689,6 +1800,13 @@
                         <div class="export-option-desc">Resumen de progreso y actividad</div>
                     </div>
                 </div>
+                <div class="export-option" id="openThemesOption">
+                    <i class="fas fa-palette"></i>
+                    <div class="export-option-text">
+                        <div class="export-option-title">Temas y colores</div>
+                        <div class="export-option-desc">Seleccionar, crear, exportar e importar temas</div>
+                    </div>
+                </div>
                 <div class="export-option" id="checkUpdatesOption">
                     <i class="fas fa-cloud-download-alt"></i>
                     <div class="export-option-text">
@@ -1716,6 +1834,113 @@
             </div>
         </div>
     </div>
+
+    <div class="modal" id="profilesModal">
+        <div class="modal-content profiles-art" style="max-width:640px;">
+            <div class="modal-header"><i class="fas fa-layer-group"></i> Perfiles / Bases</div>
+            <p style="color:var(--text-secondary); margin-bottom:8px;">Hasta 8 bases distintas. Cada perfil mantiene su propia vista de contactos.</p>
+            <div style="display:flex; gap:8px; margin:10px 0;">
+                <input id="newProfileName" class="origin-input" style="margin-top:0" placeholder="Nombre del perfil (ej: Base Casino Norte)">
+                <button id="addProfileBtn" class="btn btn-success"><i class="fas fa-plus"></i> Crear</button>
+            </div>
+            <div id="profilesList" class="history-list" style="max-height:260px;"></div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+                <input type="checkbox" id="splitImportByFileToggle">
+                <label for="splitImportByFileToggle" style="color:var(--text-secondary);">Crear/usar perfil por archivo al importar varios CSV</label>
+            </div>
+            <div class="modal-actions">
+                <button id="closeProfilesModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="modal" id="metricsModal">
+        <div class="modal-content" style="max-width: 760px;">
+            <div class="modal-header"><i class="fas fa-chart-line"></i> Centro de métricas</div>
+            <div id="metricsDateLabel" style="color:var(--text-secondary); margin-bottom:8px;">Resumen diario</div>
+            <div class="metrics-filters">
+                <select id="metricsShiftFilter" class="filter-select">
+                    <option value="all">Turno: todos</option>
+                    <option value="tm">Turno 1 (06-14)</option>
+                    <option value="tt">Turno 2 (14-22)</option>
+                    <option value="tn">Turno 3 (22-06)</option>
+                </select>
+                <input id="metricsFromDate" type="date" class="origin-input" style="margin-top:0;">
+                <input id="metricsToDate" type="date" class="origin-input" style="margin-top:0;">
+                <select id="metricsStatusFilter" class="filter-select">
+                    <option value="all">Estado: todos</option>
+                </select>
+                <select id="metricsSelectionTypeFilter" class="filter-select">
+                    <option value="all">Selección: todas</option>
+                    <option value="manual">Manual</option>
+                    <option value="ops">Operaciones</option>
+                    <option value="bulk">Masiva</option>
+                    <option value="import">Importación</option>
+                </select>
+                <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);padding-left:4px;">
+                    <input id="metricsOnlyChanges" type="checkbox"> Solo cambios
+                </label>
+            </div>
+            <div class="metrics-dashboard-grid">
+                <div class="metrics-card"><div class="k">Actividad de hoy</div><div id="metricEditedToday" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Impulso de ayer</div><div id="metricEditedYesterday" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Turno líder</div><div id="metricTopShift" class="v">-</div></div>
+                <div class="metrics-card"><div class="k">Movimientos (24h)</div><div id="metricTransitions24h" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Turno líder (24h)</div><div id="metricTopShift24h" class="v">-</div></div>
+                <div class="metrics-card"><div class="k">Ritmo por hora</div><div id="metricButtonsPerHour" class="v">0</div></div>
+            </div>
+            <div class="metrics-charts">
+                <div class="chart-card">
+                    <div class="chart-title">Estados (donut)</div>
+                    <canvas id="statusDonutChart" width="320" height="180"></canvas>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">Tipo de selección (donut)</div>
+                    <canvas id="selectionDonutChart" width="320" height="180"></canvas>
+                </div>
+                <div class="chart-card" style="grid-column: span 2;">
+                    <div class="chart-title">Transiciones de estado (barras)</div>
+                    <canvas id="transitionBarChart" width="660" height="180"></canvas>
+                </div>
+            </div>
+            <div class="metrics-actions">
+                <button id="metricsFilterLastBatchBtn" class="btn"><i class="fas fa-filter"></i> Filtrar última subida</button>
+                <button id="metricsDeleteLastBatchBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Borrar última subida</button>
+                <button id="exportFullSnapshotBtn" class="btn" title="Exporta snapshot completo (usuarios + historial global)"><i class="fas fa-file-export"></i> Exportar Snapshot <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo pesado para auditoría periódica. Incluye usuarios e historial global."></i></button>
+                <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
+                <button id="importControlBtn" class="btn" title="Importa control diario/mensual"><i class="fas fa-shield-alt"></i> Importar Control <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo liviano para seguimiento diario/mensual de métricas y turnos."></i></button>
+                <select id="controlExportType" class="filter-select" style="min-width:200px;">
+                    <option value="daily">Reporte Diario (Delta)</option>
+                    <option value="monthly">Reporte Completo (Mensual)</option>
+                </select>
+                <button id="exportControlBtn" class="btn"><i class="fas fa-file-export"></i> Exportar control</button>
+                <button id="uploadReportBtn" class="btn"><i class="fas fa-upload"></i> Subir reporte seleccionado</button>
+                <button id="resetBaselineBtn" class="btn"><i class="fas fa-eraser"></i> Reset baseline</button>
+            </div>
+            <div id="metricTransitionsBreakdown" class="metrics-transitions"></div>
+            <div id="metricTransitionSummary" class="metrics-transitions" style="margin-top:8px;"></div>
+            <details id="metricRareTransitions" class="metrics-collapsible" style="display:none;">
+                <summary>Ver combinaciones raras</summary>
+                <div id="metricRareTransitionsBody" class="inner"></div>
+            </details>
+            <div id="metricShiftBreakdown" class="metrics-wide-grid"></div>
+            <div id="metricShiftRanking" class="metrics-transitions" style="margin-top:8px;"></div>
+            <div id="controlReportsSummary" class="metrics-transitions" style="margin-top:8px;"></div>
+            <div id="controlPasswordPanel" class="metrics-password-panel" style="display:none;">
+                <div style="font-weight:700;margin-bottom:6px;">Seguridad archivo de control</div>
+                <div style="color:var(--text-secondary);font-size:.85rem;margin-bottom:8px;">Después del primer ingreso podés cambiar la clave de importación.</div>
+                <div class="metrics-password-grid">
+                    <input id="controlPasswordNew" type="password" class="origin-input" style="margin-top:0;" placeholder="Nueva clave de control">
+                    <button id="controlPasswordSaveBtn" class="btn btn-success"><i class="fas fa-key"></i> Guardar clave</button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="closeMetricsModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
+            </div>
+        </div>
+    </div>
+
 
     <div class="modal" id="whatsappMessageModal">
         <div class="modal-content" style="max-width: 640px;">
@@ -1758,11 +1983,66 @@
         </div>
     </div>
 
+    <div class="modal" id="themesModal">
+        <div class="modal-content" style="max-width:760px;">
+            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;"><span><i class="fas fa-palette"></i> Seleccioná un tema</span><label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text-secondary);"><input id="lightModeToggle" type="checkbox"> Modo claro</label></div>
+            <div id="themeCards" class="metrics-wide-grid"></div>
+            <div style="margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px;">
+                <div style="font-weight:700;margin-bottom:6px;">Tema personalizado</div>
+                <div class="metrics-filters">
+                    <input id="themeNameInput" class="origin-input" style="margin-top:0;" placeholder="Nombre del tema">
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Primary <input id="themePrimary" type="color" value="#3b82f6"></label>
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Accent <input id="themeAccent" type="color" value="#10b981"></label>
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">BG <input id="themeBg" type="color" value="#0f172a"></label>
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Surface <input id="themeSurface" type="color" value="#1e293b"></label>
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Text <input id="themeText" type="color" value="#e2e8f0"></label>
+                </div>
+                <div class="modal-actions">
+                    <button id="saveCustomThemeBtn" class="btn btn-success"><i class="fas fa-save"></i> Guardar tema</button>
+                    <button id="exportThemesBtn" class="btn"><i class="fas fa-file-export"></i> Exportar themes.json</button>
+                    <button id="importThemesBtn" class="btn"><i class="fas fa-file-import"></i> Importar themes.json</button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="closeThemesModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <div id="appLoadingOverlay" class="app-loading-overlay">
+        <div class="loading-preview-bg"><div id="loadingPreviewTrack" class="loading-preview-track"></div></div>
         <div style="font-size:1.1rem;font-weight:600;">Cargando…</div>
         <div id="appLoadingText" style="color:var(--text-secondary);">Inicializando</div>
         <div class="progress-bar"><div id="appLoadingProgress" class="progress-fill"></div></div>
         <button id="cancelImportBtn" class="btn" style="display:none;"><i class="fas fa-ban"></i> Cancelar importación</button>
+    </div>
+
+
+    <div class="modal" id="importDiagnosticsModal">
+        <div class="modal-content" style="max-width:900px;">
+            <div class="modal-header"><i class="fas fa-stethoscope"></i> Diagnóstico de importación</div>
+            <div id="importDiagSummary" style="color:var(--text-secondary);margin-bottom:10px;"></div>
+            <div class="import-diag-grid">
+                <div class="import-diag-card">
+                    <h4>Preview (primeras 20 filas)</h4>
+                    <div id="importDiagTableWrap" style="max-height:260px;overflow:auto;"></div>
+                </div>
+                <div class="import-diag-card">
+                    <h4>Mapeo de columnas</h4>
+                    <div style="display:grid;gap:8px;">
+                        <label>Nombre <select id="importMapName" class="filter-select"></select></label>
+                        <label>Teléfono <select id="importMapPhone" class="filter-select"></select></label>
+                        <label>Etiqueta/Origen <select id="importMapTag" class="filter-select"></select></label>
+                    </div>
+                    <h4 style="margin-top:12px;">Validación</h4>
+                    <div id="importDiagIssues" class="import-diag-list"></div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="importDiagCancel" class="btn"><i class="fas fa-times"></i> Cancelar archivo</button>
+                <button id="importDiagContinue" class="btn btn-success"><i class="fas fa-check"></i> Continuar importación</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1779,7 +2059,7 @@
         };
 
         const state = { map: {}, saveTimer: null };
-        const KNOWN_KEYS = new Set(['contactsData', 'contactsHistory', 'whatsappTemplate', 'duplicateMergeMode', 'lastExportAt']);
+        const KNOWN_KEYS = new Set(['contactsData', 'contactsHistory', 'whatsappTemplate', 'duplicateMergeMode', 'lastExportAt', 'backups', 'extraStorage']);
 
         const mapFromDb = (db) => {
             const nextMap = {};
@@ -1892,6 +2172,7 @@
     })();
     </script>
 
+
     <script>
     (() => {
         const $ = (sel) => document.querySelector(sel);
@@ -1948,7 +2229,35 @@
             perfDebug: false,
             importCancelRequested: false,
             reviewPositiveCounter: 0,
-            reviewMilestonesShown: {}
+            reviewMilestonesShown: {},
+            runtimeHash: '',
+            profiles: [{ id: 'default', name: 'Base principal' }],
+            activeProfileId: 'default',
+            splitImportByFile: false,
+            operatorName: 'PC local',
+            lastImportBatchId: '',
+            previousImportBatchId: '',
+            lastImportFileName: '',
+            statusTransitions: [],
+            buttonPressEvents: [],
+            shiftSnapshots: [],
+            searchGhostTerm: '',
+            searchGhostActive: false,
+            midnightExportPending: false,
+            lastMidnightExportDate: '',
+            controlImportUnlocked: false,
+            controlPasswordHash: '',
+            controlLastImportedAt: '',
+            controlReports: [],
+            metricEvents: [],
+            monthlyBaselineByProfile: {},
+            uploadUnlockedUntil: 0,
+            uploadAuditLog: [],
+            queuedUploads: [],
+            themeCatalog: {},
+            activeThemeId: 'whaticket-blue',
+            lightMode: false,
+            profilePageMap: {}
         };
 
         function ensureReviewMilestonesState() {
@@ -1970,6 +2279,8 @@
             originInput: $('#originInput'),
             startBtn: $('#startBtn'),
             preStartCheckUpdatesBtn: $('#preStartCheckUpdatesBtn'),
+            profileSelect: $('#profileSelect'),
+            manageProfilesBtn: $('#manageProfilesBtn'),
             cardsView: $('#cardsView'),
             listView: $('#listView'),
             shiftsView: $('#shiftsView'),
@@ -2006,11 +2317,82 @@
             contactHistoryMeta: $('#contactHistoryMeta'),
             deleteAllBtn: $('#deleteAllBtn'),
             importOpsBtn: $('#importOpsBtn'),
+            midnightExportBtn: $('#midnightExportBtn'),
             undoBtn: $('#undoBtn'),
             whatsappTemplateInput: $('#whatsappTemplateInput'),
             saveTemplateBtn: $('#saveTemplateBtn'),
             checkUpdatesOption: $('#checkUpdatesOption'),
             restartUpdateOption: $('#restartUpdateOption'),
+            openGithubReleasesOption: $('#openGithubReleasesOption'),
+            openStable110Option: $('#openStable110Option'),
+            openErrorLogOption: $('#openErrorLogOption'),
+            rollbackPreviousOption: $('#rollbackPreviousOption'),
+            showQuickMetricsOption: $('#showQuickMetricsOption'),
+            openThemesOption: $('#openThemesOption'),
+            metricsModal: $('#metricsModal'),
+            metricEditedToday: $('#metricEditedToday'),
+            metricEditedYesterday: $('#metricEditedYesterday'),
+            metricTopShift: $('#metricTopShift'),
+            metricTransitions24h: $('#metricTransitions24h'),
+            metricTopShift24h: $('#metricTopShift24h'),
+            metricButtonsPerHour: $('#metricButtonsPerHour'),
+            metricShiftBreakdown: $('#metricShiftBreakdown'),
+            metricTransitionSummary: $('#metricTransitionSummary'),
+            metricShiftRanking: $('#metricShiftRanking'),
+            controlReportsSummary: $('#controlReportsSummary'),
+            metricsShiftFilter: $('#metricsShiftFilter'),
+            metricsFromDate: $('#metricsFromDate'),
+            metricsToDate: $('#metricsToDate'),
+            metricsStatusFilter: $('#metricsStatusFilter'),
+            metricsSelectionTypeFilter: $('#metricsSelectionTypeFilter'),
+            metricsOnlyChanges: $('#metricsOnlyChanges'),
+            statusDonutChart: $('#statusDonutChart'),
+            selectionDonutChart: $('#selectionDonutChart'),
+            transitionBarChart: $('#transitionBarChart'),
+            controlExportType: $('#controlExportType'),
+            exportControlBtn: $('#exportControlBtn'),
+            uploadReportBtn: $('#uploadReportBtn'),
+            resetBaselineBtn: $('#resetBaselineBtn'),
+            metricsDateLabel: $('#metricsDateLabel'),
+            metricsFilterLastBatchBtn: $('#metricsFilterLastBatchBtn'),
+            metricsDeleteLastBatchBtn: $('#metricsDeleteLastBatchBtn'),
+            exportFullSnapshotBtn: $('#exportFullSnapshotBtn'),
+            importFullSnapshotBtn: $('#importFullSnapshotBtn'),
+            importControlBtn: $('#importControlBtn'),
+            controlPasswordPanel: $('#controlPasswordPanel'),
+            controlPasswordNew: $('#controlPasswordNew'),
+            controlPasswordSaveBtn: $('#controlPasswordSaveBtn'),
+            metricTransitionsBreakdown: $('#metricTransitionsBreakdown'),
+            metricRareTransitions: $('#metricRareTransitions'),
+            metricRareTransitionsBody: $('#metricRareTransitionsBody'),
+            importDiagnosticsModal: $('#importDiagnosticsModal'),
+            importDiagSummary: $('#importDiagSummary'),
+            importDiagTableWrap: $('#importDiagTableWrap'),
+            importMapName: $('#importMapName'),
+            importMapPhone: $('#importMapPhone'),
+            importMapTag: $('#importMapTag'),
+            importDiagIssues: $('#importDiagIssues'),
+            importDiagCancel: $('#importDiagCancel'),
+            importDiagContinue: $('#importDiagContinue'),
+            themesModal: $('#themesModal'),
+            themeCards: $('#themeCards'),
+            themeNameInput: $('#themeNameInput'),
+            themePrimary: $('#themePrimary'),
+            themeAccent: $('#themeAccent'),
+            themeBg: $('#themeBg'),
+            themeSurface: $('#themeSurface'),
+            themeText: $('#themeText'),
+            saveCustomThemeBtn: $('#saveCustomThemeBtn'),
+            exportThemesBtn: $('#exportThemesBtn'),
+            importThemesBtn: $('#importThemesBtn'),
+            lightModeToggle: $('#lightModeToggle'),
+            closeThemesModal: $('#closeThemesModal'),
+            profilesModal: $('#profilesModal'),
+            profilesList: $('#profilesList'),
+            newProfileName: $('#newProfileName'),
+            addProfileBtn: $('#addProfileBtn'),
+            closeProfilesModal: $('#closeProfilesModal'),
+            splitImportByFileToggle: $('#splitImportByFileToggle'),
             updateStatusText: $('#updateStatusText'),
             updateProgressFill: $('#updateProgressFill'),
             perfDebugToggle: $('#perfDebugToggle'),
@@ -2029,7 +2411,8 @@
             loadingOverlay: $('#loadingOverlay'),
             loadingOverlayText: $('#loadingOverlayText'),
             loadingOverlayProgress: $('#loadingOverlayProgress'),
-            loadingOverlayMeta: $('#loadingOverlayMeta')
+            loadingOverlayMeta: $('#loadingOverlayMeta'),
+            loadingPreviewTrack: $('#loadingPreviewTrack')
         };
 
         // Compatibilidad defensiva: evita ReferenceError en handlers legacy cacheados por el navegador.
@@ -2041,6 +2424,30 @@
         function normalizePhoneNumber(phone) {
             if (!phone) return '';
             return phone.toString().replace(/\D/g, '');
+        }
+
+        function hasMissingUsername(contact) {
+            const rawName = String(contact?.name || '').trim();
+            const nameDigits = rawName.replace(/\D/g, '');
+            const phoneDigits = normalizePhoneNumber(contact?.phone || '');
+            if (!rawName) return true;
+            if (/^\d+$/.test(rawName)) return true;
+            if (nameDigits && phoneDigits && nameDigits === phoneDigits) return true;
+            return false;
+        }
+
+        function isApocryphalPhone(phone) {
+            const digits = normalizePhoneNumber(phone || '');
+            if (!digits) return false;
+            if (/^(\d)\1{7,}$/.test(digits)) return true;
+            if (/^(012345|123456|987654|000000)/.test(digits)) return true;
+            if (digits.startsWith('54')) {
+                if (digits.length < 12 || digits.length > 13) return true;
+            } else if (digits.length < 10 || digits.length > 15) {
+                return true;
+            }
+            if (digits.includes('0000000')) return true;
+            return false;
         }
 
         function normalizeUsername(name) {
@@ -2458,8 +2865,16 @@
             const suggested = contact.ops.suggestedStatus;
             const nextStatus = getHigherPriorityStatus(contact.status, suggested);
             if (nextStatus !== contact.status) {
+                const oldStatus = contact.status;
                 contact.status = nextStatus;
                 touchContactEdit(contact, 'ops_sync');
+                const opsAt = contact?.ops?.lastCargaAt || new Date().toISOString();
+                const opsShift = inferShiftFromIso(opsAt);
+                AppState.statusTransitions.unshift({ at: opsAt, from: oldStatus, to: nextStatus, contactId: contact.id, profileId: contact.profileId || 'default', actor: 'ops-import', shift: opsShift || contact.assignedShift || '' });
+                AppState.buttonPressEvents.unshift({ at: opsAt, action: 'ops-sync', from: oldStatus, to: nextStatus, shift: opsShift || contact.assignedShift || '', profileId: contact.profileId || 'default', actor: 'ops-import' });
+                recordMetricEvent('operation_created', { profileId: contact.profileId || 'default', contactId: contact.id, status: nextStatus, from: oldStatus, to: nextStatus, at: opsAt, shift: opsShift, selectionType: 'ops' });
+                saveStatusTransitions();
+                saveButtonPressEvents();
             }
         }
 
@@ -2503,6 +2918,7 @@
                         isNewFromOps: true,
                         ops: p
                     });
+                    recordMetricEvent('user_created', { profileId: AppState.activeProfileId || 'default', contactId: newId, status: 'sin revisar', selectionType: 'ops' });
                     applyOpsHeuristicsToContact(AppState.contacts[AppState.contacts.length - 1]);
                     addToHistory('Nuevo usuario desde operaciones', p.aliasLabel || alias);
                     createdCount++;
@@ -2615,12 +3031,43 @@
             if (contact.timeline.length > 500) contact.timeline = contact.timeline.slice(0, 500);
         }
 
+        const motivationalPhrases = [
+            '🔥 Excelente ritmo, seguí así.',
+            '🎯 Estás en modo pro, impecable.',
+            '😎 Alto laburo, el CRM te aplaude.',
+            '💪 Tremenda consistencia, crack.',
+            '🧠 Productividad desbloqueada.'
+        ];
+
+        function currentShiftWindowKey() {
+            const now = new Date();
+            const block = Math.floor(now.getHours() / 8);
+            return `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}-${block}`;
+        }
+
+        function ensureMotivationWindow() {
+            const key = currentShiftWindowKey();
+            if (AppState.motivationWindowKey !== key) {
+                AppState.motivationWindowKey = key;
+                AppState.reviewPositiveCounter = 0;
+                AppState.reviewMilestonesShown = {};
+            }
+        }
+
+        async function sendNativeMotivation(count) {
+            const phrase = motivationalPhrases[Math.floor(Math.random() * motivationalPhrases.length)];
+            const body = `${phrase} Ya llevás ${count} revisiones en este bloque de 8h.`;
+            showNotification(body, 'success');
+            if (window.electronAPI?.notify) await window.electronAPI.notify({ title: 'Nexo · Felicitaciones', body });
+        }
+
         function addToHistory(action, details, contactId = null) {
             const historyEntry = {
                 timestamp: new Date().toISOString(),
                 action: action,
                 details: details,
-                contactId: contactId || null
+                contactId: contactId || null,
+                actor: AppState.operatorName || 'PC local'
             };
             AppState.history.unshift(historyEntry);
             if (AppState.history.length > 500) {
@@ -2628,6 +3075,23 @@
             }
             if (contactId) addContactTimeline(contactId, action, details);
             saveHistory();
+        }
+
+
+        function saveButtonPressEvents() {
+            try { localStorage.setItem('buttonPressEvents', JSON.stringify((AppState.buttonPressEvents || []).slice(0, 20000))); } catch (e) { reportError('saveButtonPressEvents', e); }
+        }
+
+        function saveShiftSnapshots() {
+            try { localStorage.setItem('shiftSnapshots', JSON.stringify((AppState.shiftSnapshots || []).slice(0, 3650))); } catch (e) { reportError('saveShiftSnapshots', e); }
+        }
+
+        function saveStatusTransitions() {
+            try {
+                localStorage.setItem('statusTransitions', JSON.stringify((AppState.statusTransitions || []).slice(0, 5000)));
+            } catch (e) {
+                reportError('saveStatusTransitions', e);
+            }
         }
 
         function saveHistory() {
@@ -2693,9 +3157,11 @@
             const phoneMap = new Map();
             const duplicateGroups = [];
             const duplicateIds = new Set();
+            const activeProfileId = AppState.activeProfileId || 'default';
+            const contactsInProfile = (AppState.contacts || []).filter((c) => (c.profileId || 'default') === activeProfileId);
 
             // Agrupar por nombre normalizado
-            AppState.contacts.forEach(contact => {
+            contactsInProfile.forEach(contact => {
                 const normalizedName = normalizeUsername(contact.name);
                 if (!nameMap.has(normalizedName)) {
                     nameMap.set(normalizedName, []);
@@ -2704,7 +3170,7 @@
             });
 
             // Agrupar por teléfono
-            AppState.contacts.forEach(contact => {
+            contactsInProfile.forEach(contact => {
                 if (contact.phone) {
                     const normalizedPhone = normalizePhoneNumber(contact.phone);
                     if (!phoneMap.has(normalizedPhone)) {
@@ -2743,9 +3209,12 @@
 
             AppState.duplicates = duplicateGroups;
             
-            // Marcar contactos duplicados
+            // Marcar contactos duplicados + alertas de teléfono sospechoso
             AppState.contacts.forEach(contact => {
-                contact.isDuplicate = duplicateIds.has(contact.id);
+                const profileId = contact.profileId || 'default';
+                const inActiveProfile = profileId === activeProfileId;
+                contact.isDuplicate = inActiveProfile ? duplicateIds.has(contact.id) : false;
+                contact.phoneAlert = inActiveProfile ? isApocryphalPhone(contact.phone) : false;
             });
 
             return duplicateGroups;
@@ -2921,10 +3390,111 @@
             return true;
         }
 
+
+        function detectDelimiter(text) {
+            const lines = String(text || '').split(/\r?\n/).slice(0, 8).filter(Boolean);
+            const candidates = [',', ';', '\t'];
+            let best = ',';
+            let bestScore = -1;
+            candidates.forEach((d) => {
+                const score = lines.reduce((acc, line) => acc + (line.split(d).length - 1), 0);
+                if (score > bestScore) { bestScore = score; best = d; }
+            });
+            return best;
+        }
+
+        async function showImportDiagnosticsPanel(fileName, text, profileName) {
+            const delimiter = detectDelimiter(text);
+            const lines = String(text || '').split(/\r?\n/).filter(Boolean);
+            const parsePreviewRow = (line) => {
+                if (delimiter === ',') return parseCsvRow(line);
+                return String(line || '').split(delimiter).map((v) => v.trim());
+            };
+            const rows = lines.slice(0, 21).map((l) => parsePreviewRow(l));
+            const header = rows[0] || [];
+            const dataRows = rows.slice(1, 21);
+
+            const colOptions = ['(vacío)', ...header];
+            const fillSelect = (el, preferredRegex) => {
+                if (!el) return;
+                el.innerHTML = colOptions.map((c, i) => `<option value="${i-1}">${c}</option>`).join('');
+                const idx = header.findIndex((h) => preferredRegex.test(String(h || '').toLowerCase()));
+                el.value = String(idx);
+            };
+            fillSelect(elements.importMapName, /nombre|name|usuario/);
+            fillSelect(elements.importMapPhone, /tel|phone|cel|whatsapp|wsp/);
+            fillSelect(elements.importMapTag, /origen|tag|etiqueta|label/);
+
+            const getMapped = (row, selectEl) => {
+                const idx = parseInt(selectEl?.value || '-1', 10);
+                return idx >= 0 ? String(row[idx] || '').trim() : '';
+            };
+
+            const evaluate = () => {
+                const phones = new Map();
+                let invalidPhones = 0;
+                let emptyNames = 0;
+                let duplicates = 0;
+                dataRows.forEach((row) => {
+                    const name = getMapped(row, elements.importMapName);
+                    const phone = normalizePhoneNumber(getMapped(row, elements.importMapPhone));
+                    if (!name) emptyNames += 1;
+                    if (phone && phone.length < 8) invalidPhones += 1;
+                    if (phone) {
+                        const prev = phones.get(phone) || 0;
+                        phones.set(phone, prev + 1);
+                    }
+                });
+                phones.forEach((v) => { if (v > 1) duplicates += (v - 1); });
+                return { invalidPhones, emptyNames, duplicates };
+            };
+
+            const renderTable = () => {
+                const head = header.map((h) => `<th>${h || '(columna)'}</th>`).join('');
+                const body = dataRows.map((row) => `<tr>${header.map((_,i)=>`<td>${(row[i]||'').toString().replace(/</g,'&lt;')}</td>`).join('')}</tr>`).join('');
+                elements.importDiagTableWrap.innerHTML = `<table class="import-diag-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+            };
+
+            const renderIssues = () => {
+                const r = evaluate();
+                elements.importDiagIssues.innerHTML = `
+                    <div>• Delimitador detectado: <strong>${delimiter === '\t' ? 'tab' : delimiter}</strong></div>
+                    <div>• Nombres vacíos: <strong>${r.emptyNames}</strong></div>
+                    <div>• Teléfonos inválidos: <strong>${r.invalidPhones}</strong></div>
+                    <div>• Duplicados en preview: <strong>${r.duplicates}</strong></div>
+                `;
+            };
+
+            renderTable();
+            renderIssues();
+            elements.importDiagSummary.textContent = `Archivo: ${fileName} · Perfil: ${profileName} · Filas analizadas: ${dataRows.length}`;
+            setLoadingState(false, 'Revisión previa lista', 100, false);
+            elements.importDiagnosticsModal.classList.add('active');
+
+            [elements.importMapName, elements.importMapPhone, elements.importMapTag].forEach((el) => {
+                if (!el) return;
+                el.onchange = () => renderIssues();
+            });
+
+            return new Promise((resolve) => {
+                elements.importDiagCancel.onclick = () => {
+                    elements.importDiagnosticsModal.classList.remove('active');
+                    resolve(false);
+                };
+                elements.importDiagContinue.onclick = () => {
+                    elements.importDiagnosticsModal.classList.remove('active');
+                    resolve(true);
+                };
+            });
+        }
+
         async function loadFiles() {
             const origin = elements.originInput.value.trim() || 'Sin especificar';
             let totalNewContacts = 0;
             let totalMerged = 0;
+            let totalRenamedCleanup = 0;
+            const batchId = `imp_${Date.now()}`;
+            const batchFiles = [];
 
             if (selectedFiles.length === 0) return;
             AppState.importCancelRequested = false;
@@ -2932,9 +3502,19 @@
             setLoadingState(true, 'Leyendo archivo…', 2, true);
 
             try {
+            const snapshotStamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const activeProfileBefore = AppState.activeProfileId || 'default';
+            const profileContactsBefore = AppState.contacts.filter(c => (c.profileId || 'default') === activeProfileBefore);
+            localStorage.setItem(`bk_profile_${activeProfileBefore}_${snapshotStamp}`, JSON.stringify(profileContactsBefore));
+
             for (let fileIndex = 0; fileIndex < selectedFiles.length; fileIndex++) {
                 const file = selectedFiles[fileIndex];
+                batchFiles.push(file.name);
                 const text = await file.text();
+                const profileIdForFile = AppState.splitImportByFile && selectedFiles.length > 1 ? ensureProfileByName((file.name || '').replace(/\.[^.]+$/, '')) : (AppState.activeProfileId || 'default');
+                const profileLabel = (AppState.profiles.find(p => p.id === profileIdForFile)?.name || 'Base principal');
+                const okPreview = await showImportDiagnosticsPanel(file.name, text, profileLabel);
+                if (!okPreview) continue;
                 if (AppState.importCancelRequested) break;
 
                 setLoadingState(true, `Parseando… ${file.name}`, 10, true);
@@ -2948,6 +3528,7 @@
                 const nowIso = new Date().toISOString();
                 let fileNewContacts = 0;
                 let fileMerged = 0;
+                let fileRenamedCleanup = 0;
                 const phoneIndex = new Map();
                 const nameIndex = new Map();
                 for (const existingContact of AppState.contacts) {
@@ -2976,6 +3557,19 @@
                             touched = true;
                         }
                         const previousOrigin = (existingContact.origin || '').trim();
+                        const previousName = (existingContact.name || '').trim();
+                        const incomingName = (newContact.name || '').trim();
+                        if (incomingName && normalizeName(incomingName) !== normalizeName(previousName)) {
+                            existingContact.name = incomingName;
+                            if (!Array.isArray(existingContact.previousNames)) existingContact.previousNames = [];
+                            existingContact.previousNames.unshift({ at: nowIso, from: previousName || '(vacío)', to: incomingName, file: file.name });
+                            existingContact.previousNames = existingContact.previousNames.slice(0, 40);
+                            existingContact.cleanupLabel = 'contactos a borrar';
+                            existingContact.markedForCleanup = true;
+                            fileRenamedCleanup++;
+                            totalRenamedCleanup++;
+                            touched = true;
+                        }
                         if (origin && previousOrigin !== origin) {
                             existingContact.origin = origin;
                             if (!Array.isArray(existingContact.originHistory)) existingContact.originHistory = [];
@@ -2985,6 +3579,10 @@
                         }
                         if (touched) {
                             existingContact.lastUpdated = nowIso;
+                            existingContact.lastImportBatchId = batchId;
+                            existingContact.lastImportFile = file.name;
+                            existingContact.lastImportedAt = nowIso;
+                            existingContact.profileId = profileIdForFile;
                             totalMerged++;
                             fileMerged++;
                         }
@@ -2998,9 +3596,14 @@
                             origin: origin,
                             status: newContact.status || suggestedStatus,
                             lastUpdated: nowIso,
-                            isDuplicate: false
+                            isDuplicate: false,
+                            lastImportBatchId: batchId,
+                            lastImportFile: file.name,
+                            lastImportedAt: nowIso,
+                            profileId: profileIdForFile
                         };
                         AppState.contacts.push(created);
+                        recordMetricEvent('user_created', { profileId: created.profileId || profileIdForFile, contactId: created.id, status: created.status, selectionType: 'import', at: nowIso });
                         if (normalizedPhone) phoneIndex.set(normalizedPhone, created);
                         if (normalizedName) nameIndex.set(normalizedName, created);
                         totalNewContacts++;
@@ -3015,9 +3618,16 @@
                     }
                 }
 
-                addToHistory('Importación de archivo', `${file.name}: +${fileNewContacts} nuevos / ${fileMerged} actualizados`);
+                addToHistory('Importación de archivo', `${file.name}: +${fileNewContacts} nuevos / ${fileMerged} actualizados / ${fileRenamedCleanup} renombrados (contactos a borrar)`);
                 console.info('[import] merge done', { file: file.name, nuevos: fileNewContacts, actualizados: fileMerged });
             }
+
+            AppState.previousImportBatchId = AppState.lastImportBatchId || '';
+            AppState.lastImportBatchId = batchId;
+            AppState.lastImportFileName = batchFiles[batchFiles.length - 1] || '';
+            localStorage.setItem('lastImportBatchId', AppState.lastImportBatchId);
+            localStorage.setItem('previousImportBatchId', AppState.previousImportBatchId);
+            localStorage.setItem('lastImportFileName', AppState.lastImportFileName);
 
             detectDuplicates();
             const chunkedSaved = await persistContactsChunkedForImport(sanitizeContactsForStorage(AppState.contacts));
@@ -3028,8 +3638,8 @@
             setLoadingState(false, 'Listo', 100, false);
             showNotification(
                 AppState.importCancelRequested
-                    ? `Importación cancelada. ${totalNewContacts} nuevos, ${totalMerged} actualizados`
-                    : `✅ ${totalNewContacts} contactos nuevos, ${totalMerged} actualizados`,
+                    ? `Importación cancelada. ${totalNewContacts} nuevos, ${totalMerged} actualizados, ${totalRenamedCleanup} renombrados`
+                    : `✅ ${totalNewContacts} nuevos, ${totalMerged} actualizados, ${totalRenamedCleanup} renombrados`,
                 AppState.importCancelRequested ? 'warning' : 'success'
             );
             console.info('[import] complete', { ms: Date.now() - importStarted, newContacts: totalNewContacts, merged: totalMerged });
@@ -3288,7 +3898,7 @@
                 if (elements.storageMeter) {
                     elements.storageMeter.classList.remove('ok', 'warn', 'critical');
                     elements.storageMeter.classList.add(pct >= 92 ? 'critical' : (pct >= 80 ? 'warn' : 'ok'));
-                    elements.storageMeter.textContent = `Storage ${pct}%`;
+                    elements.storageMeter.textContent = `Almacenamiento ${pct}%`;
                     elements.storageMeter.title = `${detail}. Ejecutá getStorageStatus() en consola para más detalle.`;
                 }
                 if (pct >= 92) {
@@ -3300,7 +3910,11 @@
         }
 
         let saveDebounceTimer = null;
-        function queueSaveData(delayMs = 120) {
+        let pendingContactMutations = 0;
+        let lastContactSaveAt = 0;
+        const CONTACT_SAVE_BATCH_SIZE = 100;
+        const CONTACT_SAVE_MAX_WAIT_MS = 2500;
+        function queueSaveData(delayMs = 1200) {
             if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
             saveDebounceTimer = setTimeout(() => {
                 saveDebounceTimer = null;
@@ -3332,6 +3946,8 @@
                 maybeDownloadAutomaticBackup('save');
                 setSaveState('ok', `Guardado ${new Date().toLocaleTimeString('es-ES')}`);
                 refreshStorageDiagnostics();
+                lastContactSaveAt = Date.now();
+                pendingContactMutations = 0;
             } catch (e) {
                 console.warn('No se pudo configurar archivo de backup, se usará descarga:', e);
                 AppState.autoBackupStorageMode = 'download';
@@ -3375,8 +3991,45 @@
             }
         }
 
-        function saveData() {
-            queueSaveData(120);
+        function saveData(force = false) {
+            pendingContactMutations += 1;
+            const elapsed = Date.now() - lastContactSaveAt;
+            if (force || pendingContactMutations >= CONTACT_SAVE_BATCH_SIZE || elapsed >= CONTACT_SAVE_MAX_WAIT_MS) {
+                pendingContactMutations = 0;
+                lastContactSaveAt = Date.now();
+                flushSaveQueue();
+                return;
+            }
+            queueSaveData(900);
+        }
+
+        function compactExactDuplicatesForLargeDatasets() {
+            const contacts = Array.isArray(AppState.contacts) ? AppState.contacts : [];
+            if (contacts.length < 8000) return 0;
+            const seen = new Map();
+            const makeKey = (c) => {
+                const nm = normalizeUsername(c?.name || '');
+                const ph = normalizePhoneToE164(c?.phone || '') || normalizePhoneNumber(c?.phone || '') || '';
+                const pf = String(c?.profileId || 'default');
+                return `${nm}::${ph}::${pf}`;
+            };
+            contacts.forEach((c) => {
+                const key = makeKey(c);
+                const prev = seen.get(key);
+                if (!prev) {
+                    seen.set(key, c);
+                    return;
+                }
+                const prevAt = new Date(prev.lastUpdated || prev.lastEditedAt || prev.lastImportedAt || 0).getTime();
+                const nowAt = new Date(c.lastUpdated || c.lastEditedAt || c.lastImportedAt || 0).getTime();
+                if ((nowAt || 0) >= (prevAt || 0)) seen.set(key, c);
+            });
+            const compacted = Array.from(seen.values());
+            const removed = Math.max(0, contacts.length - compacted.length);
+            if (removed > 0) {
+                AppState.contacts = compacted;
+            }
+            return removed;
         }
 
         async function loadData() {
@@ -3385,6 +4038,11 @@
                 const saved = localStorage.getItem('contactsData');
                 if (saved) {
                     AppState.contacts = JSON.parse(saved);
+                    const removedByCompaction = compactExactDuplicatesForLargeDatasets();
+                    if (removedByCompaction > 0) {
+                        addToHistory('Compactación automática', `Se removieron ${removedByCompaction} duplicados exactos al iniciar`);
+                        showNotification(`Compactación: ${removedByCompaction} duplicados exactos removidos`, 'warning');
+                    }
                     for (let i = 0; i < AppState.contacts.length; i++) {
                         const contact = AppState.contacts[i];
                         if (!contact.lastEditedAt) contact.lastEditedAt = contact.lastUpdated || new Date().toISOString();
@@ -3676,6 +4334,95 @@
             return finalStatus;
         }
 
+        function normalizeProfileName(name) {
+            return (name || '').toString().trim();
+        }
+
+        function ensureActiveProfile() {
+            if (!Array.isArray(AppState.profiles) || !AppState.profiles.length) {
+                AppState.profiles = [{ id: 'default', name: 'Base principal' }];
+            }
+            if (!AppState.profiles.some(p => p.id === AppState.activeProfileId)) {
+                AppState.activeProfileId = AppState.profiles[0].id;
+            }
+        }
+
+        function ensureProfileByName(name) {
+            const n = normalizeProfileName(name).slice(0, 60);
+            if (!n) return AppState.activeProfileId;
+            const existing = AppState.profiles.find(p => normalizeSearchText(p.name) === normalizeSearchText(n));
+            if (existing) return existing.id;
+            if (AppState.profiles.length >= 8) return AppState.activeProfileId;
+            const id = `pf_${Date.now()}_${Math.floor(Math.random()*9999)}`;
+            AppState.profiles.push({ id, name: n });
+            savePreferences();
+            return id;
+        }
+
+        function refreshProfilesUI() {
+            ensureActiveProfile();
+            if (elements.profileSelect) {
+                elements.profileSelect.innerHTML = AppState.profiles.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+                elements.profileSelect.value = AppState.activeProfileId;
+            }
+            if (elements.profilesList) {
+                elements.profilesList.innerHTML = AppState.profiles.map((p) => `
+                    <div class="history-item" style="display:flex;justify-content:space-between;align-items:center;">
+                        <div><strong>${p.name}</strong><div class="history-item-muted">${AppState.contacts.filter(c => (c.profileId || 'default') === p.id).length} contactos</div></div>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn" onclick="switchProfile('${p.id}')">Abrir</button>
+                            <button class="btn" onclick="renameProfile('${p.id}')">Renombrar</button>${p.id !== 'default' ? `<button class="btn btn-danger" onclick="deleteProfile('${p.id}')">Borrar</button>` : ''}
+                        </div>
+                    </div>
+                `).join('');
+            }
+            if (elements.splitImportByFileToggle) elements.splitImportByFileToggle.checked = !!AppState.splitImportByFile;
+        }
+
+        window.switchProfile = (profileId) => {
+            AppState.activeProfileId = profileId;
+            localStorage.setItem('activeProfileId', AppState.activeProfileId);
+            AppState.currentPage = Math.max(1, Number(AppState.profilePageMap?.[profileId] || 1));
+            refreshProfilesUI();
+            render();
+            if (elements.profilesModal) elements.profilesModal.classList.remove('active');
+        };
+
+        window.renameProfile = (profileId) => {
+            const profile = (AppState.profiles || []).find((p) => p.id === profileId);
+            if (!profile) return;
+            const nextName = normalizeProfileName(window.prompt('Nuevo nombre del perfil', profile.name || '') || '').slice(0, 60);
+            if (!nextName) return;
+            const duplicated = (AppState.profiles || []).some((p) => p.id !== profileId && normalizeSearchText(p.name) === normalizeSearchText(nextName));
+            if (duplicated) {
+                showNotification('Ya existe un perfil con ese nombre', 'warning');
+                return;
+            }
+            profile.name = nextName;
+            savePreferences();
+            refreshProfilesUI();
+            render();
+            showNotification('Perfil renombrado', 'success');
+        };
+
+        window.deleteProfile = (profileId) => {
+            if (profileId === 'default') return;
+            const count = AppState.contacts.filter(c => (c.profileId || 'default') === profileId).length;
+            const ok = confirm(`¿Borrar perfil y ${count} contactos asociados?`);
+            if (!ok) return;
+            AppState.contacts = AppState.contacts.filter(c => (c.profileId || 'default') !== profileId);
+            AppState.profiles = AppState.profiles.filter(p => p.id !== profileId);
+            ensureActiveProfile();
+            detectDuplicates();
+            saveData();
+            refreshProfilesUI();
+            render();
+        };
+
+        function getContactBatchId(contact) {
+            return String(contact?.lastImportBatchId || contact?.importBatchId || '').trim();
+        }
+
         function applyFilters() {
             const parsedQuery = parseSearchQuery(AppState.searchTerm);
             const selectedStatus = AppState.statusFilter || parsedQuery.status;
@@ -3687,12 +4434,19 @@
                 buildContactDerivedFields(contact);
                 const matchesSearch = parsedQuery.terms.length === 0 || parsedQuery.terms.every(term => contact._searchKey.includes(term));
                 const matchesStatus = !selectedStatus || normalizeSearchText(contact.status) === selectedStatus;
-                const matchesOrigin = !selectedOrigin || normalizeSearchText(contact.origin) === selectedOrigin || (normalizeSearchText(selectedOrigin) === 'operaciones panel' && !!contact.ops);
+                const isLastUploadFilter = selectedOrigin === '__last_upload__';
+                const matchesOrigin = isLastUploadFilter
+                    ? (AppState.lastImportBatchId && getContactBatchId(contact) === AppState.lastImportBatchId)
+                    : (!selectedOrigin || normalizeSearchText(contact.origin) === selectedOrigin || (normalizeSearchText(selectedOrigin) === 'operaciones panel' && !!contact.ops));
+                const activeProfile = AppState.activeProfileId || 'default';
+                const matchesProfile = (contact.profileId || 'default') === activeProfile;
                 const matchesShift = !selectedShift || normalizeSearchText(contact.assignedShift) === selectedShift;
 
                 let matchesPhone = true;
                 if (AppState.phoneFilter === 'with') matchesPhone = !!(contact.phone || '').trim();
                 else if (AppState.phoneFilter === 'without') matchesPhone = !(contact.phone || '').trim();
+                else if (AppState.phoneFilter === 'missing-user') matchesPhone = hasMissingUsername(contact);
+                else if (AppState.phoneFilter === 'suspicious') matchesPhone = !!contact.phoneAlert;
 
                 let matchesOps = true;
                 if (AppState.opsFilter === 'matched') matchesOps = !!contact.ops;
@@ -3707,7 +4461,7 @@
                     matchesEditActivity = !!editedDay && editStats.hotDays.has(editedDay);
                 }
 
-                return matchesSearch && matchesStatus && matchesOrigin && matchesShift && matchesPhone && matchesOps && matchesEditActivity;
+                return matchesProfile && matchesSearch && matchesStatus && matchesOrigin && matchesShift && matchesPhone && matchesOps && matchesEditActivity;
             });
 
             if (AppState.opsFilter === 'top50' || AppState.opsFilter === 'top100') {
@@ -3720,8 +4474,10 @@
         }
 
         function updateStats() {
+            const activeProfile = AppState.activeProfileId || 'default';
+            const profileContacts = AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile);
             const totals = {
-                total: AppState.contacts.length,
+                total: profileContacts.length,
                 unreviewed: 0,
                 contactado: 0,
                 revisado: 0,
@@ -3732,7 +4488,7 @@
             };
             const originSet = new Set();
 
-            AppState.contacts.forEach(c => {
+            profileContacts.forEach(c => {
                 if (c.origin) originSet.add(c.origin);
                 if (c.status !== 'sin revisar') totals.reviewed++;
                 if (c.status === 'sin revisar') totals.unreviewed++;
@@ -3752,7 +4508,7 @@
             $('#sinWspCount').textContent = totals.sinWsp;
             $('#noInteresadoCount').textContent = totals.noInteresado;
 
-            const totalDuplicateEntries = (AppState.duplicates || []).reduce((sum, group) => sum + group.contacts.length, 0);
+            const totalDuplicateEntries = (AppState.duplicates || []).reduce((sum, group) => sum + group.contacts.filter(c => (c.profileId || 'default') === activeProfile).length, 0);
             $('#duplicatesCount').textContent = totalDuplicateEntries;
 
             updateExportUrgencyBadge();
@@ -3764,7 +4520,9 @@
             $('#progressFill').style.width = `${progressPercentage}%`;
 
             const uniqueOrigins = [...originSet].sort();
+            const lastUploadLabel = AppState.lastImportFileName ? `Última subida (${AppState.lastImportFileName})` : 'Última subida';
             elements.originFilter.innerHTML = '<option value="">Todos los orígenes</option>' +
+                `<option value="__last_upload__">${lastUploadLabel}</option>` +
                 uniqueOrigins.map(o => `<option value="${o}">${o}</option>`).join('');
             elements.originFilter.value = AppState.originFilter;
         }
@@ -3810,7 +4568,14 @@
             return 'tn';
         }
 
-        function updateCompetitionCredit(contact, newStatus, source = 'common', { forceTransfer = false } = {}) {
+        function inferShiftFromIso(isoString) {
+            if (!isoString) return '';
+            const dt = new Date(isoString);
+            if (Number.isNaN(dt.getTime())) return '';
+            return getLocalCompetitionShift(dt);
+        }
+
+        function updateCompetitionCredit(contact, newStatus, source = 'common', { forceTransfer = false, shiftOverride = '', atOverride = '' } = {}) {
             if (!contact) return false;
 
             if (newStatus === 'sin revisar') {
@@ -3821,24 +4586,27 @@
                 return changed;
             }
 
-            const localShift = getLocalCompetitionShift(new Date());
+            const localShift = shiftOverride || getLocalCompetitionShift(new Date());
             const changed = forceTransfer || !contact.shiftReviewed || contact.shiftReviewedByShift !== localShift;
             contact.shiftReviewed = true;
             contact.shiftReviewedByShift = localShift;
-            if (changed) contact.shiftReviewedAt = new Date().toISOString();
+            if (changed) contact.shiftReviewedAt = atOverride || new Date().toISOString();
             return changed;
         }
 
         function assignShifts() {
             const rr = { i: 0 };
-            AppState.contacts.forEach(c => {
+            const activeProfile = AppState.activeProfileId || 'default';
+            AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile).forEach(c => {
                 if (!c.assignedShift) c.assignedShift = inferShiftForContact(c, rr);
             });
         }
 
         function getShiftStats(shift) {
-            const pendientes = AppState.contacts.filter(c => c.assignedShift === shift && c.status === 'sin revisar').length;
-            const revisados = AppState.contacts.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift && c.status !== 'sin revisar').length;
+            const activeProfile = AppState.activeProfileId || 'default';
+            const scoped = AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile);
+            const pendientes = scoped.filter(c => c.assignedShift === shift && c.status === 'sin revisar').length;
+            const revisados = scoped.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift && c.status !== 'sin revisar').length;
             const total = revisados + pendientes;
             const pct = total ? Math.min(100, Math.round((revisados / total) * 100)) : 0;
             return { total, revisados, pendientes, pct };
@@ -3916,7 +4684,7 @@
             return 'tn';
         }
 
-        function updateCompetitionCredit(contact, newStatus, source = 'common', { forceTransfer = false } = {}) {
+        function updateCompetitionCredit(contact, newStatus, source = 'common', { forceTransfer = false, shiftOverride = '', atOverride = '' } = {}) {
             if (!contact) return false;
 
             if (newStatus === 'sin revisar') {
@@ -3927,24 +4695,27 @@
                 return changed;
             }
 
-            const localShift = getLocalCompetitionShift(new Date());
+            const localShift = shiftOverride || getLocalCompetitionShift(new Date());
             const changed = forceTransfer || !contact.shiftReviewed || contact.shiftReviewedByShift !== localShift;
             contact.shiftReviewed = true;
             contact.shiftReviewedByShift = localShift;
-            if (changed) contact.shiftReviewedAt = new Date().toISOString();
+            if (changed) contact.shiftReviewedAt = atOverride || new Date().toISOString();
             return changed;
         }
 
         function assignShifts() {
             const rr = { i: 0 };
-            AppState.contacts.forEach(c => {
+            const activeProfile = AppState.activeProfileId || 'default';
+            AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile).forEach(c => {
                 if (!c.assignedShift) c.assignedShift = inferShiftForContact(c, rr);
             });
         }
 
         function getShiftStats(shift) {
-            const pendientes = AppState.contacts.filter(c => c.assignedShift === shift && c.status === 'sin revisar').length;
-            const revisados = AppState.contacts.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift && c.status !== 'sin revisar').length;
+            const activeProfile = AppState.activeProfileId || 'default';
+            const scoped = AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile);
+            const pendientes = scoped.filter(c => c.assignedShift === shift && c.status === 'sin revisar').length;
+            const revisados = scoped.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift && c.status !== 'sin revisar').length;
             const total = revisados + pendientes;
             const pct = total ? Math.min(100, Math.round((revisados / total) * 100)) : 0;
             return { total, revisados, pendientes, pct };
@@ -4335,14 +5106,14 @@
             
             return `
                 <div class="contact-card ${AppState.selectedContacts.has(contact.id) ? 'selected' : ''} ${contact.isDuplicate ? 'duplicate' : ''}" style="--status-rgb: ${statusOption.rgb};" data-id="${contact.id}">
-                    ${contact.isDuplicate ? '<span class="duplicate-badge"><i class="fas fa-exclamation-triangle"></i> DUP</span>' : ''}
+                    ${contact.isDuplicate ? '<span class="duplicate-badge"><i class="fas fa-exclamation-triangle"></i> DUP</span>' : ''}${contact.phoneAlert ? '<span class="duplicate-badge" style="right:8px;left:auto;background:rgba(245,158,11,.22);border-color:rgba(245,158,11,.45);" title="Teléfono sospechoso"><i class="fas fa-exclamation-circle"></i> ALERTA</span>' : ''}
                     <input type="checkbox" class="card-checkbox" ${AppState.selectedContacts.has(contact.id) ? 'checked' : ''}>
                     <div class="card-header">
                         <div class="card-icon" style="color: ${statusOption.color};">
                             <i class="fas ${statusOption.icon}"></i>
                         </div>
                         <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
-                            <span class="card-name" onclick="copyToClipboard('${escapedName}', event)" style="cursor: pointer; flex: 1;" title="Click para copiar">${contact.pinned ? '📌 ' : ''}${contact.name}</span>${AppState.currentView === 'shifts' && contact.assignedShift ? `<span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}${urgency ? `<span class=\"urgency-badge urgency-l${urgency.level}\" title=\"${urgency.title}\"><i class=\"fas fa-clock\"></i>${urgency.label}</span>` : ''}
+                            <span class="card-name" onclick="copyToClipboard('${escapedName}', event)" style="cursor: pointer; flex: 1;" title="Click para copiar">${contact.pinned ? '📌 ' : ''}${contact.phoneAlert ? '⚠️ ' : ''}${contact.name}</span>${AppState.currentView === 'shifts' && contact.assignedShift ? `<span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}${urgency ? `<span class=\"urgency-badge urgency-l${urgency.level}\" title=\"${urgency.title}\"><i class=\"fas fa-clock\"></i>${urgency.label}</span>` : ''}
                             <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="editContactField(${contact.id}, 'name', event)" title="Editar nombre">
                                 <i class="fas fa-pencil-alt"></i>
                             </button>
@@ -4368,7 +5139,7 @@
                         <div class="detail-item"><i class="fas fa-tag"></i><span>${contact.origin}</span></div>
                         <div class="detail-item">
                             <i class="fas fa-circle-notch"></i>
-                            <span class="card-status-inline" id="cardStatusInline-${contact.id}"><span class="status-badge status-${contact.status.replace(/ /g, '-')}" onclick="openCardStatusMenu(${contact.id}, event)">${statusOption.label}</span></span>
+                            <span class="card-status-inline" id="cardStatusInline-${contact.id}"><span class="card-status-trigger" onclick="openCardStatusMenu(${contact.id}, event)"><span class="status-badge status-${contact.status.replace(/ /g, '-')}">${statusOption.label}</span><i class="fas fa-chevron-down"></i></span></span>
                         </div>
                     </div>
                     ${opsMini}
@@ -4395,7 +5166,7 @@
                         <i class="fas ${statusOption.icon} list-status-bg-icon"></i>
                         <div class="list-name-row">
                             <span onclick="copyToClipboard('${escapedName}', event)" style="flex: 1; cursor: pointer;" title="Click para copiar">
-                                ${contact.isDuplicate ? '<i class=\"fas fa-exclamation-triangle\" style=\"color: var(--accent-warning);\"></i> ' : ''}${contact.name}${AppState.currentView === 'shifts' && contact.assignedShift ? ` <span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}
+                                ${contact.isDuplicate ? '<i class=\"fas fa-exclamation-triangle\" style=\"color: var(--accent-warning);\"></i> ' : ''}${contact.phoneAlert ? '<i class=\"fas fa-exclamation-circle\" style=\"color: var(--accent-warning);\" title=\"Teléfono sospechoso\"></i> ' : ''}${contact.name}${AppState.currentView === 'shifts' && contact.assignedShift ? ` <span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}
                             </span>
                             <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="editContactField(${contact.id}, 'name', event)" title="Editar">
                                 <i class="fas fa-pencil-alt"></i>
@@ -4467,7 +5238,8 @@
             const pageContacts = AppState.filteredContacts.slice(start, end);
             
             if (pageContacts.length === 0 && AppState.filteredContacts.length > 0 && AppState.currentPage > 1) {
-                AppState.currentPage = 1;
+                const totalPages = Math.max(1, Math.ceil(AppState.filteredContacts.length / AppState.itemsPerPage));
+                AppState.currentPage = Math.min(AppState.currentPage, totalPages);
                 renderPaginatedView(renderFunc);
                 return;
             }
@@ -4540,13 +5312,26 @@
 
             html += `<button ${AppState.currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${AppState.currentPage + 1})"><i class="fas fa-chevron-right"></i></button>`;
             html += `<span class="page-info">Página ${AppState.currentPage} de ${totalPages} (${AppState.filteredContacts.length} contactos)</span>`;
+            html += `<input id="pageJumpInput" class="origin-input" style="margin-top:0;width:90px;" type="number" min="1" max="${totalPages}" value="${AppState.currentPage}" />`;
+            html += `<button onclick="jumpToPage()" title="Ir a página">Ir</button>`;
             
             elements.pagination.innerHTML = html;
         }
 
+        window.jumpToPage = () => {
+            const input = document.getElementById('pageJumpInput');
+            if (!input) return;
+            const page = parseInt(input.value || '1', 10);
+            if (Number.isNaN(page)) return;
+            changePage(page);
+        };
+
         window.changePage = (page) => {
             if (page < 1 || page > Math.ceil(AppState.filteredContacts.length / AppState.itemsPerPage)) return;
             AppState.currentPage = page;
+            const pid = AppState.activeProfileId || 'default';
+            AppState.profilePageMap[pid] = page;
+            savePreferences();
             if (AppState.currentView === 'shifts') {
                 elements.cardsView.style.display = 'none';
                 elements.listView.style.display = 'none';
@@ -4581,7 +5366,7 @@
         };
 
 
-        window.changeContactStatus = (id, newStatus, event, source = 'common') => {
+        window.changeContactStatus = (id, newStatus, event, source = 'common', meta = {}) => {
             try {
             if (event) event.stopPropagation();
             const contact = AppState.contacts.find(c => c.id === id);
@@ -4592,8 +5377,10 @@
             if (contact.ops?.suggestedStatus) {
                 requestedStatus = getHigherPriorityStatus(requestedStatus, contact.ops.suggestedStatus);
             }
+            const eventAt = meta?.at || new Date().toISOString();
+            const shiftByEvent = meta?.shift || inferShiftFromIso(eventAt) || '';
             if (oldStatus === requestedStatus) {
-                const moved = updateCompetitionCredit(contact, requestedStatus, source, { forceTransfer: true });
+                const moved = updateCompetitionCredit(contact, requestedStatus, source, { forceTransfer: true, shiftOverride: shiftByEvent, atOverride: eventAt });
                 if (!moved) return;
                 touchContactEdit(contact, source === 'shift' ? 'turno_transfer' : 'status_transfer');
                 addToHistory('Crédito de competencia transferido', `${contact.name}: ahora cuenta para ${String(contact.shiftReviewedByShift || '-').toUpperCase()}`, contact.id);
@@ -4604,22 +5391,38 @@
             }
 
             contact.status = requestedStatus;
-            updateCompetitionCredit(contact, requestedStatus, source);
+            updateCompetitionCredit(contact, requestedStatus, source, { shiftOverride: shiftByEvent, atOverride: eventAt });
             try { setReviewMetadata(contact, requestedStatus); } catch (e) { console.error('Error metadata estado:', e); }
             touchContactEdit(contact, source === 'shift' ? 'turno_status' : 'status_change');
             AppState.lastEditedContact = id;
             const policyNote = (requestedStatus !== newStatus && requestedStatus === 'sin wsp') ? ' (autopolítica 3 recontactos)' : '';
             addToHistory('Estado cambiado', `${contact.name}: ${oldStatus} → ${requestedStatus}${policyNote}`, contact.id);
+            AppState.statusTransitions.unshift({ at: eventAt, from: oldStatus, to: requestedStatus, contactId: contact.id, profileId: contact.profileId || 'default', actor: AppState.operatorName || 'PC local', shift: shiftByEvent || contact.shiftReviewedByShift || contact.assignedShift || '' });
+            recordMetricEvent('status_changed', {
+                profileId: contact.profileId || 'default',
+                contactId: contact.id,
+                from: oldStatus,
+                to: requestedStatus,
+                status: requestedStatus,
+                at: eventAt,
+                shift: shiftByEvent || contact.shiftReviewedByShift || contact.assignedShift || '',
+                selectionType: source
+            });
+            if (AppState.statusTransitions.length > 5000) AppState.statusTransitions = AppState.statusTransitions.slice(0, 5000);
+            saveStatusTransitions();
+            AppState.buttonPressEvents.unshift({ at: eventAt, action: 'status-change', from: oldStatus, to: requestedStatus, shift: shiftByEvent || contact.shiftReviewedByShift || contact.assignedShift || '', profileId: contact.profileId || 'default', actor: AppState.operatorName || 'PC local' });
+            if (AppState.buttonPressEvents.length > 20000) AppState.buttonPressEvents = AppState.buttonPressEvents.slice(0, 20000);
+            saveButtonPressEvents();
             if (oldStatus === 'sin revisar' && requestedStatus !== 'sin revisar') {
                 try {
                     ensureReviewMilestonesState();
+                    ensureMotivationWindow();
                     AppState.reviewPositiveCounter += 1;
-                    const milestones = [100, 250, 500, 1000, 1500, 2500, 5000];
+                    const milestones = [200, 400, 600, 800, 1000, 1500, 2000];
                     const nearest = milestones.find(v => v === AppState.reviewPositiveCounter);
                     if (nearest && !AppState.reviewMilestonesShown[nearest]) {
                         AppState.reviewMilestonesShown[nearest] = true;
-                        const msg = `🚀 Tremendo laburo: ${nearest} usuarios revisados.`;
-                        showNotification(msg, 'success');
+                        sendNativeMotivation(nearest).catch(() => {});
                     }
                 } catch (moralErr) {
                     console.warn('No se pudo procesar notificación motivacional:', moralErr);
@@ -4639,7 +5442,7 @@
             if (event) event.stopPropagation();
             const contact = AppState.contacts.find(c => c.id === id);
             if (!contact || !contact.ops?.suggestedStatus) return;
-            changeContactStatus(id, contact.ops.suggestedStatus);
+            changeContactStatus(id, contact.ops.suggestedStatus, null, 'ops', { at: contact.ops?.lastCargaAt || new Date().toISOString(), shift: inferShiftFromIso(contact.ops?.lastCargaAt) });
             showNotification(`Sugerencia aplicada a ${contact.name}`, 'success');
         };
 
@@ -4686,6 +5489,43 @@
                 if (!Number.isNaN(lastAutoDl) && lastAutoDl > 0) AppState.lastAutoDownloadAt = lastAutoDl;
                 const sig = localStorage.getItem('lastAutoBackupSignature') || '';
                 if (sig) AppState.lastAutoBackupSignature = sig;
+                AppState.lastImportBatchId = localStorage.getItem('lastImportBatchId') || '';
+                AppState.previousImportBatchId = localStorage.getItem('previousImportBatchId') || '';
+                AppState.lastImportFileName = localStorage.getItem('lastImportFileName') || '';
+                const profilesRaw = localStorage.getItem('nexoProfiles');
+                if (profilesRaw) { try { AppState.profiles = JSON.parse(profilesRaw); } catch (_) {} }
+                AppState.activeProfileId = localStorage.getItem('activeProfileId') || AppState.activeProfileId || 'default';
+                AppState.splitImportByFile = localStorage.getItem('splitImportByFile') === '1';
+                const operatorName = localStorage.getItem('operatorName');
+                if (operatorName) AppState.operatorName = operatorName;
+                const statusTransitionsRaw = localStorage.getItem('statusTransitions');
+                if (statusTransitionsRaw) { try { AppState.statusTransitions = JSON.parse(statusTransitionsRaw); } catch (_) { AppState.statusTransitions = []; } }
+                const buttonPressEventsRaw = localStorage.getItem('buttonPressEvents');
+                if (buttonPressEventsRaw) { try { AppState.buttonPressEvents = JSON.parse(buttonPressEventsRaw); } catch (_) { AppState.buttonPressEvents = []; } }
+                const shiftSnapshotsRaw = localStorage.getItem('shiftSnapshots');
+                if (shiftSnapshotsRaw) { try { AppState.shiftSnapshots = JSON.parse(shiftSnapshotsRaw); } catch (_) { AppState.shiftSnapshots = []; } }
+                AppState.lastMidnightExportDate = localStorage.getItem('lastMidnightExportDate') || '';
+                AppState.midnightExportPending = localStorage.getItem('midnightExportPending') === '1';
+                AppState.controlImportUnlocked = localStorage.getItem('controlImportUnlocked') === '1';
+                AppState.controlPasswordHash = localStorage.getItem('controlPasswordHash') || '';
+                AppState.controlLastImportedAt = localStorage.getItem('controlLastImportedAt') || '';
+                const controlReportsRaw = localStorage.getItem('controlReports');
+                if (controlReportsRaw) { try { AppState.controlReports = JSON.parse(controlReportsRaw); } catch (_) { AppState.controlReports = []; } }
+                const metricEventsRaw = localStorage.getItem('metricEvents');
+                if (metricEventsRaw) { try { AppState.metricEvents = JSON.parse(metricEventsRaw); } catch (_) { AppState.metricEvents = []; } }
+                const baselineRaw = localStorage.getItem('monthlyBaselineByProfile');
+                if (baselineRaw) { try { AppState.monthlyBaselineByProfile = JSON.parse(baselineRaw); } catch (_) { AppState.monthlyBaselineByProfile = {}; } }
+                AppState.uploadUnlockedUntil = Number(localStorage.getItem('uploadUnlockedUntil') || '0') || 0;
+                const uploadAuditRaw = localStorage.getItem('uploadAuditLog');
+                if (uploadAuditRaw) { try { AppState.uploadAuditLog = JSON.parse(uploadAuditRaw); } catch (_) { AppState.uploadAuditLog = []; } }
+                const queuedUploadsRaw = localStorage.getItem('queuedUploads');
+                if (queuedUploadsRaw) { try { AppState.queuedUploads = JSON.parse(queuedUploadsRaw); } catch (_) { AppState.queuedUploads = []; } }
+                const themeCatalogRaw = localStorage.getItem('themeCatalog');
+                if (themeCatalogRaw) { try { AppState.themeCatalog = JSON.parse(themeCatalogRaw); } catch (_) { AppState.themeCatalog = {}; } }
+                AppState.activeThemeId = localStorage.getItem('activeThemeId') || AppState.activeThemeId || 'whaticket-blue';
+                AppState.lightMode = localStorage.getItem('lightMode') === '1';
+                const profilePageMapRaw = localStorage.getItem('profilePageMap');
+                if (profilePageMapRaw) { try { AppState.profilePageMap = JSON.parse(profilePageMapRaw); } catch (_) { AppState.profilePageMap = {}; } }
                 const backupMode = localStorage.getItem('autoBackupStorageMode');
                 if (backupMode === 'download' || backupMode === 'file' || backupMode === 'ask') {
                     AppState.autoBackupStorageMode = backupMode === 'ask' ? 'download' : backupMode;
@@ -4700,18 +5540,271 @@
             }
         }
 
-        function savePreferences() {
+        let preferencesSaveTimer = null;
+        function persistPreferencesNow() {
             try {
                 localStorage.setItem('whatsappTemplate', AppState.whatsappTemplate);
                 localStorage.setItem('duplicateMergeMode', AppState.duplicateMergeMode);
+                localStorage.setItem('nexoProfiles', JSON.stringify(AppState.profiles || []));
+                localStorage.setItem('activeProfileId', AppState.activeProfileId || 'default');
+                localStorage.setItem('splitImportByFile', AppState.splitImportByFile ? '1' : '0');
+                localStorage.setItem('operatorName', AppState.operatorName || 'PC local');
+                localStorage.setItem('controlImportUnlocked', AppState.controlImportUnlocked ? '1' : '0');
+                if (AppState.controlPasswordHash) localStorage.setItem('controlPasswordHash', AppState.controlPasswordHash);
+                if (AppState.controlLastImportedAt) localStorage.setItem('controlLastImportedAt', AppState.controlLastImportedAt);
+                localStorage.setItem('controlReports', JSON.stringify((AppState.controlReports || []).slice(0, 180)));
+                localStorage.setItem('metricEvents', JSON.stringify((AppState.metricEvents || []).slice(0, 30000)));
+                localStorage.setItem('monthlyBaselineByProfile', JSON.stringify(AppState.monthlyBaselineByProfile || {}));
+                localStorage.setItem('uploadUnlockedUntil', String(AppState.uploadUnlockedUntil || 0));
+                localStorage.setItem('uploadAuditLog', JSON.stringify((AppState.uploadAuditLog || []).slice(0, 5000)));
+                localStorage.setItem('queuedUploads', JSON.stringify((AppState.queuedUploads || []).slice(0, 300)));
+                localStorage.setItem('themeCatalog', JSON.stringify(AppState.themeCatalog || {}));
+                localStorage.setItem('activeThemeId', AppState.activeThemeId || 'whaticket-blue');
+                localStorage.setItem('lightMode', AppState.lightMode ? '1' : '0');
+                localStorage.setItem('profilePageMap', JSON.stringify(AppState.profilePageMap || {}));
             } catch (e) {
                 console.error('Error al guardar preferencias:', e);
             }
         }
 
+        function savePreferences(force = false) {
+            if (force) {
+                if (preferencesSaveTimer) {
+                    clearTimeout(preferencesSaveTimer);
+                    preferencesSaveTimer = null;
+                }
+                persistPreferencesNow();
+                return;
+            }
+            if (preferencesSaveTimer) clearTimeout(preferencesSaveTimer);
+            preferencesSaveTimer = setTimeout(() => {
+                preferencesSaveTimer = null;
+                persistPreferencesNow();
+            }, 700);
+        }
+
+        function hashControlPassword(raw) {
+            const value = String(raw || '');
+            const seed = String.fromCharCode(110, 101, 120, 111, 45, 99, 111, 110, 116, 114, 111, 108, 45, 115, 97, 108, 116);
+            let hash = 0;
+            const merged = `${seed}:${value}`;
+            for (let i = 0; i < merged.length; i++) {
+                hash = ((hash << 5) - hash) + merged.charCodeAt(i);
+                hash |= 0;
+            }
+            return `nexo-${Math.abs(hash).toString(36)}`;
+        }
+
+        function getDefaultControlPasswordHash() {
+            const hiddenDefault = [109, 97, 115, 116, 101, 114, 49, 50, 51].map((c) => String.fromCharCode(c)).join('');
+            return hashControlPassword(hiddenDefault);
+        }
+
+        function verifyControlPassword(rawPassword) {
+            const currentHash = AppState.controlPasswordHash || getDefaultControlPasswordHash();
+            return hashControlPassword(rawPassword) === currentHash;
+        }
+
         function buildWhatsAppMessage(contactName) {
             const base = (AppState.whatsappTemplate || '').trim();
             return base.replaceAll('{usuario}', contactName || '');
+        }
+
+        function isSystemThemeId(themeId) {
+            return Object.prototype.hasOwnProperty.call(getDefaultThemes(), String(themeId || ''));
+        }
+
+        function getDefaultThemes() {
+            return {
+                'whaticket-blue': { id: 'whaticket-blue', name: 'Azul Whaticket', desc: 'Apariencia profesional y limpia', primary: '#6ea8ff', accent: '#f49ab0', bg: '#1f2d46', surface: '#2b3a54', text: '#ecf2ff' },
+                'forest-green': { id: 'forest-green', name: 'Verde Bosque', desc: 'Naturaleza relajante', primary: '#61c554', accent: '#eab308', bg: '#1b351f', surface: '#25492a', text: '#eef8ee' },
+                'ocean-green': { id: 'ocean-green', name: 'Verde Océano', desc: 'Verde azulado fresco', primary: '#2dd4bf', accent: '#f38ba8', bg: '#153443', surface: '#1d4556', text: '#e8fbff' },
+                'sunset-orange': { id: 'sunset-orange', name: 'Naranja Atardecer', desc: 'Naranja cálido y dorado', primary: '#f59e0b', accent: '#f472b6', bg: '#3a230f', surface: '#4b2d12', text: '#fff4e8' },
+                'night-purple': { id: 'night-purple', name: 'Púrpura Nocturno', desc: 'Violeta elegante con cian', primary: '#a855f7', accent: '#22d3ee', bg: '#28173f', surface: '#352050', text: '#f4ecff' },
+                'rose-pink': { id: 'rose-pink', name: 'Rosa Rosado', desc: 'Sutil y marketinero', primary: '#f72585', accent: '#fb923c', bg: '#3b1830', surface: '#4a1f3b', text: '#ffeaf5' },
+                'cosmic': { id: 'cosmic', name: 'Cósmico', desc: 'Espacio profundo con neón', primary: '#7c83ff', accent: '#ff7aa2', bg: '#0a1024', surface: '#141e3d', text: '#e8edff' }
+            };
+        }
+
+        function hexToRgb(hex) {
+            const raw = String(hex || '').replace('#', '');
+            if (!raw || (raw.length !== 3 && raw.length !== 6)) return { r: 59, g: 130, b: 246 };
+            const full = raw.length === 3 ? raw.split('').map((c) => c + c).join('') : raw;
+            const num = parseInt(full, 16);
+            return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+        }
+
+        function applyTheme(themeId) {
+            const theme = (AppState.themeCatalog || {})[themeId];
+            if (!theme) return;
+            const root = document.documentElement;
+            const pr = hexToRgb(theme.primary);
+            root.style.setProperty('--accent-primary', theme.primary);
+            root.style.setProperty('--accent-secondary', theme.accent);
+            root.style.setProperty('--accent-success', theme.accent);
+            root.style.setProperty('--bg-primary', AppState.lightMode ? '#eef2f8' : theme.bg);
+            root.style.setProperty('--bg-secondary', AppState.lightMode ? '#f7f9fc' : theme.surface);
+            root.style.setProperty('--bg-card', AppState.lightMode ? '#dfe8f3' : theme.surface);
+            root.style.setProperty('--text-primary', AppState.lightMode ? '#1e293b' : theme.text);
+            root.style.setProperty('--text-secondary', AppState.lightMode ? '#475569' : '#cbd5e1');
+            root.style.setProperty('--border-color', AppState.lightMode ? '#b8c6db' : 'rgba(148,163,184,.35)');
+            root.style.setProperty('--hover-color', AppState.lightMode ? '#cfdcee' : '#475569');
+            root.style.setProperty('--selection-bg', `rgba(${pr.r}, ${pr.g}, ${pr.b}, ${AppState.lightMode ? '0.18' : '0.2'})`);
+            document.body.classList.toggle('light-mode', !!AppState.lightMode);
+            AppState.activeThemeId = themeId;
+            savePreferences();
+        }
+
+        function renderThemeCards() {
+            if (!elements.themeCards) return;
+            const cards = Object.values(AppState.themeCatalog || {}).map((t) => {
+                const active = t.id === AppState.activeThemeId;
+                const custom = !isSystemThemeId(t.id);
+                return `<button class="metrics-card" style="text-align:left;cursor:pointer;${active ? 'outline:2px solid var(--accent-primary);' : ''}" data-theme-id="${t.id}"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><div><div class="k" style="font-weight:700;color:var(--text-primary)">${t.name}</div><div class="k" style="margin-top:4px;min-height:32px;">${t.desc || ''}</div></div>${custom ? `<div style="display:flex;gap:6px;flex-wrap:wrap;"><span class="btn" data-theme-rename="${t.id}" style="padding:4px 8px;font-size:.72rem;">Renombrar</span><span class="btn btn-danger" data-theme-delete="${t.id}" style="padding:4px 8px;font-size:.72rem;">Borrar</span></div>` : ''}</div><div style="display:flex;gap:6px;margin-top:8px;"><span style="width:18px;height:18px;border-radius:4px;background:${t.primary}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.accent}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.bg}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.surface}"></span></div></button>`;
+            }).join('');
+            elements.themeCards.innerHTML = cards || '<div style="color:var(--text-secondary)">Sin temas</div>';
+            elements.themeCards.querySelectorAll('[data-theme-id]').forEach((btn) => {
+                btn.onclick = () => {
+                    applyTheme(btn.getAttribute('data-theme-id'));
+                    renderThemeCards();
+                };
+            });
+            elements.themeCards.querySelectorAll('[data-theme-rename]').forEach((btn) => {
+                btn.onclick = (ev) => {
+                    ev.stopPropagation();
+                    const id = btn.getAttribute('data-theme-rename');
+                    const theme = (AppState.themeCatalog || {})[id];
+                    if (!theme || isSystemThemeId(id)) return;
+                    const nextName = String(window.prompt('Nuevo nombre del tema personalizado', theme.name || '') || '').trim();
+                    if (!nextName) return;
+                    theme.name = nextName.slice(0, 60);
+                    savePreferences();
+                    renderThemeCards();
+                    showNotification('Tema renombrado', 'success');
+                };
+            });
+            elements.themeCards.querySelectorAll('[data-theme-delete]').forEach((btn) => {
+                btn.onclick = (ev) => {
+                    ev.stopPropagation();
+                    const id = btn.getAttribute('data-theme-delete');
+                    if (!id || isSystemThemeId(id)) return;
+                    if (!confirm('¿Eliminar tema personalizado?')) return;
+                    delete AppState.themeCatalog[id];
+                    if (AppState.activeThemeId === id) {
+                        AppState.activeThemeId = 'whaticket-blue';
+                        applyTheme(AppState.activeThemeId);
+                    }
+                    savePreferences();
+                    renderThemeCards();
+                    showNotification('Tema eliminado', 'info');
+                };
+            });
+        }
+
+        function inferShiftFromDateParts(dateObj) {
+            const h = dateObj.getHours();
+            if (h >= 6 && h < 14) return 'tm';
+            if (h >= 14 && h < 22) return 'tt';
+            return 'tn';
+        }
+
+        function normalizeSelectionType(raw) {
+            const val = String(raw || '').toLowerCase();
+            if (val.includes('ops')) return 'ops';
+            if (val.includes('bulk') || val.includes('masiv')) return 'bulk';
+            if (val.includes('import')) return 'import';
+            return 'manual';
+        }
+
+        function recordMetricEvent(type, payload = {}) {
+            const at = payload.at || new Date().toISOString();
+            const dateObj = new Date(at);
+            const event = {
+                id: `${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+                type,
+                at,
+                profileId: payload.profileId || AppState.activeProfileId || 'default',
+                shift: payload.shift || inferShiftFromDateParts(dateObj),
+                status: payload.status || '',
+                from: payload.from || '',
+                to: payload.to || '',
+                selectionType: normalizeSelectionType(payload.selectionType || payload.source || type),
+                contactId: payload.contactId || null
+            };
+            AppState.metricEvents.unshift(event);
+            if (AppState.metricEvents.length > 30000) AppState.metricEvents = AppState.metricEvents.slice(0, 30000);
+            savePreferences();
+        }
+
+        function drawDonut(canvas, entries, colors) {
+            if (!canvas || !canvas.getContext) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width, h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+            const total = entries.reduce((a, b) => a + b.value, 0);
+            if (!total) { ctx.fillStyle = '#94a3b8'; ctx.fillText('Sin datos', 12, 20); return; }
+            let start = -Math.PI / 2;
+            const cx = 90, cy = 90, r = 64;
+            entries.forEach((entry, idx) => {
+                const angle = (entry.value / total) * Math.PI * 2;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.arc(cx, cy, r, start, start + angle);
+                ctx.closePath();
+                ctx.fillStyle = colors[idx % colors.length];
+                ctx.fill();
+                start += angle;
+            });
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 34, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '12px sans-serif';
+            entries.slice(0, 5).forEach((entry, idx) => {
+                ctx.fillText(`${entry.label} ${Math.round((entry.value / total) * 100)}%`, 180, 22 + (idx * 18));
+            });
+        }
+
+        function drawBars(canvas, entries, color = '#3b82f6') {
+            if (!canvas || !canvas.getContext) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width, h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+            if (!entries.length) { ctx.fillStyle = '#94a3b8'; ctx.fillText('Sin datos', 12, 20); return; }
+            const max = Math.max(1, ...entries.map((e) => e.value));
+            const barW = Math.max(16, Math.floor((w - 40) / Math.max(1, entries.length)) - 8);
+            entries.slice(0, 12).forEach((entry, idx) => {
+                const x = 20 + idx * (barW + 8);
+                const bh = Math.max(2, Math.round((entry.value / max) * (h - 50)));
+                const y = h - 24 - bh;
+                const grad = ctx.createLinearGradient(x, y, x + barW, y + bh);
+                grad.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--accent-primary').trim() || color);
+                grad.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--accent-secondary').trim() || '#10b981');
+                ctx.fillStyle = grad;
+                const radius = 6;
+                ctx.beginPath();
+                ctx.moveTo(x + radius, y);
+                ctx.lineTo(x + barW - radius, y);
+                ctx.quadraticCurveTo(x + barW, y, x + barW, y + radius);
+                ctx.lineTo(x + barW, y + bh - radius);
+                ctx.quadraticCurveTo(x + barW, y + bh, x + barW - radius, y + bh);
+                ctx.lineTo(x + radius, y + bh);
+                ctx.quadraticCurveTo(x, y + bh, x, y + bh - radius);
+                ctx.lineTo(x, y + radius);
+                ctx.quadraticCurveTo(x, y, x + radius, y);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = '10px sans-serif';
+                ctx.fillText(String(entry.value), x, y - 4);
+                ctx.save();
+                ctx.translate(x + 2, h - 8);
+                ctx.rotate(-0.35);
+                ctx.fillText(entry.label.slice(0, 14), 0, 0);
+                ctx.restore();
+            });
         }
 
         function getDuplicateReason(group) {
@@ -4845,6 +5938,7 @@
             applyFilters();
             AppState.filteredContacts.sort((a, b) => {
                 if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+                if (!!a.phoneAlert !== !!b.phoneAlert) return a.phoneAlert ? 1 : -1;
                 if (AppState.opsFilter === 'top50' || AppState.opsFilter === 'top100') return (b.ops?.score || 0) - (a.ops?.score || 0);
                 buildContactDerivedFields(a);
                 buildContactDerivedFields(b);
@@ -5068,7 +6162,7 @@
                     return `
                     <div class="history-item ${contact ? '' : 'history-item-muted'}">
                         <div class="history-time">${new Date(entry.timestamp).toLocaleString('es-ES')}</div>
-                        <div class="history-action"><strong>${entry.action}:</strong> ${entry.details}</div>
+                        <div class="history-action"><strong>${entry.action}:</strong> ${entry.details}</div><div class="history-item-muted">por: ${entry.actor || 'PC local'}</div>
                         <div class="history-item-actions">
                             <button class="btn" onclick="searchFromHistory('${userName.replace(/'/g, "\\'")}', event)"><i class="fas fa-search"></i> Ver</button>
                             <button class="btn" onclick="editFromHistory('${userName.replace(/'/g, "\\'")}', event)" ${contact ? '' : 'disabled'}><i class="fas fa-pen"></i> Editar</button>
@@ -5144,6 +6238,15 @@
             if (elements.appLoadingText) elements.appLoadingText.textContent = message;
             if (elements.appLoadingProgress) elements.appLoadingProgress.style.width = `${Math.max(0, Math.min(100, progress ?? 0))}%`;
             if (elements.cancelImportBtn) elements.cancelImportBtn.style.display = cancelable ? 'inline-flex' : 'none';
+            if (active) renderLoadingPreview();
+        }
+
+        function renderLoadingPreview() {
+            if (!elements.loadingPreviewTrack) return;
+            const rows = (AppState.contacts || []).slice(0, 60).map((c) => (
+                `<div class="loading-preview-row"><div>${(c.name || 'Sin nombre').toString().replace(/</g, '&lt;')}</div><div>${(c.phone || '-').toString().replace(/</g, '&lt;')}</div><div>${(c.status || 'sin revisar').toString().replace(/</g, '&lt;')}</div></div>`
+            )).join('');
+            elements.loadingPreviewTrack.innerHTML = rows || '<div class="loading-preview-row"><div>Sin datos</div><div>-</div><div>sin revisar</div></div>';
         }
 
         function perfMark(label, fn) {
@@ -5214,7 +6317,9 @@
         }
 
         function setupEventListeners() {
-            elements.uploadArea.onclick = () => elements.fileInput.click();
+            elements.uploadArea.onclick = () => {
+                elements.fileInput.click();
+            };
             elements.uploadArea.ondragover = (e) => { e.preventDefault(); elements.uploadArea.style.borderColor = 'var(--accent-primary)'; };
             elements.uploadArea.ondragleave = () => elements.uploadArea.style.borderColor = 'var(--border-color)';
             elements.uploadArea.ondrop = (e) => {
@@ -5254,6 +6359,49 @@
             elements.settingsBtn.onclick = () => {
                 elements.userOptionsModal.classList.add('active');
             };
+            if (elements.manageProfilesBtn) {
+                elements.manageProfilesBtn.onclick = () => {
+                    refreshProfilesUI();
+                    elements.profilesModal && elements.profilesModal.classList.add('active');
+                };
+            }
+            if (elements.profileSelect) {
+                elements.profileSelect.onchange = (e) => {
+                    AppState.activeProfileId = e.target.value || 'default';
+                    localStorage.setItem('activeProfileId', AppState.activeProfileId);
+                    render();
+                };
+            }
+            if (elements.addProfileBtn) {
+                elements.addProfileBtn.onclick = () => {
+                    const name = (elements.newProfileName?.value || '').trim();
+                    if (!name) {
+                        showNotification('Escribí un nombre para el perfil', 'warning');
+                        return;
+                    }
+                    const createdId = ensureProfileByName(name);
+                    AppState.activeProfileId = createdId || AppState.activeProfileId;
+                    localStorage.setItem('activeProfileId', AppState.activeProfileId);
+                    if (elements.newProfileName) elements.newProfileName.value = '';
+                    refreshProfilesUI();
+                    render();
+                    showNotification('Perfil creado y activado', 'success');
+                };
+            }
+            if (elements.closeProfilesModal) elements.closeProfilesModal.onclick = () => elements.profilesModal && elements.profilesModal.classList.remove('active');
+            if (elements.splitImportByFileToggle) {
+                elements.splitImportByFileToggle.onchange = (e) => {
+                    AppState.splitImportByFile = !!e.target.checked;
+                    localStorage.setItem('splitImportByFile', AppState.splitImportByFile ? '1' : '0');
+                };
+            }
+            const shortHash = (value) => {
+                if (!value) return '';
+                const raw = String(value).trim();
+                if (raw.length <= 16) return raw;
+                return `${raw.slice(0, 10)}…${raw.slice(-6)}`;
+            };
+
             const triggerUpdateCheck = async (from = 'principal') => {
                 if (elements.updateStatusText) elements.updateStatusText.textContent = 'Estado: buscando…';
                 if (elements.updateProgressFill) elements.updateProgressFill.style.width = '0%';
@@ -5277,8 +6425,10 @@
             if (elements.perfDebugToggle) {
                 elements.perfDebugToggle.checked = localStorage.getItem('perfDebugMode') === '1';
                 AppState.perfDebug = elements.perfDebugToggle.checked;
+                document.body.classList.toggle('perf-mode', AppState.perfDebug);
                 elements.perfDebugToggle.onchange = (e) => {
                     AppState.perfDebug = !!e.target.checked;
+                    document.body.classList.toggle('perf-mode', AppState.perfDebug);
                     localStorage.setItem('perfDebugMode', AppState.perfDebug ? '1' : '0');
                     showNotification(`Modo debug performance ${AppState.perfDebug ? 'activado' : 'desactivado'}`, 'info');
                 };
@@ -5339,7 +6489,8 @@
                         showNotification(payload.message || 'Estás en la última versión', 'success');
                     }
                     if (status === 'suspicious-update') {
-                        elements.updateStatusText.textContent = payload.message || 'Update sospechosa detectada';
+                        const issueHash = shortHash(payload.downloadedSha512 || payload.expectedSha512);
+                        elements.updateStatusText.textContent = `${payload.message || 'Update sospechosa detectada'}${issueHash ? ` (hash ${issueHash})` : ''}`;
                         if (elements.updateProgressFill) elements.updateProgressFill.style.width = '100%';
                         elements.restartUpdateOption.style.display = 'flex';
                         const titleEl = elements.restartUpdateOption.querySelector('.export-option-title');
@@ -5349,7 +6500,9 @@
                         showNotification(payload.message || 'Update sospechosa detectada', 'warning');
                     }
                     if (status === 'downloaded') {
-                        elements.updateStatusText.textContent = payload.message || 'Actualización lista. Reiniciar ahora';
+                        const updateHash = shortHash(payload.downloadedSha512 || payload.expectedSha512);
+                        const hashSummary = updateHash ? ` · hash ${updateHash}` : '';
+                        elements.updateStatusText.textContent = `${payload.message || 'Actualización lista. Reiniciar ahora'}${hashSummary}`;
                         if (elements.updateProgressFill) elements.updateProgressFill.style.width = '100%';
                         elements.restartUpdateOption.style.display = 'flex';
                         const titleEl = elements.restartUpdateOption.querySelector('.export-option-title');
@@ -5359,9 +6512,13 @@
                         showNotification(payload.message || 'Actualización lista. Reiniciar ahora', 'success');
                     }
                     if (status === 'error') {
-                        elements.updateStatusText.textContent = payload.message || 'Error de actualización';
+                        const raw = String(payload.message || '');
+                        const friendly = /no tiene una versión mayor|ya estás en la última versión|no hay una actualización nueva/i.test(raw)
+                            ? 'No hay una actualización nueva disponible en este momento.'
+                            : (payload.message || 'Error de actualización');
+                        elements.updateStatusText.textContent = friendly;
                         if (elements.updateProgressFill) elements.updateProgressFill.style.width = '0%';
-                        showNotification(payload.message || 'Error de actualización', 'error');
+                        showNotification(friendly, /No hay una actualización nueva/.test(friendly) ? 'info' : 'error');
                     }
                 });
             }
@@ -5392,7 +6549,7 @@
             };
             if (elements.openGithubReleasesOption) {
                 elements.openGithubReleasesOption.onclick = async () => {
-                    const url = 'https://github.com/zhinouno-ui/Nexo.exe/releases/latest';
+                    const url = 'https://github.com/zhinouno-ui/nexo-desktop/releases/latest';
                     try {
                         if (window.electronAPI?.openExternal) await window.electronAPI.openExternal(url);
                         else window.open(url, '_blank');
@@ -5404,7 +6561,7 @@
 
             if (elements.openStable110Option) {
                 elements.openStable110Option.onclick = async () => {
-                    const url = 'https://github.com/zhinouno-ui/Nexo.exe/releases/tag/v1.1.10';
+                    const url = 'https://github.com/zhinouno-ui/nexo-desktop/releases/tag/v1.1.10';
                     try {
                         if (window.electronAPI?.openExternal) await window.electronAPI.openExternal(url);
                         else window.open(url, '_blank');
@@ -5447,19 +6604,747 @@
                 };
             }
 
+
+            const buildTransitionSummary = (dayFilter) => {
+                const summary = new Map();
+                (AppState.statusTransitions || []).forEach((t) => {
+                    if (!t?.from || !t?.to) return;
+                    if (dayFilter) {
+                        const d = new Date(t.at || 0).toISOString().slice(0, 10);
+                        if (d !== dayFilter) return;
+                    }
+                    const key = `${t.from}=>${t.to}`;
+                    summary.set(key, (summary.get(key) || 0) + 1);
+                });
+                return Array.from(summary.entries()).sort((a,b) => b[1]-a[1]);
+            };
+
+            const renderTransitionTable = (rows) => {
+                if (!elements.metricTransitionsBreakdown) return;
+                if (!rows.length) {
+                    elements.metricTransitionsBreakdown.innerHTML = '<div style="color:var(--text-secondary)">Sin transiciones registradas para el período.</div>';
+                    return;
+                }
+                const body = rows.map(([k,v]) => { const parts=k.split('=>'); return `<tr><td>${parts[0]}</td><td>${parts[1]}</td><td>${v}</td></tr>`; }).join('');
+                elements.metricTransitionsBreakdown.innerHTML = `<table><thead><tr><th>Desde</th><th>Hacia</th><th>Cantidad</th></tr></thead><tbody>${body}</tbody></table>`;
+            };
+
+            const exportFullSnapshot = () => {
+                const perContactHistory = {};
+                (AppState.history || []).forEach((item) => {
+                    if (!item?.contactId) return;
+                    const key = String(item.contactId);
+                    if (!perContactHistory[key]) perContactHistory[key] = [];
+                    if (perContactHistory[key].length < 15) perContactHistory[key].push(item);
+                });
+                const payload = {
+                    exportedAt: new Date().toISOString(),
+                    appVersion: '1.1.19',
+                    exportType: 'nexo-snapshot-full-v1',
+                    state: {
+                        contacts: AppState.contacts || [],
+                        history: AppState.history || [],
+                        perContactHistory,
+                        profiles: AppState.profiles || [],
+                        activeProfileId: AppState.activeProfileId || 'default',
+                        statusTransitions: AppState.statusTransitions || [],
+                        preferences: {
+                            whatsappTemplate: AppState.whatsappTemplate,
+                            duplicateMergeMode: AppState.duplicateMergeMode,
+                            splitImportByFile: !!AppState.splitImportByFile,
+                            operatorName: AppState.operatorName || 'PC local'
+                        }
+                    }
+                };
+                downloadFile(JSON.stringify(payload, null, 2), `nexo_full_snapshot_${new Date().toISOString().slice(0,10)}.json`, 'application/json;charset=utf-8;');
+                showNotification('Snapshot completo exportado', 'success');
+            };
+
+            const importFullSnapshot = async () => {
+                try {
+                    const files = await window.electronAPI?.openImportDialog?.();
+                    const selected = Array.isArray(files) ? files.find((f) => /\.json$/i.test(f)) : null;
+                    if (!selected) { showNotification('Seleccioná un archivo JSON exportado', 'warning'); return; }
+                    const text = await window.electronAPI.readTextFile(selected);
+                    const parsed = JSON.parse(text);
+                    const state = parsed?.state || parsed;
+                    if (!Array.isArray(state.contacts)) throw new Error('El snapshot no incluye contactos válidos');
+                    const sourceName = (parsed?.sourceDevice || parsed?.deviceName || 'Equipo importado').slice(0, 40);
+                    const profileBase = `import-${Date.now()}`;
+                    const incomingProfiles = Array.isArray(state.profiles) && state.profiles.length ? state.profiles : [{ id: 'default', name: 'Base principal' }];
+                    const profileMap = new Map();
+                    incomingProfiles.forEach((p, idx) => {
+                        const newId = `${profileBase}-${idx}`;
+                        profileMap.set(p.id || 'default', newId);
+                        AppState.profiles.push({ id: newId, name: `${sourceName} · ${p.name || `Perfil ${idx+1}`}` });
+                    });
+                    const importedContacts = (Array.isArray(state.contacts) ? state.contacts : []).map((c) => ({ ...c, id: Date.now() + Math.floor(Math.random()*1000000), profileId: profileMap.get(c.profileId || 'default') || profileBase }));
+                    AppState.contacts = AppState.contacts.concat(importedContacts);
+                    const importedHistory = (Array.isArray(state.history) ? state.history : []).map((h) => ({ ...h, details: `[${sourceName}] ${h.details || ''}` }));
+                    AppState.history = importedHistory.concat(AppState.history);
+                    const importedTransitions = (Array.isArray(state.statusTransitions) ? state.statusTransitions : []).map((t) => ({ ...t, profileId: profileMap.get(t.profileId || 'default') || profileBase }));
+                    AppState.statusTransitions = importedTransitions.concat(AppState.statusTransitions);
+                    if (state.preferences) {
+                        AppState.whatsappTemplate = state.preferences.whatsappTemplate || AppState.whatsappTemplate;
+                        AppState.duplicateMergeMode = state.preferences.duplicateMergeMode || AppState.duplicateMergeMode;
+                        AppState.splitImportByFile = !!state.preferences.splitImportByFile;
+                        AppState.operatorName = state.preferences.operatorName || AppState.operatorName;
+                    }
+                    AppState.buttonPressEvents = (Array.isArray(state.buttonPressEvents) ? state.buttonPressEvents : []).concat(AppState.buttonPressEvents);
+                    AppState.shiftSnapshots = (Array.isArray(state.shiftSnapshots) ? state.shiftSnapshots : []).concat(AppState.shiftSnapshots);
+                    saveStatusTransitions();
+                    saveButtonPressEvents();
+                    saveShiftSnapshots();
+                    saveHistory();
+                    saveData();
+                    render();
+                    showNotification(`Snapshot importado en perfiles separados (${sourceName})`, 'success');
+                } catch (e) {
+                    reportError('importFullSnapshot', e);
+                    showNotification(`No se pudo importar snapshot: ${e?.message || e}`, 'error');
+                }
+            };
+
+            const withinLastHours = (iso, hours = 24) => {
+                if (!iso) return false;
+                const t = new Date(iso).getTime();
+                if (!Number.isFinite(t)) return false;
+                return (Date.now() - t) <= (hours * 60 * 60 * 1000);
+            };
+
+            const createControlExportPayload = () => {
+                const transitions24h = (AppState.statusTransitions || []).filter((t) => withinLastHours(t.at, 24));
+                const transitions30d = (AppState.statusTransitions || []).filter((t) => withinLastHours(t.at, 24 * 30));
+                const buttons24h = (AppState.buttonPressEvents || []).filter((t) => withinLastHours(t.at, 24));
+                const buttons30d = (AppState.buttonPressEvents || []).filter((t) => withinLastHours(t.at, 24 * 30));
+                const shiftTotals = {};
+                transitions24h.forEach((t) => {
+                    const key = String(t.shift || 'sin-turno').toLowerCase();
+                    if (!shiftTotals[key]) shiftTotals[key] = { shift: key, reviewedOut: 0, sentOut: 0, total: 0 };
+                    shiftTotals[key].total += 1;
+                    if (t.from === 'sin revisar') shiftTotals[key].reviewedOut += 1;
+                    if (['contactado', 'jugando'].includes(t.to)) shiftTotals[key].sentOut += 1;
+                });
+                const topShift = Object.values(shiftTotals).sort((a,b) => b.total - a.total)[0] || null;
+                const buttonsPerHour = Math.round(((buttons24h.length / 24) + Number.EPSILON) * 100) / 100;
+                const monthByShift = {};
+                transitions30d.forEach((t) => {
+                    const key = String(t.shift || 'sin-turno').toLowerCase();
+                    monthByShift[key] = (monthByShift[key] || 0) + 1;
+                });
+                return {
+                    exportedAt: new Date().toISOString(),
+                    exportType: 'nexo-control-daily-v1',
+                    sourceDevice: navigator.userAgent || 'Nexo',
+                    activeProfileId: AppState.activeProfileId || 'default',
+                    reportScope: {
+                        profiles: (AppState.profiles || []).map((p) => ({ id: p.id, name: p.name })),
+                        contactsTotal: (AppState.contacts || []).length,
+                        historyTotal: (AppState.history || []).length
+                    },
+                    dailyTransitions: transitions24h,
+                    dailyButtons: buttons24h,
+                    summary24h: {
+                        transitionsCount: transitions24h.length,
+                        buttonsCount: buttons24h.length,
+                        buttonsPerHour,
+                        topShift,
+                        shiftTotals: Object.values(shiftTotals)
+                    },
+                    summary30d: {
+                        transitionsCount: transitions30d.length,
+                        buttonsCount: buttons30d.length,
+                        shifts: monthByShift
+                    }
+                };
+            };
+
+            const exportControlFile = (reason = 'manual') => {
+                const payload = createControlExportPayload();
+                const stamp = new Date().toISOString().replace(/[:]/g, '-').slice(0, 19);
+                downloadFile(JSON.stringify(payload, null, 2), `nexo_control_${stamp}.json`, 'application/json;charset=utf-8;');
+                AppState.midnightExportPending = false;
+                AppState.lastMidnightExportDate = new Date().toISOString().slice(0, 10);
+                localStorage.setItem('midnightExportPending', '0');
+                localStorage.setItem('lastMidnightExportDate', AppState.lastMidnightExportDate);
+                if (elements.midnightExportBtn) elements.midnightExportBtn.classList.remove('btn-midnight-pulse');
+                showNotification(reason === 'auto' ? 'Exporte de control 00:00 generado automáticamente' : 'Exporte de control generado', 'success');
+            };
+
+            const ensureControlPasswordAccess = () => {
+                const typed = window.prompt('Clave de archivo de control');
+                if (!typed) return false;
+                if (!verifyControlPassword(typed)) {
+                    showNotification('Clave incorrecta para importar archivo de control', 'error');
+                    return false;
+                }
+                AppState.controlImportUnlocked = true;
+                savePreferences();
+                if (elements.controlPasswordPanel) elements.controlPasswordPanel.style.display = '';
+                return true;
+            };
+
+            const importControlPayload = (payload) => {
+                const report = payload || {};
+                const kind = String(report.exportType || '').toLowerCase();
+                if (kind.includes('snapshot') || Array.isArray(report?.state?.contacts) || Array.isArray(report?.contacts)) {
+                    throw new Error('Este archivo es un snapshot completo. Usá "Importar TODO" para ese formato.');
+                }
+                if (!kind.includes('control') && !Array.isArray(report.dailyTransitions) && !report.summary24h) {
+                    throw new Error('Archivo de control inválido o no compatible');
+                }
+                const sourceName = String(report?.sourceDevice || report?.deviceName || report?.machineName || 'Control importado').slice(0, 60);
+                const importedAt = new Date().toISOString();
+                const compact = {
+                    id: `ctrl-${Date.now()}`,
+                    importedAt,
+                    sourceName,
+                    exportedAt: report.exportedAt || '',
+                    summary24h: report.summary24h || null,
+                    summary30d: report.summary30d || null,
+                    transitionsCount: Array.isArray(report.dailyTransitions) ? report.dailyTransitions.length : (report.summary24h?.transitionsCount || 0)
+                };
+                AppState.controlReports = [compact].concat(AppState.controlReports || []).slice(0, 180);
+                AppState.controlLastImportedAt = importedAt;
+                addToHistory('Control importado', `${sourceName}: ${compact.transitionsCount} transiciones diarias`);
+                saveHistory();
+                savePreferences();
+                render();
+                showNotification(`Control importado (${sourceName})`, 'success');
+            };
+
+            const buildCurrentBaseline = () => {
+                const profileId = AppState.activeProfileId || 'default';
+                const map = {};
+                (AppState.contacts || []).filter((c) => (c.profileId || 'default') === profileId).forEach((c) => {
+                    const key = normalizePhoneToE164(c.phone || '') || String(c.id);
+                    if (!key) return;
+                    map[key] = {
+                        id: c.id,
+                        phone: c.phone || '',
+                        status: c.status || 'sin revisar',
+                        name: c.name || '',
+                        updatedAt: c.lastUpdated || c.lastEditedAt || c.lastImportedAt || ''
+                    };
+                });
+                return map;
+            };
+
+            const exportMonthlyFull = () => {
+                const profileId = AppState.activeProfileId || 'default';
+                const baselineMap = buildCurrentBaseline();
+                const profileContacts = (AppState.contacts || []).filter((c) => (c.profileId || 'default') === profileId);
+                const transitions30d = (AppState.statusTransitions || []).filter((t) => (t.profileId || 'default') === profileId && withinLastHours(t.at, 24 * 30));
+                const payload = {
+                    schema_version: '1.0.0',
+                    exportType: 'nexo-monthly-full-v1',
+                    profile_id: profileId,
+                    generated_at: new Date().toISOString(),
+                    range_start: new Date(Date.now() - (24 * 30 * 60 * 60 * 1000)).toISOString(),
+                    range_end: new Date().toISOString(),
+                    users: profileContacts,
+                    movements_30d: transitions30d,
+                    baseline: baselineMap
+                };
+                const json = JSON.stringify(payload, null, 2);
+                downloadFile(json, `nexo_monthly_full_${profileId}_${new Date().toISOString().slice(0,10)}.json`, 'application/json;charset=utf-8;');
+                AppState.monthlyBaselineByProfile[profileId] = { generatedAt: payload.generated_at, map: baselineMap };
+                savePreferences();
+                addToHistory('Export mensual full', `Perfil ${profileId}: ${profileContacts.length} usuarios`);
+                showNotification('Export mensual full generado y baseline actualizado', 'success');
+            };
+
+            const exportDailyDelta = () => {
+                const profileId = AppState.activeProfileId || 'default';
+                const baseline = AppState.monthlyBaselineByProfile?.[profileId]?.map || {};
+                const current = buildCurrentBaseline();
+                const newUsers = [];
+                const statusChanges = [];
+                Object.entries(current).forEach(([key, nowUser]) => {
+                    const old = baseline[key];
+                    if (!old) {
+                        newUsers.push({ type: 'new_user', key, ...nowUser });
+                        return;
+                    }
+                    if ((old.status || '') !== (nowUser.status || '')) {
+                        statusChanges.push({ type: 'status_change', key, from: old.status, to: nowUser.status, name: nowUser.name, phone: nowUser.phone, at: nowUser.updatedAt || new Date().toISOString() });
+                    }
+                });
+                const dailyTransitions = (AppState.statusTransitions || []).filter((t) => (t.profileId || 'default') === profileId && withinLastHours(t.at, 24));
+                const payload = {
+                    schema_version: '1.0.0',
+                    exportType: 'nexo-daily-delta-v1',
+                    profile_id: profileId,
+                    generated_at: new Date().toISOString(),
+                    baseline_generated_at: AppState.monthlyBaselineByProfile?.[profileId]?.generatedAt || '',
+                    range_start: new Date(new Date().setHours(0, 0, 0, 0)).toISOString(),
+                    range_end: new Date().toISOString(),
+                    new_users: newUsers,
+                    status_changes: statusChanges,
+                    daily_transitions: dailyTransitions
+                };
+                const csvLines = ['type,key,name,phone,from,to,at']
+                    .concat(newUsers.map((r) => `new_user,${r.key},"${(r.name||'').replace(/"/g,'""')}","${r.phone||''}",,,${r.updatedAt || ''}`))
+                    .concat(statusChanges.map((r) => `status_change,${r.key},"${(r.name||'').replace(/"/g,'""')}","${r.phone||''}","${r.from}","${r.to}",${r.at}`));
+                downloadFile(JSON.stringify(payload, null, 2), `nexo_daily_delta_${profileId}_${new Date().toISOString().slice(0,10)}.json`, 'application/json;charset=utf-8;');
+                downloadFile(csvLines.join('\n'), `nexo_daily_delta_${profileId}_${new Date().toISOString().slice(0,10)}.csv`, 'text/csv;charset=utf-8;');
+                addToHistory('Export diario delta', `Perfil ${profileId}: ${newUsers.length} nuevos / ${statusChanges.length} cambios`);
+                showNotification(`Delta diario exportado (${newUsers.length} nuevos, ${statusChanges.length} cambios)`, 'success');
+                return { payload, csv: csvLines.join('\n') };
+            };
+
+            const ensureUploadUnlocked = () => {
+                if (Date.now() < (AppState.uploadUnlockedUntil || 0)) return true;
+                const typed = window.prompt('Clave para subir reporte');
+                const ok = String(typed || '') === 'Master123';
+                AppState.uploadAuditLog.unshift({ at: new Date().toISOString(), profileId: AppState.activeProfileId || 'default', ok, action: 'upload-auth' });
+                if (ok) {
+                    AppState.uploadUnlockedUntil = Date.now() + (10 * 60 * 1000);
+                    savePreferences();
+                    return true;
+                }
+                savePreferences();
+                showNotification('Clave incorrecta para subir reporte', 'error');
+                return false;
+            };
+
+            const queueReportUpload = async (reportObj, label) => {
+                const profileId = AppState.activeProfileId || 'default';
+                const payload = JSON.stringify(reportObj, null, 2);
+                const queued = { at: new Date().toISOString(), profileId, label, size: payload.length };
+                AppState.queuedUploads.unshift(queued);
+                if (window.electronAPI?.queueUpload) {
+                    try { await window.electronAPI.queueUpload({ profileId, label, payload }); } catch (_) {}
+                }
+                savePreferences();
+                showNotification('Encolado para subir', 'success');
+            };
+
+            const updateMidnightButtonState = () => {
+                if (!elements.midnightExportBtn) return;
+                if (AppState.midnightExportPending) elements.midnightExportBtn.classList.add('btn-midnight-pulse');
+                else elements.midnightExportBtn.classList.remove('btn-midnight-pulse');
+            };
+
+            const startMidnightControlScheduler = () => {
+                updateMidnightButtonState();
+                setInterval(() => {
+                    const now = new Date();
+                    const dateKey = now.toISOString().slice(0, 10);
+                    const isMidnight = now.getHours() === 0 && now.getMinutes() === 0;
+                    if (isMidnight && AppState.lastMidnightExportDate !== dateKey) {
+                        AppState.midnightExportPending = true;
+                        localStorage.setItem('midnightExportPending', '1');
+                        updateMidnightButtonState();
+                        exportControlFile('auto');
+                    }
+                }, 30000);
+            };
+
+            const getFilteredMetricEvents = () => {
+                const from = elements.metricsFromDate?.value ? new Date(`${elements.metricsFromDate.value}T00:00:00`).getTime() : 0;
+                const to = elements.metricsToDate?.value ? new Date(`${elements.metricsToDate.value}T23:59:59`).getTime() : Number.MAX_SAFE_INTEGER;
+                const shift = elements.metricsShiftFilter?.value || 'all';
+                const status = elements.metricsStatusFilter?.value || 'all';
+                const selectionType = elements.metricsSelectionTypeFilter?.value || 'all';
+                const onlyChanges = !!elements.metricsOnlyChanges?.checked;
+                return (AppState.metricEvents || []).filter((ev) => {
+                    if ((ev.profileId || 'default') !== (AppState.activeProfileId || 'default')) return false;
+                    const at = new Date(ev.at || 0).getTime();
+                    if (!Number.isFinite(at) || at < from || at > to) return false;
+                    if (shift !== 'all' && String(ev.shift || '').toLowerCase() !== shift) return false;
+                    if (status !== 'all' && String(ev.status || ev.to || '').toLowerCase() !== status) return false;
+                    if (selectionType !== 'all' && normalizeSelectionType(ev.selectionType) !== selectionType) return false;
+                    if (onlyChanges && ev.type !== 'status_changed') return false;
+                    return true;
+                });
+            };
+
+            const renderMetricChartsFromEvents = () => {
+                const events = getFilteredMetricEvents();
+                const statusMap = new Map();
+                const selMap = new Map();
+                const transMap = new Map();
+                events.forEach((ev) => {
+                    if (ev.status || ev.to) {
+                        const st = String(ev.status || ev.to || '').toLowerCase();
+                        statusMap.set(st, (statusMap.get(st) || 0) + 1);
+                    }
+                    const sel = normalizeSelectionType(ev.selectionType || ev.type);
+                    selMap.set(sel, (selMap.get(sel) || 0) + 1);
+                    if (ev.from && ev.to) {
+                        const key = `${ev.from}→${ev.to}`;
+                        transMap.set(key, (transMap.get(key) || 0) + 1);
+                    }
+                });
+                const statusEntries = Array.from(statusMap.entries()).map(([label, value]) => ({ label, value })).sort((a,b)=>b.value-a.value);
+                const selEntries = Array.from(selMap.entries()).map(([label, value]) => ({ label, value })).sort((a,b)=>b.value-a.value);
+                const transEntries = Array.from(transMap.entries()).map(([label, value]) => ({ label, value })).sort((a,b)=>b.value-a.value).slice(0, 12);
+                drawDonut(elements.statusDonutChart, statusEntries, ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#ef4444','#22d3ee']);
+                drawDonut(elements.selectionDonutChart, selEntries, ['#14b8a6','#3b82f6','#f97316','#8b5cf6','#ef4444']);
+                drawBars(elements.transitionBarChart, transEntries, '#22c55e');
+            };
+
+            const syncMetricsFilters = () => {
+                const statusOptions = STATUS_OPTIONS.map((s) => `<option value="${s.id}">${s.label}</option>`).join('');
+                if (elements.metricsStatusFilter && !elements.metricsStatusFilter.dataset.bound) {
+                    elements.metricsStatusFilter.innerHTML = `<option value="all">Estado: todos</option>${statusOptions}`;
+                    elements.metricsStatusFilter.dataset.bound = '1';
+                }
+            };
+
             if (elements.showQuickMetricsOption) {
                 elements.showQuickMetricsOption.onclick = () => {
-                    const total = AppState.contacts.length;
-                    const revisados = AppState.contacts.filter(c => c.status && c.status !== 'sin revisar').length;
-                    const conTel = AppState.contacts.filter(c => (c.phone || '').trim()).length;
-                    const pct = total ? Math.round((revisados / total) * 100) : 0;
-                    showNotification(`Métrica rápida: ${revisados}/${total} revisados (${pct}%), con teléfono ${conTel}.`, 'info');
+                    const now = new Date();
+                    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+                    const yesterdayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+                    const yesterday = yesterdayDate.toISOString().slice(0, 10);
+                    const dayFromIso = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : '');
+
+                    const byShift = { tm: 0, tt: 0, tn: 0 };
+                    let editedToday = 0;
+                    let editedYesterday = 0;
+
+                    AppState.contacts.forEach((c) => {
+                        const day = dayFromIso(c.lastUpdated || c.lastEditedAt || c.lastImportedAt);
+                        if (day === today) editedToday++;
+                        if (day === yesterday) editedYesterday++;
+                        const shiftKey = String(c.shiftReviewedByShift || '').toLowerCase();
+                        if (byShift[shiftKey] !== undefined && day === today) byShift[shiftKey]++;
+                    });
+
+                    const transitions24h = (AppState.statusTransitions || []).filter((t) => withinLastHours(t.at, 24));
+                    const buttons24h = (AppState.buttonPressEvents || []).filter((t) => withinLastHours(t.at, 24));
+                    const shiftTotals = {};
+                    transitions24h.forEach((t) => {
+                        const key = String(t.shift || 'sin-turno').toLowerCase();
+                        if (!shiftTotals[key]) shiftTotals[key] = { shift: key, reviewedOut: 0, sentOut: 0, total: 0 };
+                        shiftTotals[key].total += 1;
+                        if (t.from === 'sin revisar') shiftTotals[key].reviewedOut += 1;
+                        if (['contactado', 'jugando'].includes(t.to)) shiftTotals[key].sentOut += 1;
+                    });
+                    const topShift = Object.values(shiftTotals).sort((a,b) => b.total-a.total)[0] || null;
+                    const topShiftText = topShift ? `${String(topShift.shift).toUpperCase()} (${topShift.total})` : 'sin datos';
+                    const buttonsPerHour = Math.round(((buttons24h.length / 24) + Number.EPSILON) * 100) / 100;
+                    const filteredEvents = getFilteredMetricEvents();
+                    const opTotal = filteredEvents.filter((e) => ['operation_created', 'status_changed'].includes(e.type)).length;
+                    const newUsers = filteredEvents.filter((e) => e.type === 'user_created').length;
+                    const statusChanges = filteredEvents.filter((e) => e.type === 'status_changed').length;
+                    const usersInRange = new Set(filteredEvents.map((e) => e.contactId).filter(Boolean)).size;
+
+                    if (elements.metricsDateLabel) elements.metricsDateLabel.textContent = `Métricas de las últimas 24h`;
+                    if (elements.metricEditedToday) elements.metricEditedToday.textContent = String(opTotal || editedToday);
+                    if (elements.metricEditedYesterday) elements.metricEditedYesterday.textContent = String(usersInRange || editedYesterday);
+                    if (elements.metricTopShift) elements.metricTopShift.textContent = topShiftText;
+                    if (elements.metricTransitions24h) elements.metricTransitions24h.textContent = String(statusChanges || transitions24h.length);
+                    if (elements.metricTopShift24h) elements.metricTopShift24h.textContent = topShiftText;
+                    if (elements.metricButtonsPerHour) elements.metricButtonsPerHour.textContent = String(buttonsPerHour || newUsers);
+                    const allTransitions = buildTransitionSummary();
+                    renderTransitionTable(allTransitions);
+                    const transitionRows = allTransitions.map(([key, count]) => {
+                        const [from, to] = key.split('=>');
+                        return { from, to, count };
+                    });
+                    const transitionMap = new Map(transitionRows.map((row) => [`${row.from}=>${row.to}`, row.count]));
+                    const highlightedCombos = [
+                        ['sin revisar', 'contactado'],
+                        ['contactado', 'no interesado'],
+                        ['contactado', 'jugando'],
+                        ['sin revisar', 'jugando'],
+                        ['sin revisar', 'revisado'],
+                        ['sin revisar', 'no interesado']
+                    ].map(([from, to]) => ({ from, to, count: transitionMap.get(`${from}=>${to}`) || 0 }));
+                    const topTransitions = transitionRows.filter((row) => row.count > 0).slice(0, 6);
+                    const mainTransitions = topTransitions.length ? topTransitions : highlightedCombos.filter((row) => row.count > 0);
+                    const rareTransitions = transitionRows.filter((row) => row.count > 0 && !mainTransitions.find((it) => it.from === row.from && it.to === row.to));
+                    if (elements.metricTransitionSummary) {
+                        const lines = (mainTransitions.length ? mainTransitions : highlightedCombos).map(({ from, to, count }) => (
+                            `<div><strong>${from}</strong> >>>> <strong>${to}</strong> x${count}</div>`
+                        )).join('');
+                        elements.metricTransitionSummary.innerHTML = lines || '<div style="color:var(--text-secondary)">Sin resumen de transiciones</div>';
+                    }
+                    if (elements.metricRareTransitions && elements.metricRareTransitionsBody) {
+                        if (!rareTransitions.length) {
+                            elements.metricRareTransitions.style.display = 'none';
+                            elements.metricRareTransitions.open = false;
+                            elements.metricRareTransitionsBody.innerHTML = '';
+                        } else {
+                            elements.metricRareTransitions.style.display = '';
+                            elements.metricRareTransitionsBody.innerHTML = rareTransitions.map((row) => `<div>${row.from} >>>> ${row.to} x${row.count}</div>`).join('');
+                        }
+                    }
+                    if (elements.metricShiftBreakdown) {
+                        const shiftRich = {};
+                        transitions24h.forEach((row) => {
+                            const key = String(row.shift || 'sin-turno').toLowerCase();
+                            if (!shiftRich[key]) shiftRich[key] = { shift: key, total: 0, byTo: {} };
+                            shiftRich[key].total += 1;
+                            shiftRich[key].byTo[row.to] = (shiftRich[key].byTo[row.to] || 0) + 1;
+                        });
+                        const sorted = Object.values(shiftRich).sort((a, b) => b.total - a.total);
+                        const cards = sorted.map((row) => {
+                            const topStates = Object.entries(row.byTo).sort((a, b) => b[1] - a[1]).slice(0, 3);
+                            const lines = topStates.map(([status, amount]) => `${status}: ${amount}`).join(' · ');
+                            return `<div class="metrics-card"><div class="k">${String(row.shift).toUpperCase()} ${row.total} usuarios</div><div class="v">${row.total}</div><div class="k">${lines || 'Sin cambios'}</div></div>`;
+                        });
+                        elements.metricShiftBreakdown.innerHTML = cards.length ? cards.join('') : '<div style="color:var(--text-secondary)">Sin datos por turno en 24h.</div>';
+                        if (elements.metricShiftRanking) {
+                            if (!sorted.length) {
+                                elements.metricShiftRanking.innerHTML = '<div style="color:var(--text-secondary)">Sin ranking de turnos en 24h.</div>';
+                            } else {
+                                const top = sorted[0];
+                                const lines = sorted.map((row, idx) => {
+                                    const topStates = Object.entries(row.byTo).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([st, qty]) => `${st} ${qty}`).join(', ');
+                                    return `${idx + 1}º ${String(row.shift).toUpperCase()} ${row.total} usuarios${topStates ? ` — ${topStates}` : ''}`;
+                                });
+                                elements.metricShiftRanking.innerHTML = `<div><strong>${String(top.shift).toUpperCase()} 1er puesto:</strong> ${top.total} usuarios</div><div style="margin-top:6px">${lines.join('<br>')}</div>`;
+                            }
+                        }
+                    }
+
+                    if (elements.controlReportsSummary) {
+                        const reports = (AppState.controlReports || []).slice(0, 5);
+                        if (!reports.length) {
+                            elements.controlReportsSummary.innerHTML = '<div style="color:var(--text-secondary)">Sin controles importados todavía.</div>';
+                        } else {
+                            const rows = reports.map((r, idx) => {
+                                const d24 = r?.summary24h?.transitionsCount ?? r.transitionsCount ?? 0;
+                                const d30 = r?.summary30d?.transitionsCount ?? 0;
+                                return `<div><strong>${idx + 1}.</strong> ${r.sourceName} · 24h: ${d24} · 30d: ${d30} · importado: ${new Date(r.importedAt).toLocaleString('es-ES')}</div>`;
+                            }).join('');
+                            elements.controlReportsSummary.innerHTML = `<div style="font-weight:700;margin-bottom:6px;">Controles importados recientes</div>${rows}`;
+                        }
+                    }
+
+                    renderMetricChartsFromEvents();
+
+                    if (elements.metricsModal) elements.metricsModal.classList.add('active');
                 };
             }
+
+            syncMetricsFilters();
+            [elements.metricsShiftFilter, elements.metricsFromDate, elements.metricsToDate, elements.metricsStatusFilter, elements.metricsSelectionTypeFilter, elements.metricsOnlyChanges].forEach((el) => {
+                if (!el) return;
+                el.onchange = () => {
+                    if (elements.metricsModal?.classList.contains('active')) renderMetricChartsFromEvents();
+                };
+            });
+
+            if (elements.metricsFilterLastBatchBtn) {
+                elements.metricsFilterLastBatchBtn.onclick = () => {
+                    AppState.originFilter = '__last_upload__';
+                    if (elements.originFilter) elements.originFilter.value = '__last_upload__';
+                    AppState.currentPage = 1;
+                    render();
+                    showNotification('Filtro aplicado: última subida', 'info');
+                };
+            }
+
+            if (elements.exportFullSnapshotBtn) elements.exportFullSnapshotBtn.onclick = exportFullSnapshot;
+            if (elements.importFullSnapshotBtn) elements.importFullSnapshotBtn.onclick = importFullSnapshot;
+            const exportControlBySelection = () => {
+                const mode = elements.controlExportType?.value || 'daily';
+                if (mode === 'monthly') {
+                    exportMonthlyFull();
+                    return { mode: 'monthly', payload: null };
+                }
+                const delta = exportDailyDelta();
+                return { mode: 'daily', payload: delta?.payload || null };
+            };
+            if (elements.exportControlBtn) elements.exportControlBtn.onclick = () => exportControlBySelection();
+            if (elements.resetBaselineBtn) {
+                elements.resetBaselineBtn.onclick = () => {
+                    const profileId = AppState.activeProfileId || 'default';
+                    if (!confirm(`¿Resetear baseline mensual del perfil ${profileId}?`)) return;
+                    delete AppState.monthlyBaselineByProfile[profileId];
+                    savePreferences();
+                    showNotification('Baseline mensual reseteado', 'warning');
+                };
+            }
+            if (elements.uploadReportBtn) {
+                elements.uploadReportBtn.onclick = async () => {
+                    if (!ensureUploadUnlocked()) return;
+                    const selected = exportControlBySelection();
+                    const mode = selected?.mode || (elements.controlExportType?.value || 'daily');
+                    if (mode === 'monthly') {
+                        showNotification('Se exportó reporte completo. Subida automática solo disponible para formato diario por ahora.', 'info');
+                        return;
+                    }
+                    if (!selected?.payload) {
+                        showNotification('No se pudo preparar el reporte diario', 'error');
+                        return;
+                    }
+                    await queueReportUpload(selected.payload, 'daily-delta');
+                };
+            }
+            if (elements.importControlBtn) {
+                elements.importControlBtn.onclick = async () => {
+                    if (!ensureControlPasswordAccess()) return;
+                    try {
+                        const files = await window.electronAPI?.openImportDialog?.();
+                        const selected = Array.isArray(files) ? files.find((f) => /\.json$/i.test(f)) : null;
+                        if (!selected) {
+                            showNotification('Seleccioná un archivo JSON de control', 'warning');
+                            return;
+                        }
+                        const text = await window.electronAPI.readTextFile(selected);
+                        const parsed = JSON.parse(text);
+                        importControlPayload(parsed);
+                    } catch (e) {
+                        reportError('importControlFile', e);
+                        showNotification(`No se pudo importar archivo de control: ${e?.message || e}`, 'error');
+                    }
+                };
+            }
+
+            if (elements.openThemesOption && elements.themesModal) {
+                elements.openThemesOption.onclick = () => {
+                    renderThemeCards();
+                    if (elements.lightModeToggle) elements.lightModeToggle.checked = !!AppState.lightMode;
+                    elements.themesModal.classList.add('active');
+                    elements.userOptionsModal.classList.remove('active');
+                };
+            }
+            if (elements.lightModeToggle) {
+                elements.lightModeToggle.onchange = (e) => {
+                    AppState.lightMode = !!e.target.checked;
+                    applyTheme(AppState.activeThemeId || 'whaticket-blue');
+                    renderThemeCards();
+                    showNotification(AppState.lightMode ? 'Modo claro activado' : 'Modo oscuro activado', 'info');
+                };
+            }
+            if (elements.closeThemesModal) elements.closeThemesModal.onclick = () => elements.themesModal.classList.remove('active');
+            if (elements.saveCustomThemeBtn) {
+                elements.saveCustomThemeBtn.onclick = () => {
+                    const name = String(elements.themeNameInput?.value || '').trim() || `Tema ${new Date().toLocaleDateString('es-ES')}`;
+                    let id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `theme-${Date.now()}`;
+                    while (AppState.themeCatalog[id]) id = `${id}-2`;
+                    AppState.themeCatalog[id] = {
+                        id,
+                        name,
+                        primary: elements.themePrimary?.value || '#3b82f6',
+                        accent: elements.themeAccent?.value || '#10b981',
+                        bg: elements.themeBg?.value || '#0f172a',
+                        surface: elements.themeSurface?.value || '#1e293b',
+                        text: elements.themeText?.value || '#e2e8f0'
+                    };
+                    applyTheme(id);
+                    renderThemeCards();
+                    showNotification('Tema personalizado guardado', 'success');
+                };
+            }
+            if (elements.exportThemesBtn) {
+                elements.exportThemesBtn.onclick = () => {
+                    const customThemes = Object.fromEntries(Object.entries(AppState.themeCatalog || {}).filter(([id]) => !isSystemThemeId(id)));
+                    downloadFile(JSON.stringify({ schema_version: '1.0.0', generated_at: new Date().toISOString(), themes: customThemes }, null, 2), 'themes.json', 'application/json;charset=utf-8;');
+                };
+            }
+            if (elements.importThemesBtn) {
+                elements.importThemesBtn.onclick = async () => {
+                    try {
+                        const files = await window.electronAPI?.openImportDialog?.();
+                        const selected = Array.isArray(files) ? files.find((f) => /themes\.json$|\.json$/i.test(f)) : null;
+                        if (!selected) return;
+                        const text = await window.electronAPI.readTextFile(selected);
+                        const parsed = JSON.parse(text);
+                        const incoming = parsed?.themes || {};
+                        Object.values(incoming).forEach((theme) => {
+                            if (!theme?.name) return;
+                            let id = theme.id || theme.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                            while (AppState.themeCatalog[id]) id = `${id}-2`;
+                            AppState.themeCatalog[id] = { ...theme, id };
+                        });
+                        savePreferences();
+                        renderThemeCards();
+                        showNotification('Temas importados y mergeados', 'success');
+                    } catch (e) {
+                        reportError('importThemes', e);
+                        showNotification('No se pudo importar themes.json', 'error');
+                    }
+                };
+            }
+
+            if (elements.controlPasswordSaveBtn && elements.controlPasswordNew) {
+                elements.controlPasswordSaveBtn.onclick = () => {
+                    if (!AppState.controlImportUnlocked) {
+                        showNotification('Primero ingresá la clave actual para habilitar el cambio', 'warning');
+                        return;
+                    }
+                    const nextPassword = String(elements.controlPasswordNew.value || '').trim();
+                    if (nextPassword.length < 6) {
+                        showNotification('La nueva clave debe tener al menos 6 caracteres', 'warning');
+                        return;
+                    }
+                    AppState.controlPasswordHash = hashControlPassword(nextPassword);
+                    elements.controlPasswordNew.value = '';
+                    savePreferences();
+                    showNotification('Clave del archivo de control actualizada', 'success');
+                };
+            }
+
+            if (elements.midnightExportBtn) {
+                elements.midnightExportBtn.onclick = () => exportControlFile('manual');
+                updateMidnightButtonState();
+            }
+            if (elements.controlPasswordPanel) {
+                elements.controlPasswordPanel.style.display = AppState.controlImportUnlocked ? '' : 'none';
+            }
+            startMidnightControlScheduler();
+
+            if (elements.metricsDeleteLastBatchBtn) {
+                elements.metricsDeleteLastBatchBtn.onclick = () => {
+                    if (!AppState.lastImportBatchId) {
+                        showNotification('No hay última subida para borrar', 'warning');
+                        return;
+                    }
+                    const count = AppState.contacts.filter(c => getContactBatchId(c) === AppState.lastImportBatchId).length;
+                    if (!count) {
+                        showNotification('No hay contactos de la última subida', 'warning');
+                        return;
+                    }
+                    const ok = confirm(`¿Borrar completamente ${count} contactos de la última subida?`);
+                    if (!ok) return;
+                    AppState.contacts = AppState.contacts.filter(c => getContactBatchId(c) !== AppState.lastImportBatchId);
+                    addToHistory('Borrado por métricas', `Se eliminaron ${count} contactos de la última subida`);
+                    AppState.lastImportBatchId = AppState.previousImportBatchId || '';
+                    localStorage.setItem('lastImportBatchId', AppState.lastImportBatchId);
+                    detectDuplicates();
+                    saveData();
+                    render();
+                    showNotification(`Eliminados ${count} contactos de la última subida`, 'success');
+                };
+            }
+
+            if ($('#closeMetricsModal')) $('#closeMetricsModal').onclick = () => $('#metricsModal').classList.remove('active');
             $('#closeUserOptionsModal').onclick = () => elements.userOptionsModal.classList.remove('active');
 
+            const clearSearchGhost = () => {
+                AppState.searchGhostActive = false;
+                elements.searchInput.classList.remove('ghost-value', 'ghost-value-active');
+                elements.searchInput.placeholder = 'Buscar... (ej: pepe, 11, estado:jugando, turno:tm, origen:csv)';
+            };
+            elements.searchInput.onfocus = () => {
+                if (AppState.searchGhostTerm) {
+                    AppState.searchGhostActive = true;
+                    elements.searchInput.value = '';
+                    elements.searchInput.classList.add('ghost-value', 'ghost-value-active');
+                    elements.searchInput.placeholder = AppState.searchGhostTerm;
+                }
+            };
+            elements.searchInput.onblur = () => {
+                if (AppState.searchTerm) {
+                    AppState.searchGhostTerm = AppState.searchTerm;
+                    AppState.searchGhostActive = true;
+                    elements.searchInput.value = AppState.searchGhostTerm;
+                    elements.searchInput.classList.add('ghost-value', 'ghost-value-active');
+                }
+            };
             elements.searchInput.oninput = (e) => {
-                AppState.searchTerm = e.target.value;
+                const value = e.target.value;
+                if (AppState.searchGhostActive) {
+                    clearSearchGhost();
+                }
+                AppState.searchTerm = value;
                 AppState.currentPage = 1;
                 render();
             };
@@ -5498,14 +7383,16 @@
             });
 
             window.addEventListener('beforeunload', () => {
-                flushSaveQueue();
+                saveData(true);
                 saveHistory();
+                savePreferences(true);
             });
 
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'hidden') {
-                    flushSaveQueue();
+                    saveData(true);
                     saveHistory();
+                    savePreferences(true);
                 }
             });
 
@@ -5619,8 +7506,11 @@
             if (elements.selectFilteredBtn) {
                 elements.selectFilteredBtn.onclick = () => {
                     applyFilters();
-                    AppState.filteredContacts.forEach(c => AppState.selectedContacts.add(c.id));
-                    showNotification(`Seleccionados ${AppState.filteredContacts.length} contactos filtrados`, 'success');
+                    const start = (AppState.currentPage - 1) * AppState.itemsPerPage;
+                    const end = start + AppState.itemsPerPage;
+                    const visibleContacts = AppState.filteredContacts.slice(start, end);
+                    visibleContacts.forEach(c => AppState.selectedContacts.add(c.id));
+                    showNotification(`Seleccionados ${visibleContacts.length} contactos visibles`, 'success');
                     updateBulkActionsBar();
                     render();
                 };
@@ -5927,7 +7817,7 @@
                     touchContactEdit(contact, 'modal_edit');
                     AppState.lastEditedContact = contact.id;
                     const newSnapshot = `${contact.name} | ${contact.phone || 'sin teléfono'} | ${contact.origin || 'Manual'} | ${contact.status || 'sin revisar'}`;
-                    addToHistory('Contacto editado', `${oldSnapshot} → ${newSnapshot}`, editing.id);
+                    addToHistory('Contacto editado', `${oldSnapshot} → ${newSnapshot}`, contact.id);
                     detectDuplicates();
                     saveData();
                     render();
@@ -5951,6 +7841,7 @@
                 };
 
                 AppState.contacts.push(newContact);
+                recordMetricEvent('user_created', { profileId: AppState.activeProfileId || 'default', contactId: newContact.id, status: newContact.status, selectionType: 'manual' });
                 addToHistory('Contacto agregado manualmente', name);
                 detectDuplicates();
                 saveData();
@@ -5960,15 +7851,31 @@
                 showNotification('✅ Contacto agregado', 'success');
             };
 
-            $('#deleteAllBtn').onclick = () => {
-                if (confirm('⚠️ ¿BORRAR TODOS LOS CONTACTOS? Esta acción NO se puede deshacer.')) {
+            $('#deleteAllBtn').onclick = async () => {
+                if (!confirm('⚠️ ¿BORRAR TODOS LOS CONTACTOS? Esta acción NO se puede deshacer.')) return;
+                if (!confirm('Confirmación final: se vaciará la base de contactos actual para volver a subir desde cero.')) return;
+                try {
                     const count = AppState.contacts.length;
+                    setLoadingState(true, 'Limpiando base…', 35, false);
+                    await new Promise((r) => setTimeout(r, 0));
                     AppState.contacts = [];
+                    AppState.filteredContacts = [];
+                    AppState.duplicates = [];
+                    AppState.undoStack = [];
+                    AppState.lastEditedContact = null;
                     AppState.selectedContacts.clear();
+                    AppState.currentPage = 1;
+                    setLoadingState(true, 'Guardando limpieza…', 80, false);
+                    saveDataImmediate();
                     addToHistory('Todos los contactos eliminados', `${count} contactos borrados`);
-                    saveData();
+                    saveHistory();
                     render();
+                    setLoadingState(false, 'Listo', 100, false);
                     showNotification(`${count} contactos eliminados`, 'success');
+                } catch (clearErr) {
+                    reportError('deleteAllBtn', clearErr);
+                    setLoadingState(false, 'Error', 100, false);
+                    showNotification(`No se pudo limpiar la base: ${clearErr?.message || clearErr}`, 'error');
                 }
             };
         }
@@ -6092,7 +7999,7 @@
             const turnoManana = contacts.filter(c => c.origin && c.origin.toLowerCase().includes('mañana')).map(c => c.name);
             const turnoTarde = contacts.filter(c => c.origin && c.origin.toLowerCase().includes('tarde')).map(c => c.name);
             const turnoNoche = contacts.filter(c => c.origin && c.origin.toLowerCase().includes('noche')).map(c => c.name);
-            const aBorrar = contacts.filter(c => c.status === 'no interesado').map(c => c.name);
+            const aBorrar = contacts.filter(c => c.status === 'no interesado' || c.markedForCleanup).map(c => c.name);
 
             const maxLength = Math.max(contacts.length, yaContactados.length, recuperados.length, actualmenteCargando.length, turnoManana.length, turnoTarde.length, turnoNoche.length, aBorrar.length);
             
@@ -6124,6 +8031,27 @@
                 csvContent += row.join(',') + '\n';
             }
 
+            const shiftTotals = { tm: 0, tt: 0, tn: 0 };
+            contacts.forEach((c) => {
+                const key = String(c.shiftReviewedByShift || '').toLowerCase();
+                if (shiftTotals[key] !== undefined) shiftTotals[key]++;
+            });
+            const originsCount = {};
+            contacts.forEach((c) => {
+                const o = (c.origin || 'Sin origen').toString();
+                originsCount[o] = (originsCount[o] || 0) + 1;
+            });
+            csvContent += '\n\n';
+            csvContent += 'META_LOG,TIPO,VALOR\n';
+            csvContent += `META_LOG,exportado_en,${formatCsvField(new Date().toISOString())}\n`;
+            csvContent += `META_LOG,total_contactos,${contacts.length}\n`;
+            csvContent += `META_LOG,turno_manana,${shiftTotals.tm}\n`;
+            csvContent += `META_LOG,turno_tarde,${shiftTotals.tt}\n`;
+            csvContent += `META_LOG,turno_noche,${shiftTotals.tn}\n`;
+            Object.entries(originsCount).forEach(([originName, qty]) => {
+                csvContent += `META_LOG,origen_${formatCsvField(originName)},${qty}\n`;
+            });
+
             downloadFile(csvContent, `planilla_exportada_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv;charset=utf-8;');
             showNotification('Exportación completada con teléfonos', 'success');
         }
@@ -6145,9 +8073,10 @@
                 try {
                     const version = await window.electronAPI?.getAppVersion?.();
                     if (version) {
-                        document.title = `Nexo Desktop v${version}`;
+                        const safeVersion = String(version || '').replace(/^v/i, '');
+                        document.title = `Nexo Desktop v${safeVersion}`;
                         const h1 = document.querySelector('#uploadScreen h1');
-                        if (h1) h1.textContent = `Gestor de Contactos Masivo · v${version}`;
+                        if (h1) h1.textContent = `Gestor de Contactos Masivo · v${safeVersion}`;
                     }
                 } catch (e) { console.warn('No se pudo leer versión de app', e); }
                 window.addEventListener('nexo-store-error', (event) => {
@@ -6155,8 +8084,27 @@
                 });
                 elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
                 setupEventListeners();
+                if (window.electronAPI?.onDeepLinkImport) {
+                    window.electronAPI.onDeepLinkImport((payload) => {
+                        const filePath = String(payload?.file || '');
+                        elements.uploadScreen.classList.remove('hidden');
+                        showNotification(filePath ? `Deep link import recibido: ${filePath}` : 'Deep link import recibido', 'info');
+                    });
+                }
+
+                window.nexoUpdaterDiagnostics = async () => {
+                    const diag = await window.electronAPI?.getUpdaterDiagnostics?.();
+                    console.table(diag || {});
+                    return diag || {};
+                };
                 loadHistory();
                 loadPreferences();
+                AppState.currentPage = Math.max(1, Number(AppState.profilePageMap?.[AppState.activeProfileId || 'default'] || AppState.currentPage || 1));
+                AppState.themeCatalog = { ...getDefaultThemes(), ...(AppState.themeCatalog || {}) };
+                if (!AppState.themeCatalog[AppState.activeThemeId]) AppState.activeThemeId = 'whaticket-blue';
+                applyTheme(AppState.activeThemeId);
+                ensureActiveProfile();
+                refreshProfilesUI();
                 loadOpsData();
                 setLoadingState(true, 'Hidratando datos…', 8, false);
                 await perfMark('init/hidratacion', async () => loadData());
