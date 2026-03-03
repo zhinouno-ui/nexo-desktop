@@ -1942,6 +1942,55 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -2086,6 +2135,8 @@
                     <option value="all">Teléfono: todos</option>
                     <option value="with">Con teléfono</option>
                     <option value="without">Sin teléfono</option>
+                    <option value="missing-user">Sin usuario (solo número)</option>
+                    <option value="suspicious">Teléfono sospechoso</option>
                 </select>
                 <select id="editActivityFilter" class="filter-select">
                     <option value="all">Ediciones: todas</option>
@@ -2403,9 +2454,12 @@
                 <button id="exportFullSnapshotBtn" class="btn" title="Exporta snapshot completo (usuarios + historial global)"><i class="fas fa-file-export"></i> Exportar Snapshot <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo pesado para auditoría periódica. Incluye usuarios e historial global."></i></button>
                 <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
                 <button id="importControlBtn" class="btn" title="Importa control diario/mensual"><i class="fas fa-shield-alt"></i> Importar Control <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo liviano para seguimiento diario/mensual de métricas y turnos."></i></button>
-                <button id="exportDailyDeltaBtn" class="btn"><i class="fas fa-calendar-day"></i> Export Diario (Delta)</button>
-                <button id="exportMonthlyFullBtn" class="btn"><i class="fas fa-calendar-alt"></i> Export Mensual (Full)</button>
-                <button id="uploadReportBtn" class="btn"><i class="fas fa-upload"></i> Subir reporte</button>
+                <select id="controlExportType" class="filter-select" style="min-width:200px;">
+                    <option value="daily">Reporte Diario (Delta)</option>
+                    <option value="monthly">Reporte Completo (Mensual)</option>
+                </select>
+                <button id="exportControlBtn" class="btn"><i class="fas fa-file-export"></i> Exportar control</button>
+                <button id="uploadReportBtn" class="btn"><i class="fas fa-upload"></i> Subir reporte seleccionado</button>
                 <button id="resetBaselineBtn" class="btn"><i class="fas fa-eraser"></i> Reset baseline</button>
             </div>
             <div id="metricTransitionsBreakdown" class="metrics-transitions"></div>
@@ -2746,7 +2800,8 @@
             queuedUploads: [],
             themeCatalog: {},
             activeThemeId: 'whaticket-blue',
-            lightMode: false
+            lightMode: false,
+            profilePageMap: {}
         };
 
         function ensureReviewMilestonesState() {
@@ -2838,8 +2893,8 @@
             statusDonutChart: $('#statusDonutChart'),
             selectionDonutChart: $('#selectionDonutChart'),
             transitionBarChart: $('#transitionBarChart'),
-            exportDailyDeltaBtn: $('#exportDailyDeltaBtn'),
-            exportMonthlyFullBtn: $('#exportMonthlyFullBtn'),
+            controlExportType: $('#controlExportType'),
+            exportControlBtn: $('#exportControlBtn'),
             uploadReportBtn: $('#uploadReportBtn'),
             resetBaselineBtn: $('#resetBaselineBtn'),
             metricsDateLabel: $('#metricsDateLabel'),
@@ -2913,6 +2968,30 @@
         function normalizePhoneNumber(phone) {
             if (!phone) return '';
             return phone.toString().replace(/\D/g, '');
+        }
+
+        function hasMissingUsername(contact) {
+            const rawName = String(contact?.name || '').trim();
+            const nameDigits = rawName.replace(/\D/g, '');
+            const phoneDigits = normalizePhoneNumber(contact?.phone || '');
+            if (!rawName) return true;
+            if (/^\d+$/.test(rawName)) return true;
+            if (nameDigits && phoneDigits && nameDigits === phoneDigits) return true;
+            return false;
+        }
+
+        function isApocryphalPhone(phone) {
+            const digits = normalizePhoneNumber(phone || '');
+            if (!digits) return false;
+            if (/^(\d)\1{7,}$/.test(digits)) return true;
+            if (/^(012345|123456|987654|000000)/.test(digits)) return true;
+            if (digits.startsWith('54')) {
+                if (digits.length < 12 || digits.length > 13) return true;
+            } else if (digits.length < 10 || digits.length > 15) {
+                return true;
+            }
+            if (digits.includes('0000000')) return true;
+            return false;
         }
 
         function normalizeUsername(name) {
@@ -3674,10 +3753,12 @@
 
             AppState.duplicates = duplicateGroups;
             
-            // Marcar contactos duplicados
+            // Marcar contactos duplicados + alertas de teléfono sospechoso
             AppState.contacts.forEach(contact => {
                 const profileId = contact.profileId || 'default';
-                contact.isDuplicate = profileId === activeProfileId ? duplicateIds.has(contact.id) : false;
+                const inActiveProfile = profileId === activeProfileId;
+                contact.isDuplicate = inActiveProfile ? duplicateIds.has(contact.id) : false;
+                contact.phoneAlert = inActiveProfile ? isApocryphalPhone(contact.phone) : false;
             });
 
             return duplicateGroups;
@@ -4373,7 +4454,11 @@
         }
 
         let saveDebounceTimer = null;
-        function queueSaveData(delayMs = 120) {
+        let pendingContactMutations = 0;
+        let lastContactSaveAt = 0;
+        const CONTACT_SAVE_BATCH_SIZE = 100;
+        const CONTACT_SAVE_MAX_WAIT_MS = 2500;
+        function queueSaveData(delayMs = 1200) {
             if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
             saveDebounceTimer = setTimeout(() => {
                 saveDebounceTimer = null;
@@ -4405,6 +4490,8 @@
                 maybeDownloadAutomaticBackup('save');
                 setSaveState('ok', `Guardado ${new Date().toLocaleTimeString('es-ES')}`);
                 refreshStorageDiagnostics();
+                lastContactSaveAt = Date.now();
+                pendingContactMutations = 0;
             } catch (e) {
                 console.warn('No se pudo configurar archivo de backup, se usará descarga:', e);
                 AppState.autoBackupStorageMode = 'download';
@@ -4448,8 +4535,45 @@
             }
         }
 
-        function saveData() {
-            queueSaveData(120);
+        function saveData(force = false) {
+            pendingContactMutations += 1;
+            const elapsed = Date.now() - lastContactSaveAt;
+            if (force || pendingContactMutations >= CONTACT_SAVE_BATCH_SIZE || elapsed >= CONTACT_SAVE_MAX_WAIT_MS) {
+                pendingContactMutations = 0;
+                lastContactSaveAt = Date.now();
+                flushSaveQueue();
+                return;
+            }
+            queueSaveData(900);
+        }
+
+        function compactExactDuplicatesForLargeDatasets() {
+            const contacts = Array.isArray(AppState.contacts) ? AppState.contacts : [];
+            if (contacts.length < 8000) return 0;
+            const seen = new Map();
+            const makeKey = (c) => {
+                const nm = normalizeUsername(c?.name || '');
+                const ph = normalizePhoneToE164(c?.phone || '') || normalizePhoneNumber(c?.phone || '') || '';
+                const pf = String(c?.profileId || 'default');
+                return `${nm}::${ph}::${pf}`;
+            };
+            contacts.forEach((c) => {
+                const key = makeKey(c);
+                const prev = seen.get(key);
+                if (!prev) {
+                    seen.set(key, c);
+                    return;
+                }
+                const prevAt = new Date(prev.lastUpdated || prev.lastEditedAt || prev.lastImportedAt || 0).getTime();
+                const nowAt = new Date(c.lastUpdated || c.lastEditedAt || c.lastImportedAt || 0).getTime();
+                if ((nowAt || 0) >= (prevAt || 0)) seen.set(key, c);
+            });
+            const compacted = Array.from(seen.values());
+            const removed = Math.max(0, contacts.length - compacted.length);
+            if (removed > 0) {
+                AppState.contacts = compacted;
+            }
+            return removed;
         }
 
         function compactExactDuplicatesForLargeDatasets() {
@@ -4820,7 +4944,7 @@
                         <div><strong>${p.name}</strong><div class="history-item-muted">${AppState.contacts.filter(c => (c.profileId || 'default') === p.id).length} contactos</div></div>
                         <div style="display:flex;gap:8px;">
                             <button class="btn" onclick="switchProfile('${p.id}')">Abrir</button>
-                            ${p.id !== 'default' ? `<button class="btn btn-danger" onclick="deleteProfile('${p.id}')">Borrar</button>` : ''}
+                            <button class="btn" onclick="renameProfile('${p.id}')">Renombrar</button>${p.id !== 'default' ? `<button class="btn btn-danger" onclick="deleteProfile('${p.id}')">Borrar</button>` : ''}
                         </div>
                     </div>
                 `).join('');
@@ -4831,9 +4955,27 @@
         window.switchProfile = (profileId) => {
             AppState.activeProfileId = profileId;
             localStorage.setItem('activeProfileId', AppState.activeProfileId);
+            AppState.currentPage = Math.max(1, Number(AppState.profilePageMap?.[profileId] || 1));
             refreshProfilesUI();
             render();
             if (elements.profilesModal) elements.profilesModal.classList.remove('active');
+        };
+
+        window.renameProfile = (profileId) => {
+            const profile = (AppState.profiles || []).find((p) => p.id === profileId);
+            if (!profile) return;
+            const nextName = normalizeProfileName(window.prompt('Nuevo nombre del perfil', profile.name || '') || '').slice(0, 60);
+            if (!nextName) return;
+            const duplicated = (AppState.profiles || []).some((p) => p.id !== profileId && normalizeSearchText(p.name) === normalizeSearchText(nextName));
+            if (duplicated) {
+                showNotification('Ya existe un perfil con ese nombre', 'warning');
+                return;
+            }
+            profile.name = nextName;
+            savePreferences();
+            refreshProfilesUI();
+            render();
+            showNotification('Perfil renombrado', 'success');
         };
 
         window.deleteProfile = (profileId) => {
@@ -4876,6 +5018,8 @@
                 let matchesPhone = true;
                 if (AppState.phoneFilter === 'with') matchesPhone = !!(contact.phone || '').trim();
                 else if (AppState.phoneFilter === 'without') matchesPhone = !(contact.phone || '').trim();
+                else if (AppState.phoneFilter === 'missing-user') matchesPhone = hasMissingUsername(contact);
+                else if (AppState.phoneFilter === 'suspicious') matchesPhone = !!contact.phoneAlert;
 
                 let matchesOps = true;
                 if (AppState.opsFilter === 'matched') matchesOps = !!contact.ops;
@@ -5535,14 +5679,14 @@
             
             return `
                 <div class="contact-card ${AppState.selectedContacts.has(contact.id) ? 'selected' : ''} ${contact.isDuplicate ? 'duplicate' : ''}" style="--status-rgb: ${statusOption.rgb};" data-id="${contact.id}">
-                    ${contact.isDuplicate ? '<span class="duplicate-badge"><i class="fas fa-exclamation-triangle"></i> DUP</span>' : ''}
+                    ${contact.isDuplicate ? '<span class="duplicate-badge"><i class="fas fa-exclamation-triangle"></i> DUP</span>' : ''}${contact.phoneAlert ? '<span class="duplicate-badge" style="right:8px;left:auto;background:rgba(245,158,11,.22);border-color:rgba(245,158,11,.45);" title="Teléfono sospechoso"><i class="fas fa-exclamation-circle"></i> ALERTA</span>' : ''}
                     <input type="checkbox" class="card-checkbox" ${AppState.selectedContacts.has(contact.id) ? 'checked' : ''}>
                     <div class="card-header">
                         <div class="card-icon" style="color: ${statusOption.color};">
                             <i class="fas ${statusOption.icon}"></i>
                         </div>
                         <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
-                            <span class="card-name" onclick="copyToClipboard('${escapedName}', event)" style="cursor: pointer; flex: 1;" title="Click para copiar">${contact.pinned ? '📌 ' : ''}${contact.name}</span>${AppState.currentView === 'shifts' && contact.assignedShift ? `<span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}${urgency ? `<span class=\"urgency-badge urgency-l${urgency.level}\" title=\"${urgency.title}\"><i class=\"fas fa-clock\"></i>${urgency.label}</span>` : ''}
+                            <span class="card-name" onclick="copyToClipboard('${escapedName}', event)" style="cursor: pointer; flex: 1;" title="Click para copiar">${contact.pinned ? '📌 ' : ''}${contact.phoneAlert ? '⚠️ ' : ''}${contact.name}</span>${AppState.currentView === 'shifts' && contact.assignedShift ? `<span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}${urgency ? `<span class=\"urgency-badge urgency-l${urgency.level}\" title=\"${urgency.title}\"><i class=\"fas fa-clock\"></i>${urgency.label}</span>` : ''}
                             <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="editContactField(${contact.id}, 'name', event)" title="Editar nombre">
                                 <i class="fas fa-pencil-alt"></i>
                             </button>
@@ -5595,7 +5739,7 @@
                         <i class="fas ${statusOption.icon} list-status-bg-icon"></i>
                         <div class="list-name-row">
                             <span onclick="copyToClipboard('${escapedName}', event)" style="flex: 1; cursor: pointer;" title="Click para copiar">
-                                ${contact.isDuplicate ? '<i class=\"fas fa-exclamation-triangle\" style=\"color: var(--accent-warning);\"></i> ' : ''}${contact.name}${AppState.currentView === 'shifts' && contact.assignedShift ? ` <span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}
+                                ${contact.isDuplicate ? '<i class=\"fas fa-exclamation-triangle\" style=\"color: var(--accent-warning);\"></i> ' : ''}${contact.phoneAlert ? '<i class=\"fas fa-exclamation-circle\" style=\"color: var(--accent-warning);\" title=\"Teléfono sospechoso\"></i> ' : ''}${contact.name}${AppState.currentView === 'shifts' && contact.assignedShift ? ` <span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}
                             </span>
                             <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="editContactField(${contact.id}, 'name', event)" title="Editar">
                                 <i class="fas fa-pencil-alt"></i>
@@ -5667,7 +5811,8 @@
             const pageContacts = AppState.filteredContacts.slice(start, end);
             
             if (pageContacts.length === 0 && AppState.filteredContacts.length > 0 && AppState.currentPage > 1) {
-                AppState.currentPage = 1;
+                const totalPages = Math.max(1, Math.ceil(AppState.filteredContacts.length / AppState.itemsPerPage));
+                AppState.currentPage = Math.min(AppState.currentPage, totalPages);
                 renderPaginatedView(renderFunc);
                 return;
             }
@@ -5740,13 +5885,26 @@
 
             html += `<button ${AppState.currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${AppState.currentPage + 1})"><i class="fas fa-chevron-right"></i></button>`;
             html += `<span class="page-info">Página ${AppState.currentPage} de ${totalPages} (${AppState.filteredContacts.length} contactos)</span>`;
+            html += `<input id="pageJumpInput" class="origin-input" style="margin-top:0;width:90px;" type="number" min="1" max="${totalPages}" value="${AppState.currentPage}" />`;
+            html += `<button onclick="jumpToPage()" title="Ir a página">Ir</button>`;
             
             elements.pagination.innerHTML = html;
         }
 
+        window.jumpToPage = () => {
+            const input = document.getElementById('pageJumpInput');
+            if (!input) return;
+            const page = parseInt(input.value || '1', 10);
+            if (Number.isNaN(page)) return;
+            changePage(page);
+        };
+
         window.changePage = (page) => {
             if (page < 1 || page > Math.ceil(AppState.filteredContacts.length / AppState.itemsPerPage)) return;
             AppState.currentPage = page;
+            const pid = AppState.activeProfileId || 'default';
+            AppState.profilePageMap[pid] = page;
+            savePreferences();
             if (AppState.currentView === 'shifts') {
                 elements.cardsView.style.display = 'none';
                 elements.listView.style.display = 'none';
@@ -5939,6 +6097,8 @@
                 if (themeCatalogRaw) { try { AppState.themeCatalog = JSON.parse(themeCatalogRaw); } catch (_) { AppState.themeCatalog = {}; } }
                 AppState.activeThemeId = localStorage.getItem('activeThemeId') || AppState.activeThemeId || 'whaticket-blue';
                 AppState.lightMode = localStorage.getItem('lightMode') === '1';
+                const profilePageMapRaw = localStorage.getItem('profilePageMap');
+                if (profilePageMapRaw) { try { AppState.profilePageMap = JSON.parse(profilePageMapRaw); } catch (_) { AppState.profilePageMap = {}; } }
                 const backupMode = localStorage.getItem('autoBackupStorageMode');
                 if (backupMode === 'download' || backupMode === 'file' || backupMode === 'ask') {
                     AppState.autoBackupStorageMode = backupMode === 'ask' ? 'download' : backupMode;
@@ -5953,7 +6113,8 @@
             }
         }
 
-        function savePreferences() {
+        let preferencesSaveTimer = null;
+        function persistPreferencesNow() {
             try {
                 localStorage.setItem('whatsappTemplate', AppState.whatsappTemplate);
                 localStorage.setItem('duplicateMergeMode', AppState.duplicateMergeMode);
@@ -5973,9 +6134,26 @@
                 localStorage.setItem('themeCatalog', JSON.stringify(AppState.themeCatalog || {}));
                 localStorage.setItem('activeThemeId', AppState.activeThemeId || 'whaticket-blue');
                 localStorage.setItem('lightMode', AppState.lightMode ? '1' : '0');
+                localStorage.setItem('profilePageMap', JSON.stringify(AppState.profilePageMap || {}));
             } catch (e) {
                 console.error('Error al guardar preferencias:', e);
             }
+        }
+
+        function savePreferences(force = false) {
+            if (force) {
+                if (preferencesSaveTimer) {
+                    clearTimeout(preferencesSaveTimer);
+                    preferencesSaveTimer = null;
+                }
+                persistPreferencesNow();
+                return;
+            }
+            if (preferencesSaveTimer) clearTimeout(preferencesSaveTimer);
+            preferencesSaveTimer = setTimeout(() => {
+                preferencesSaveTimer = null;
+                persistPreferencesNow();
+            }, 700);
         }
 
         function hashControlPassword(raw) {
@@ -6003,6 +6181,10 @@
         function buildWhatsAppMessage(contactName) {
             const base = (AppState.whatsappTemplate || '').trim();
             return base.replaceAll('{usuario}', contactName || '');
+        }
+
+        function isSystemThemeId(themeId) {
+            return Object.prototype.hasOwnProperty.call(getDefaultThemes(), String(themeId || ''));
         }
 
         function getDefaultThemes() {
@@ -6050,13 +6232,44 @@
             if (!elements.themeCards) return;
             const cards = Object.values(AppState.themeCatalog || {}).map((t) => {
                 const active = t.id === AppState.activeThemeId;
-                return `<button class="metrics-card" style="text-align:left;cursor:pointer;${active ? 'outline:2px solid var(--accent-primary);' : ''}" data-theme-id="${t.id}"><div class="k" style="font-weight:700;color:var(--text-primary)">${t.name}</div><div class="k" style="margin-top:4px;min-height:32px;">${t.desc || ''}</div><div style="display:flex;gap:6px;margin-top:8px;"><span style="width:18px;height:18px;border-radius:4px;background:${t.primary}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.accent}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.bg}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.surface}"></span></div></button>`;
+                const custom = !isSystemThemeId(t.id);
+                return `<button class="metrics-card" style="text-align:left;cursor:pointer;${active ? 'outline:2px solid var(--accent-primary);' : ''}" data-theme-id="${t.id}"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><div><div class="k" style="font-weight:700;color:var(--text-primary)">${t.name}</div><div class="k" style="margin-top:4px;min-height:32px;">${t.desc || ''}</div></div>${custom ? `<div style="display:flex;gap:6px;flex-wrap:wrap;"><span class="btn" data-theme-rename="${t.id}" style="padding:4px 8px;font-size:.72rem;">Renombrar</span><span class="btn btn-danger" data-theme-delete="${t.id}" style="padding:4px 8px;font-size:.72rem;">Borrar</span></div>` : ''}</div><div style="display:flex;gap:6px;margin-top:8px;"><span style="width:18px;height:18px;border-radius:4px;background:${t.primary}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.accent}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.bg}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.surface}"></span></div></button>`;
             }).join('');
             elements.themeCards.innerHTML = cards || '<div style="color:var(--text-secondary)">Sin temas</div>';
             elements.themeCards.querySelectorAll('[data-theme-id]').forEach((btn) => {
                 btn.onclick = () => {
                     applyTheme(btn.getAttribute('data-theme-id'));
                     renderThemeCards();
+                };
+            });
+            elements.themeCards.querySelectorAll('[data-theme-rename]').forEach((btn) => {
+                btn.onclick = (ev) => {
+                    ev.stopPropagation();
+                    const id = btn.getAttribute('data-theme-rename');
+                    const theme = (AppState.themeCatalog || {})[id];
+                    if (!theme || isSystemThemeId(id)) return;
+                    const nextName = String(window.prompt('Nuevo nombre del tema personalizado', theme.name || '') || '').trim();
+                    if (!nextName) return;
+                    theme.name = nextName.slice(0, 60);
+                    savePreferences();
+                    renderThemeCards();
+                    showNotification('Tema renombrado', 'success');
+                };
+            });
+            elements.themeCards.querySelectorAll('[data-theme-delete]').forEach((btn) => {
+                btn.onclick = (ev) => {
+                    ev.stopPropagation();
+                    const id = btn.getAttribute('data-theme-delete');
+                    if (!id || isSystemThemeId(id)) return;
+                    if (!confirm('¿Eliminar tema personalizado?')) return;
+                    delete AppState.themeCatalog[id];
+                    if (AppState.activeThemeId === id) {
+                        AppState.activeThemeId = 'whaticket-blue';
+                        applyTheme(AppState.activeThemeId);
+                    }
+                    savePreferences();
+                    renderThemeCards();
+                    showNotification('Tema eliminado', 'info');
                 };
             });
         }
@@ -6298,6 +6511,7 @@
             applyFilters();
             AppState.filteredContacts.sort((a, b) => {
                 if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+                if (!!a.phoneAlert !== !!b.phoneAlert) return a.phoneAlert ? 1 : -1;
                 if (AppState.opsFilter === 'top50' || AppState.opsFilter === 'top100') return (b.ops?.score || 0) - (a.ops?.score || 0);
                 buildContactDerivedFields(a);
                 buildContactDerivedFields(b);
@@ -7501,8 +7715,16 @@
 
             if (elements.exportFullSnapshotBtn) elements.exportFullSnapshotBtn.onclick = exportFullSnapshot;
             if (elements.importFullSnapshotBtn) elements.importFullSnapshotBtn.onclick = importFullSnapshot;
-            if (elements.exportMonthlyFullBtn) elements.exportMonthlyFullBtn.onclick = exportMonthlyFull;
-            if (elements.exportDailyDeltaBtn) elements.exportDailyDeltaBtn.onclick = exportDailyDelta;
+            const exportControlBySelection = () => {
+                const mode = elements.controlExportType?.value || 'daily';
+                if (mode === 'monthly') {
+                    exportMonthlyFull();
+                    return { mode: 'monthly', payload: null };
+                }
+                const delta = exportDailyDelta();
+                return { mode: 'daily', payload: delta?.payload || null };
+            };
+            if (elements.exportControlBtn) elements.exportControlBtn.onclick = () => exportControlBySelection();
             if (elements.resetBaselineBtn) {
                 elements.resetBaselineBtn.onclick = () => {
                     const profileId = AppState.activeProfileId || 'default';
@@ -7515,8 +7737,17 @@
             if (elements.uploadReportBtn) {
                 elements.uploadReportBtn.onclick = async () => {
                     if (!ensureUploadUnlocked()) return;
-                    const delta = exportDailyDelta();
-                    await queueReportUpload(delta.payload, 'daily-delta');
+                    const selected = exportControlBySelection();
+                    const mode = selected?.mode || (elements.controlExportType?.value || 'daily');
+                    if (mode === 'monthly') {
+                        showNotification('Se exportó reporte completo. Subida automática solo disponible para formato diario por ahora.', 'info');
+                        return;
+                    }
+                    if (!selected?.payload) {
+                        showNotification('No se pudo preparar el reporte diario', 'error');
+                        return;
+                    }
+                    await queueReportUpload(selected.payload, 'daily-delta');
                 };
             }
             if (elements.importControlBtn) {
@@ -7577,7 +7808,8 @@
             }
             if (elements.exportThemesBtn) {
                 elements.exportThemesBtn.onclick = () => {
-                    downloadFile(JSON.stringify({ schema_version: '1.0.0', generated_at: new Date().toISOString(), themes: AppState.themeCatalog || {} }, null, 2), 'themes.json', 'application/json;charset=utf-8;');
+                    const customThemes = Object.fromEntries(Object.entries(AppState.themeCatalog || {}).filter(([id]) => !isSystemThemeId(id)));
+                    downloadFile(JSON.stringify({ schema_version: '1.0.0', generated_at: new Date().toISOString(), themes: customThemes }, null, 2), 'themes.json', 'application/json;charset=utf-8;');
                 };
             }
             if (elements.importThemesBtn) {
@@ -7724,14 +7956,16 @@
             });
 
             window.addEventListener('beforeunload', () => {
-                flushSaveQueue();
+                saveData(true);
                 saveHistory();
+                savePreferences(true);
             });
 
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'hidden') {
-                    flushSaveQueue();
+                    saveData(true);
                     saveHistory();
+                    savePreferences(true);
                 }
             });
 
@@ -8440,6 +8674,7 @@
                 };
                 loadHistory();
                 loadPreferences();
+                AppState.currentPage = Math.max(1, Number(AppState.profilePageMap?.[AppState.activeProfileId || 'default'] || AppState.currentPage || 1));
                 AppState.themeCatalog = { ...getDefaultThemes(), ...(AppState.themeCatalog || {}) };
                 if (!AppState.themeCatalog[AppState.activeThemeId]) AppState.activeThemeId = 'whaticket-blue';
                 applyTheme(AppState.activeThemeId);

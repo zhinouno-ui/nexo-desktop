@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.1.21 - filtros y fluidez de revisión
+
+### Búsqueda y revisión más práctica
+- Nuevo filtro `Sin usuario (solo número)` para encontrar rápido contactos cuyo “nombre” es numérico o igual al teléfono.
+- Nuevo filtro `Teléfono sospechoso` para revisar líneas potencialmente apócrifas.
+- Contactos con teléfono sospechoso ahora muestran alerta visual (`⚠️` / `ALERTA`) y se ordenan al final para no molestar en el flujo principal.
+
+### Paginación más usable
+- La app ahora recuerda página por perfil (se conserva al cambiar perfil y al recargar).
+- Se agregó selector rápido de página (`Ir`) en la barra de paginación.
+
+### Rendimiento operativo
+- Ajuste de detección para marcar teléfonos sospechosos durante el ciclo de duplicados sin bloquear el flujo de edición.
+
+## 1.1.20 - foco rendimiento + gestión
+
+### Gestión de perfiles y temas
+- Perfiles: ahora se pueden renombrar desde el modal de Perfiles/Bases (además de borrar perfiles no default).
+- Temas personalizados: ahora se pueden renombrar y borrar directamente desde la grilla de temas.
+- Export de `themes.json` ahora incluye **solo temas personalizados** (no exporta temas del sistema).
+
+### Export de control unificado
+- Se unificó el export diario/mensual en un único selector + botón `Exportar control`.
+- La subida usa el tipo seleccionado; para mensual deja export realizado y avisa que la cola automática actual es diaria.
+
+### Rendimiento de guardado
+- Se redujo la frecuencia de escrituras pesadas: contactos se guardan en lote (hasta 100 cambios o timeout), evitando lag en cambios de estado/copia/operación diaria.
+- Preferencias pasan a guardado diferido (debounce) y se fuerzan al cerrar la ventana para no perder cambios.
+
 ## 1.1.19 - actualización del control
 
 ### Métricas + exportes + temas (refuerzo final)
