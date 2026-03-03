@@ -255,8 +255,42 @@
             justify-content: center;
             flex-direction: column;
             gap: 10px;
+            overflow: hidden;
         }
         .app-loading-overlay.active { display: flex; }
+        .loading-preview-bg {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: .4;
+            mask-image: linear-gradient(to top, transparent, black 24%, black 76%, transparent);
+            -webkit-mask-image: linear-gradient(to top, transparent, black 24%, black 76%, transparent);
+        }
+        .loading-preview-track {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(900px, 92vw);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            animation: loadingPreviewScroll 26s linear infinite;
+        }
+        .loading-preview-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 180px;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: rgba(30,41,59,.4);
+            border: 1px solid rgba(148,163,184,.2);
+            color: #cbd5e1;
+            font-size: .84rem;
+        }
+        @keyframes loadingPreviewScroll {
+            from { transform: translate(-50%, 100%); }
+            to { transform: translate(-50%, -100%); }
+        }
         .app-loading-overlay .progress-bar {
             width: min(520px, 82vw);
             height: 10px;
@@ -1812,6 +1846,41 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v { font-size:1.2rem; font-weight:800; margin-top:4px; }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -2370,6 +2439,7 @@
     </div>
 
     <div id="appLoadingOverlay" class="app-loading-overlay">
+        <div class="loading-preview-bg"><div id="loadingPreviewTrack" class="loading-preview-track"></div></div>
         <div style="font-size:1.1rem;font-weight:600;">Cargando…</div>
         <div id="appLoadingText" style="color:var(--text-secondary);">Inicializando</div>
         <div class="progress-bar"><div id="appLoadingProgress" class="progress-fill"></div></div>
@@ -2767,7 +2837,8 @@
             loadingOverlay: $('#loadingOverlay'),
             loadingOverlayText: $('#loadingOverlayText'),
             loadingOverlayProgress: $('#loadingOverlayProgress'),
-            loadingOverlayMeta: $('#loadingOverlayMeta')
+            loadingOverlayMeta: $('#loadingOverlayMeta'),
+            loadingPreviewTrack: $('#loadingPreviewTrack')
         };
 
         // Compatibilidad defensiva: evita ReferenceError en handlers legacy cacheados por el navegador.
@@ -3797,6 +3868,7 @@
             renderTable();
             renderIssues();
             elements.importDiagSummary.textContent = `Archivo: ${fileName} · Perfil: ${profileName} · Filas analizadas: ${dataRows.length}`;
+            setLoadingState(false, 'Revisión previa lista', 100, false);
             elements.importDiagnosticsModal.classList.add('active');
 
             [elements.importMapName, elements.importMapPhone, elements.importMapTag].forEach((el) => {
@@ -6428,6 +6500,15 @@
             if (elements.appLoadingText) elements.appLoadingText.textContent = message;
             if (elements.appLoadingProgress) elements.appLoadingProgress.style.width = `${Math.max(0, Math.min(100, progress ?? 0))}%`;
             if (elements.cancelImportBtn) elements.cancelImportBtn.style.display = cancelable ? 'inline-flex' : 'none';
+            if (active) renderLoadingPreview();
+        }
+
+        function renderLoadingPreview() {
+            if (!elements.loadingPreviewTrack) return;
+            const rows = (AppState.contacts || []).slice(0, 60).map((c) => (
+                `<div class="loading-preview-row"><div>${(c.name || 'Sin nombre').toString().replace(/</g, '&lt;')}</div><div>${(c.phone || '-').toString().replace(/</g, '&lt;')}</div><div>${(c.status || 'sin revisar').toString().replace(/</g, '&lt;')}</div></div>`
+            )).join('');
+            elements.loadingPreviewTrack.innerHTML = rows || '<div class="loading-preview-row"><div>Sin datos</div><div>-</div><div>sin revisar</div></div>';
         }
 
         function perfMark(label, fn) {
