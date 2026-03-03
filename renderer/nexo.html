@@ -11,6 +11,7 @@
             --bg-secondary: #1e293b;
             --bg-card: #334155;
             --accent-primary: #3b82f6;
+            --accent-secondary: #10b981;
             --accent-success: #10b981;
             --accent-warning: #f59e0b;
             --accent-danger: #ef4444;
@@ -21,6 +22,17 @@
             --border-color: #475569;
             --hover-color: #475569;
             --selection-bg: rgba(59, 130, 246, 0.2);
+        }
+
+        body.light-mode {
+            --bg-primary: #e9eef5;
+            --bg-secondary: #f7f9fc;
+            --bg-card: #dfe8f3;
+            --text-primary: #1e293b;
+            --text-secondary: #475569;
+            --border-color: #b8c6db;
+            --hover-color: #cfdcee;
+            --selection-bg: rgba(59,130,246,.16);
         }
 
         * {
@@ -204,10 +216,10 @@
             gap:10px;
             margin-right:12px;
             padding:8px 12px;
-            border:1px solid rgba(59,130,246,.35);
+            border:1px solid color-mix(in srgb, var(--accent-primary) 45%, transparent);
             border-radius:12px;
-            background:linear-gradient(90deg, rgba(30,64,175,.24), rgba(15,23,42,.3));
-            box-shadow: inset 0 0 0 1px rgba(125,211,252,.08);
+            background:linear-gradient(90deg, color-mix(in srgb, var(--accent-primary) 22%, transparent), color-mix(in srgb, var(--bg-primary) 90%, transparent));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 22%, transparent);
         }
         .nexo-brand-logo {
             width:28px;
@@ -218,7 +230,7 @@
             justify-content:center;
             font-weight:900;
             color:#0b1220;
-            background:linear-gradient(135deg,#60a5fa,#34d399);
+            background:linear-gradient(135deg,var(--accent-primary),var(--accent-secondary));
         }
         .nexo-brand-text { font-weight:800; letter-spacing:.4px; }
         .nexo-brand-sub { font-size:.72rem; color:var(--text-secondary); }
@@ -1881,6 +1893,55 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -2315,12 +2376,12 @@
                 </label>
             </div>
             <div class="metrics-dashboard-grid">
-                <div class="metrics-card"><div class="k">Trabajados hoy</div><div id="metricEditedToday" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Trabajados ayer</div><div id="metricEditedYesterday" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Turno más activo</div><div id="metricTopShift" class="v">-</div></div>
-                <div class="metrics-card"><div class="k">Transiciones 24h</div><div id="metricTransitions24h" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Turno más activo (24h)</div><div id="metricTopShift24h" class="v">-</div></div>
-                <div class="metrics-card"><div class="k">Promedio botones/hora</div><div id="metricButtonsPerHour" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Actividad de hoy</div><div id="metricEditedToday" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Impulso de ayer</div><div id="metricEditedYesterday" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Turno líder</div><div id="metricTopShift" class="v">-</div></div>
+                <div class="metrics-card"><div class="k">Movimientos (24h)</div><div id="metricTransitions24h" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Turno líder (24h)</div><div id="metricTopShift24h" class="v">-</div></div>
+                <div class="metrics-card"><div class="k">Ritmo por hora</div><div id="metricButtonsPerHour" class="v">0</div></div>
             </div>
             <div class="metrics-charts">
                 <div class="chart-card">
@@ -2414,7 +2475,7 @@
 
     <div class="modal" id="themesModal">
         <div class="modal-content" style="max-width:760px;">
-            <div class="modal-header"><i class="fas fa-palette"></i> Seleccioná un tema</div>
+            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;"><span><i class="fas fa-palette"></i> Seleccioná un tema</span><label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text-secondary);"><input id="lightModeToggle" type="checkbox"> Modo claro</label></div>
             <div id="themeCards" class="metrics-wide-grid"></div>
             <div style="margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px;">
                 <div style="font-weight:700;margin-bottom:6px;">Tema personalizado</div>
@@ -2684,7 +2745,8 @@
             uploadAuditLog: [],
             queuedUploads: [],
             themeCatalog: {},
-            activeThemeId: 'whaticket-blue'
+            activeThemeId: 'whaticket-blue',
+            lightMode: false
         };
 
         function ensureReviewMilestonesState() {
@@ -2812,6 +2874,7 @@
             saveCustomThemeBtn: $('#saveCustomThemeBtn'),
             exportThemesBtn: $('#exportThemesBtn'),
             importThemesBtn: $('#importThemesBtn'),
+            lightModeToggle: $('#lightModeToggle'),
             closeThemesModal: $('#closeThemesModal'),
             profilesModal: $('#profilesModal'),
             profilesList: $('#profilesList'),
@@ -5875,6 +5938,7 @@
                 const themeCatalogRaw = localStorage.getItem('themeCatalog');
                 if (themeCatalogRaw) { try { AppState.themeCatalog = JSON.parse(themeCatalogRaw); } catch (_) { AppState.themeCatalog = {}; } }
                 AppState.activeThemeId = localStorage.getItem('activeThemeId') || AppState.activeThemeId || 'whaticket-blue';
+                AppState.lightMode = localStorage.getItem('lightMode') === '1';
                 const backupMode = localStorage.getItem('autoBackupStorageMode');
                 if (backupMode === 'download' || backupMode === 'file' || backupMode === 'ask') {
                     AppState.autoBackupStorageMode = backupMode === 'ask' ? 'download' : backupMode;
@@ -5908,6 +5972,7 @@
                 localStorage.setItem('queuedUploads', JSON.stringify((AppState.queuedUploads || []).slice(0, 300)));
                 localStorage.setItem('themeCatalog', JSON.stringify(AppState.themeCatalog || {}));
                 localStorage.setItem('activeThemeId', AppState.activeThemeId || 'whaticket-blue');
+                localStorage.setItem('lightMode', AppState.lightMode ? '1' : '0');
             } catch (e) {
                 console.error('Error al guardar preferencias:', e);
             }
@@ -5942,25 +6007,41 @@
 
         function getDefaultThemes() {
             return {
-                'whaticket-blue': { id: 'whaticket-blue', name: 'Azul Whaticket', primary: '#3b82f6', accent: '#10b981', bg: '#0f172a', surface: '#1e293b', text: '#e2e8f0' },
-                'forest-green': { id: 'forest-green', name: 'Verde Bosque', primary: '#16a34a', accent: '#22c55e', bg: '#0b1f14', surface: '#163124', text: '#e7f7ee' },
-                'ocean-green': { id: 'ocean-green', name: 'Verde Océano', primary: '#0ea5a4', accent: '#14b8a6', bg: '#082f3a', surface: '#0f3f4c', text: '#d8f8f5' },
-                'sunset-orange': { id: 'sunset-orange', name: 'Naranja Atardecer', primary: '#f97316', accent: '#fb923c', bg: '#2b1308', surface: '#3e1b0b', text: '#fff2e8' },
-                'night-purple': { id: 'night-purple', name: 'Púrpura Nocturno', primary: '#8b5cf6', accent: '#a78bfa', bg: '#1a1032', surface: '#2a1a4a', text: '#f1edff' },
-                'rose-pink': { id: 'rose-pink', name: 'Rosa Rosado', primary: '#ec4899', accent: '#f472b6', bg: '#2b0f1f', surface: '#40172f', text: '#ffeaf5' },
-                'cosmic': { id: 'cosmic', name: 'Cósmico', primary: '#06b6d4', accent: '#6366f1', bg: '#050814', surface: '#121a33', text: '#e6f0ff' }
+                'whaticket-blue': { id: 'whaticket-blue', name: 'Azul Whaticket', desc: 'Apariencia profesional y limpia', primary: '#6ea8ff', accent: '#f49ab0', bg: '#1f2d46', surface: '#2b3a54', text: '#ecf2ff' },
+                'forest-green': { id: 'forest-green', name: 'Verde Bosque', desc: 'Naturaleza relajante', primary: '#61c554', accent: '#eab308', bg: '#1b351f', surface: '#25492a', text: '#eef8ee' },
+                'ocean-green': { id: 'ocean-green', name: 'Verde Océano', desc: 'Verde azulado fresco', primary: '#2dd4bf', accent: '#f38ba8', bg: '#153443', surface: '#1d4556', text: '#e8fbff' },
+                'sunset-orange': { id: 'sunset-orange', name: 'Naranja Atardecer', desc: 'Naranja cálido y dorado', primary: '#f59e0b', accent: '#f472b6', bg: '#3a230f', surface: '#4b2d12', text: '#fff4e8' },
+                'night-purple': { id: 'night-purple', name: 'Púrpura Nocturno', desc: 'Violeta elegante con cian', primary: '#a855f7', accent: '#22d3ee', bg: '#28173f', surface: '#352050', text: '#f4ecff' },
+                'rose-pink': { id: 'rose-pink', name: 'Rosa Rosado', desc: 'Sutil y marketinero', primary: '#f72585', accent: '#fb923c', bg: '#3b1830', surface: '#4a1f3b', text: '#ffeaf5' },
+                'cosmic': { id: 'cosmic', name: 'Cósmico', desc: 'Espacio profundo con neón', primary: '#7c83ff', accent: '#ff7aa2', bg: '#0a1024', surface: '#141e3d', text: '#e8edff' }
             };
+        }
+
+        function hexToRgb(hex) {
+            const raw = String(hex || '').replace('#', '');
+            if (!raw || (raw.length !== 3 && raw.length !== 6)) return { r: 59, g: 130, b: 246 };
+            const full = raw.length === 3 ? raw.split('').map((c) => c + c).join('') : raw;
+            const num = parseInt(full, 16);
+            return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
         }
 
         function applyTheme(themeId) {
             const theme = (AppState.themeCatalog || {})[themeId];
             if (!theme) return;
             const root = document.documentElement;
+            const pr = hexToRgb(theme.primary);
             root.style.setProperty('--accent-primary', theme.primary);
             root.style.setProperty('--accent-secondary', theme.accent);
-            root.style.setProperty('--bg-primary', theme.bg);
-            root.style.setProperty('--bg-secondary', theme.surface);
-            root.style.setProperty('--text-primary', theme.text);
+            root.style.setProperty('--accent-success', theme.accent);
+            root.style.setProperty('--bg-primary', AppState.lightMode ? '#eef2f8' : theme.bg);
+            root.style.setProperty('--bg-secondary', AppState.lightMode ? '#f7f9fc' : theme.surface);
+            root.style.setProperty('--bg-card', AppState.lightMode ? '#dfe8f3' : theme.surface);
+            root.style.setProperty('--text-primary', AppState.lightMode ? '#1e293b' : theme.text);
+            root.style.setProperty('--text-secondary', AppState.lightMode ? '#475569' : '#cbd5e1');
+            root.style.setProperty('--border-color', AppState.lightMode ? '#b8c6db' : 'rgba(148,163,184,.35)');
+            root.style.setProperty('--hover-color', AppState.lightMode ? '#cfdcee' : '#475569');
+            root.style.setProperty('--selection-bg', `rgba(${pr.r}, ${pr.g}, ${pr.b}, ${AppState.lightMode ? '0.18' : '0.2'})`);
+            document.body.classList.toggle('light-mode', !!AppState.lightMode);
             AppState.activeThemeId = themeId;
             savePreferences();
         }
@@ -5969,7 +6050,7 @@
             if (!elements.themeCards) return;
             const cards = Object.values(AppState.themeCatalog || {}).map((t) => {
                 const active = t.id === AppState.activeThemeId;
-                return `<button class="metrics-card" style="text-align:left;cursor:pointer;${active ? 'outline:2px solid var(--accent-primary);' : ''}" data-theme-id="${t.id}"><div class="k">${t.name}</div><div style="display:flex;gap:6px;margin-top:8px;"><span style="width:18px;height:18px;border-radius:4px;background:${t.primary}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.accent}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.bg}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.surface}"></span></div></button>`;
+                return `<button class="metrics-card" style="text-align:left;cursor:pointer;${active ? 'outline:2px solid var(--accent-primary);' : ''}" data-theme-id="${t.id}"><div class="k" style="font-weight:700;color:var(--text-primary)">${t.name}</div><div class="k" style="margin-top:4px;min-height:32px;">${t.desc || ''}</div><div style="display:flex;gap:6px;margin-top:8px;"><span style="width:18px;height:18px;border-radius:4px;background:${t.primary}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.accent}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.bg}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.surface}"></span></div></button>`;
             }).join('');
             elements.themeCards.innerHTML = cards || '<div style="color:var(--text-secondary)">Sin temas</div>';
             elements.themeCards.querySelectorAll('[data-theme-id]').forEach((btn) => {
@@ -6051,14 +6132,30 @@
             const ctx = canvas.getContext('2d');
             const w = canvas.width, h = canvas.height;
             ctx.clearRect(0, 0, w, h);
+            if (!entries.length) { ctx.fillStyle = '#94a3b8'; ctx.fillText('Sin datos', 12, 20); return; }
             const max = Math.max(1, ...entries.map((e) => e.value));
             const barW = Math.max(16, Math.floor((w - 40) / Math.max(1, entries.length)) - 8);
             entries.slice(0, 12).forEach((entry, idx) => {
                 const x = 20 + idx * (barW + 8);
                 const bh = Math.max(2, Math.round((entry.value / max) * (h - 50)));
                 const y = h - 24 - bh;
-                ctx.fillStyle = color;
-                ctx.fillRect(x, y, barW, bh);
+                const grad = ctx.createLinearGradient(x, y, x + barW, y + bh);
+                grad.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--accent-primary').trim() || color);
+                grad.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--accent-secondary').trim() || '#10b981');
+                ctx.fillStyle = grad;
+                const radius = 6;
+                ctx.beginPath();
+                ctx.moveTo(x + radius, y);
+                ctx.lineTo(x + barW - radius, y);
+                ctx.quadraticCurveTo(x + barW, y, x + barW, y + radius);
+                ctx.lineTo(x + barW, y + bh - radius);
+                ctx.quadraticCurveTo(x + barW, y + bh, x + barW - radius, y + bh);
+                ctx.lineTo(x + radius, y + bh);
+                ctx.quadraticCurveTo(x, y + bh, x, y + bh - radius);
+                ctx.lineTo(x, y + radius);
+                ctx.quadraticCurveTo(x, y, x + radius, y);
+                ctx.closePath();
+                ctx.fill();
                 ctx.fillStyle = '#cbd5e1';
                 ctx.font = '10px sans-serif';
                 ctx.fillText(String(entry.value), x, y - 4);
@@ -7445,8 +7542,17 @@
             if (elements.openThemesOption && elements.themesModal) {
                 elements.openThemesOption.onclick = () => {
                     renderThemeCards();
+                    if (elements.lightModeToggle) elements.lightModeToggle.checked = !!AppState.lightMode;
                     elements.themesModal.classList.add('active');
                     elements.userOptionsModal.classList.remove('active');
+                };
+            }
+            if (elements.lightModeToggle) {
+                elements.lightModeToggle.onchange = (e) => {
+                    AppState.lightMode = !!e.target.checked;
+                    applyTheme(AppState.activeThemeId || 'whaticket-blue');
+                    renderThemeCards();
+                    showNotification(AppState.lightMode ? 'Modo claro activado' : 'Modo oscuro activado', 'info');
                 };
             }
             if (elements.closeThemesModal) elements.closeThemesModal.onclick = () => elements.themesModal.classList.remove('active');
