@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getErrorLogPath: () => ipcRenderer.invoke('app:getErrorLogPath'),
   openErrorLog: () => ipcRenderer.invoke('app:openErrorLog'),
   logError: (payload) => ipcRenderer.invoke('app:logError', payload),
+  queueUpload: (payload) => ipcRenderer.invoke('app:queueUpload', payload),
   zoomIn: () => ipcRenderer.invoke('zoom:in'),
   zoomOut: () => ipcRenderer.invoke('zoom:out'),
   zoomReset: () => ipcRenderer.invoke('zoom:reset'),

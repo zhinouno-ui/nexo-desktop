@@ -2,6 +2,13 @@
 
 ## 1.1.19 - actualización del control
 
+### Métricas + exportes + temas (refuerzo final)
+- Dashboard de métricas por perfil con filtros (rango/turno/estado/tipo/solo-cambios) y gráficas (donut estado, donut selección, barras de transiciones).
+- Export Mensual Full (`nexo-monthly-full-v1`) con baseline por perfil.
+- Export Diario Delta (`nexo-daily-delta-v1`) con comparación contra baseline (nuevos + cambios) y salida JSON+CSV.
+- Subida restringida por clave (`Master123`) con desbloqueo temporal y cola local `uploads_queue`.
+- Modal de temas tipo Whaticket con presets, tema personalizado e import/export `themes.json`.
+
 ### Control import/export protegido
 - Nuevo input dedicado para importar archivo de control desde el Centro de métricas.
 - Importación protegida por clave (base inicial `master123`) sin exponerla en texto plano en la UI.

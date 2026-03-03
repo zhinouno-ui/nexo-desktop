@@ -824,6 +824,18 @@ ipcMain.handle('app:exportBackup', async () => {
   await fs.copyFile(getDbPath(), target.filePath);
   return { canceled: false, filePath: target.filePath };
 });
+ipcMain.handle('app:queueUpload', async (_event, payload) => {
+  const profileId = String(payload?.profileId || 'default').replace(/[^a-z0-9_-]/gi, '_');
+  const label = String(payload?.label || 'report').replace(/[^a-z0-9_-]/gi, '_');
+  const raw = String(payload?.payload || '{}');
+  const queueDir = path.join(app.getPath('userData'), 'uploads_queue', profileId);
+  await fs.mkdir(queueDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:]/g, '-').slice(0, 19);
+  const out = path.join(queueDir, `${stamp}_${label}.json`);
+  await fs.writeFile(out, raw, 'utf8');
+  await appendErrorLog('upload-queue', new Error('queued'), { profileId, label, path: out, bytes: raw.length });
+  return { ok: true, path: out };
+});
 ipcMain.handle('dialog:openImportFiles', async () => {
   const result = await dialog.showOpenDialog({
     title: 'Seleccionar archivos para importar',

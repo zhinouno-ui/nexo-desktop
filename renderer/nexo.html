@@ -1707,6 +1707,41 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v { font-size:1.2rem; font-weight:800; margin-top:4px; }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -2058,6 +2093,13 @@
                         <div class="export-option-desc">Resumen de progreso y actividad</div>
                     </div>
                 </div>
+                <div class="export-option" id="openThemesOption">
+                    <i class="fas fa-palette"></i>
+                    <div class="export-option-text">
+                        <div class="export-option-title">Temas y colores</div>
+                        <div class="export-option-desc">Seleccionar, crear, exportar e importar temas</div>
+                    </div>
+                </div>
                 <div class="export-option" id="checkUpdatesOption">
                     <i class="fas fa-cloud-download-alt"></i>
                     <div class="export-option-text">
@@ -2110,6 +2152,29 @@
         <div class="modal-content" style="max-width: 760px;">
             <div class="modal-header"><i class="fas fa-chart-line"></i> Centro de métricas</div>
             <div id="metricsDateLabel" style="color:var(--text-secondary); margin-bottom:8px;">Resumen diario</div>
+            <div class="metrics-filters">
+                <select id="metricsShiftFilter" class="filter-select">
+                    <option value="all">Turno: todos</option>
+                    <option value="tm">Turno 1 (06-14)</option>
+                    <option value="tt">Turno 2 (14-22)</option>
+                    <option value="tn">Turno 3 (22-06)</option>
+                </select>
+                <input id="metricsFromDate" type="date" class="origin-input" style="margin-top:0;">
+                <input id="metricsToDate" type="date" class="origin-input" style="margin-top:0;">
+                <select id="metricsStatusFilter" class="filter-select">
+                    <option value="all">Estado: todos</option>
+                </select>
+                <select id="metricsSelectionTypeFilter" class="filter-select">
+                    <option value="all">Selección: todas</option>
+                    <option value="manual">Manual</option>
+                    <option value="ops">Operaciones</option>
+                    <option value="bulk">Masiva</option>
+                    <option value="import">Importación</option>
+                </select>
+                <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);padding-left:4px;">
+                    <input id="metricsOnlyChanges" type="checkbox"> Solo cambios
+                </label>
+            </div>
             <div class="metrics-dashboard-grid">
                 <div class="metrics-card"><div class="k">Trabajados hoy</div><div id="metricEditedToday" class="v">0</div></div>
                 <div class="metrics-card"><div class="k">Trabajados ayer</div><div id="metricEditedYesterday" class="v">0</div></div>
@@ -2118,12 +2183,30 @@
                 <div class="metrics-card"><div class="k">Turno más activo (24h)</div><div id="metricTopShift24h" class="v">-</div></div>
                 <div class="metrics-card"><div class="k">Promedio botones/hora</div><div id="metricButtonsPerHour" class="v">0</div></div>
             </div>
+            <div class="metrics-charts">
+                <div class="chart-card">
+                    <div class="chart-title">Estados (donut)</div>
+                    <canvas id="statusDonutChart" width="320" height="180"></canvas>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">Tipo de selección (donut)</div>
+                    <canvas id="selectionDonutChart" width="320" height="180"></canvas>
+                </div>
+                <div class="chart-card" style="grid-column: span 2;">
+                    <div class="chart-title">Transiciones de estado (barras)</div>
+                    <canvas id="transitionBarChart" width="660" height="180"></canvas>
+                </div>
+            </div>
             <div class="metrics-actions">
                 <button id="metricsFilterLastBatchBtn" class="btn"><i class="fas fa-filter"></i> Filtrar última subida</button>
                 <button id="metricsDeleteLastBatchBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Borrar última subida</button>
                 <button id="exportFullSnapshotBtn" class="btn" title="Exporta snapshot completo (usuarios + historial global)"><i class="fas fa-file-export"></i> Exportar Snapshot <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo pesado para auditoría periódica. Incluye usuarios e historial global."></i></button>
                 <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
                 <button id="importControlBtn" class="btn" title="Importa control diario/mensual"><i class="fas fa-shield-alt"></i> Importar Control <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo liviano para seguimiento diario/mensual de métricas y turnos."></i></button>
+                <button id="exportDailyDeltaBtn" class="btn"><i class="fas fa-calendar-day"></i> Export Diario (Delta)</button>
+                <button id="exportMonthlyFullBtn" class="btn"><i class="fas fa-calendar-alt"></i> Export Mensual (Full)</button>
+                <button id="uploadReportBtn" class="btn"><i class="fas fa-upload"></i> Subir reporte</button>
+                <button id="resetBaselineBtn" class="btn"><i class="fas fa-eraser"></i> Reset baseline</button>
             </div>
             <div id="metricTransitionsBreakdown" class="metrics-transitions"></div>
             <div id="metricTransitionSummary" class="metrics-transitions" style="margin-top:8px;"></div>
@@ -2186,6 +2269,32 @@
             <div class="modal-actions">
                 <button id="cancelAddSingle" class="btn"><i class="fas fa-times"></i> Cancelar</button>
                 <button id="confirmAddSingle" class="btn btn-success"><i class="fas fa-plus"></i> Agregar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="themesModal">
+        <div class="modal-content" style="max-width:760px;">
+            <div class="modal-header"><i class="fas fa-palette"></i> Seleccioná un tema</div>
+            <div id="themeCards" class="metrics-wide-grid"></div>
+            <div style="margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px;">
+                <div style="font-weight:700;margin-bottom:6px;">Tema personalizado</div>
+                <div class="metrics-filters">
+                    <input id="themeNameInput" class="origin-input" style="margin-top:0;" placeholder="Nombre del tema">
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Primary <input id="themePrimary" type="color" value="#3b82f6"></label>
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Accent <input id="themeAccent" type="color" value="#10b981"></label>
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">BG <input id="themeBg" type="color" value="#0f172a"></label>
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Surface <input id="themeSurface" type="color" value="#1e293b"></label>
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Text <input id="themeText" type="color" value="#e2e8f0"></label>
+                </div>
+                <div class="modal-actions">
+                    <button id="saveCustomThemeBtn" class="btn btn-success"><i class="fas fa-save"></i> Guardar tema</button>
+                    <button id="exportThemesBtn" class="btn"><i class="fas fa-file-export"></i> Exportar themes.json</button>
+                    <button id="importThemesBtn" class="btn"><i class="fas fa-file-import"></i> Importar themes.json</button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="closeThemesModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
             </div>
         </div>
     </div>
@@ -2428,7 +2537,14 @@
             controlImportUnlocked: false,
             controlPasswordHash: '',
             controlLastImportedAt: '',
-            controlReports: []
+            controlReports: [],
+            metricEvents: [],
+            monthlyBaselineByProfile: {},
+            uploadUnlockedUntil: 0,
+            uploadAuditLog: [],
+            queuedUploads: [],
+            themeCatalog: {},
+            activeThemeId: 'whaticket-blue'
         };
 
         function ensureReviewMilestonesState() {
@@ -2499,6 +2615,7 @@
             openErrorLogOption: $('#openErrorLogOption'),
             rollbackPreviousOption: $('#rollbackPreviousOption'),
             showQuickMetricsOption: $('#showQuickMetricsOption'),
+            openThemesOption: $('#openThemesOption'),
             metricsModal: $('#metricsModal'),
             metricEditedToday: $('#metricEditedToday'),
             metricEditedYesterday: $('#metricEditedYesterday'),
@@ -2510,6 +2627,19 @@
             metricTransitionSummary: $('#metricTransitionSummary'),
             metricShiftRanking: $('#metricShiftRanking'),
             controlReportsSummary: $('#controlReportsSummary'),
+            metricsShiftFilter: $('#metricsShiftFilter'),
+            metricsFromDate: $('#metricsFromDate'),
+            metricsToDate: $('#metricsToDate'),
+            metricsStatusFilter: $('#metricsStatusFilter'),
+            metricsSelectionTypeFilter: $('#metricsSelectionTypeFilter'),
+            metricsOnlyChanges: $('#metricsOnlyChanges'),
+            statusDonutChart: $('#statusDonutChart'),
+            selectionDonutChart: $('#selectionDonutChart'),
+            transitionBarChart: $('#transitionBarChart'),
+            exportDailyDeltaBtn: $('#exportDailyDeltaBtn'),
+            exportMonthlyFullBtn: $('#exportMonthlyFullBtn'),
+            uploadReportBtn: $('#uploadReportBtn'),
+            resetBaselineBtn: $('#resetBaselineBtn'),
             metricsDateLabel: $('#metricsDateLabel'),
             metricsFilterLastBatchBtn: $('#metricsFilterLastBatchBtn'),
             metricsDeleteLastBatchBtn: $('#metricsDeleteLastBatchBtn'),
@@ -2531,6 +2661,18 @@
             importDiagIssues: $('#importDiagIssues'),
             importDiagCancel: $('#importDiagCancel'),
             importDiagContinue: $('#importDiagContinue'),
+            themesModal: $('#themesModal'),
+            themeCards: $('#themeCards'),
+            themeNameInput: $('#themeNameInput'),
+            themePrimary: $('#themePrimary'),
+            themeAccent: $('#themeAccent'),
+            themeBg: $('#themeBg'),
+            themeSurface: $('#themeSurface'),
+            themeText: $('#themeText'),
+            saveCustomThemeBtn: $('#saveCustomThemeBtn'),
+            exportThemesBtn: $('#exportThemesBtn'),
+            importThemesBtn: $('#importThemesBtn'),
+            closeThemesModal: $('#closeThemesModal'),
             profilesModal: $('#profilesModal'),
             profilesList: $('#profilesList'),
             newProfileName: $('#newProfileName'),
@@ -2991,6 +3133,7 @@
                 const opsShift = inferShiftFromIso(opsAt);
                 AppState.statusTransitions.unshift({ at: opsAt, from: oldStatus, to: nextStatus, contactId: contact.id, profileId: contact.profileId || 'default', actor: 'ops-import', shift: opsShift || contact.assignedShift || '' });
                 AppState.buttonPressEvents.unshift({ at: opsAt, action: 'ops-sync', from: oldStatus, to: nextStatus, shift: opsShift || contact.assignedShift || '', profileId: contact.profileId || 'default', actor: 'ops-import' });
+                recordMetricEvent('operation_created', { profileId: contact.profileId || 'default', contactId: contact.id, status: nextStatus, from: oldStatus, to: nextStatus, at: opsAt, shift: opsShift, selectionType: 'ops' });
                 saveStatusTransitions();
                 saveButtonPressEvents();
             }
@@ -3036,6 +3179,7 @@
                         isNewFromOps: true,
                         ops: p
                     });
+                    recordMetricEvent('user_created', { profileId: AppState.activeProfileId || 'default', contactId: newId, status: 'sin revisar', selectionType: 'ops' });
                     applyOpsHeuristicsToContact(AppState.contacts[AppState.contacts.length - 1]);
                     addToHistory('Nuevo usuario desde operaciones', p.aliasLabel || alias);
                     createdCount++;
@@ -3714,6 +3858,7 @@
                             profileId: profileIdForFile
                         };
                         AppState.contacts.push(created);
+                        recordMetricEvent('user_created', { profileId: created.profileId || profileIdForFile, contactId: created.id, status: created.status, selectionType: 'import', at: nowIso });
                         if (normalizedPhone) phoneIndex.set(normalizedPhone, created);
                         if (normalizedName) nameIndex.set(normalizedName, created);
                         totalNewContacts++;
@@ -5426,6 +5571,16 @@
             const policyNote = (requestedStatus !== newStatus && requestedStatus === 'sin wsp') ? ' (autopolítica 3 recontactos)' : '';
             addToHistory('Estado cambiado', `${contact.name}: ${oldStatus} → ${requestedStatus}${policyNote}`, contact.id);
             AppState.statusTransitions.unshift({ at: eventAt, from: oldStatus, to: requestedStatus, contactId: contact.id, profileId: contact.profileId || 'default', actor: AppState.operatorName || 'PC local', shift: shiftByEvent || contact.shiftReviewedByShift || contact.assignedShift || '' });
+            recordMetricEvent('status_changed', {
+                profileId: contact.profileId || 'default',
+                contactId: contact.id,
+                from: oldStatus,
+                to: requestedStatus,
+                status: requestedStatus,
+                at: eventAt,
+                shift: shiftByEvent || contact.shiftReviewedByShift || contact.assignedShift || '',
+                selectionType: source
+            });
             if (AppState.statusTransitions.length > 5000) AppState.statusTransitions = AppState.statusTransitions.slice(0, 5000);
             saveStatusTransitions();
             AppState.buttonPressEvents.unshift({ at: eventAt, action: 'status-change', from: oldStatus, to: requestedStatus, shift: shiftByEvent || contact.shiftReviewedByShift || contact.assignedShift || '', profileId: contact.profileId || 'default', actor: AppState.operatorName || 'PC local' });
@@ -5529,6 +5684,18 @@
                 AppState.controlLastImportedAt = localStorage.getItem('controlLastImportedAt') || '';
                 const controlReportsRaw = localStorage.getItem('controlReports');
                 if (controlReportsRaw) { try { AppState.controlReports = JSON.parse(controlReportsRaw); } catch (_) { AppState.controlReports = []; } }
+                const metricEventsRaw = localStorage.getItem('metricEvents');
+                if (metricEventsRaw) { try { AppState.metricEvents = JSON.parse(metricEventsRaw); } catch (_) { AppState.metricEvents = []; } }
+                const baselineRaw = localStorage.getItem('monthlyBaselineByProfile');
+                if (baselineRaw) { try { AppState.monthlyBaselineByProfile = JSON.parse(baselineRaw); } catch (_) { AppState.monthlyBaselineByProfile = {}; } }
+                AppState.uploadUnlockedUntil = Number(localStorage.getItem('uploadUnlockedUntil') || '0') || 0;
+                const uploadAuditRaw = localStorage.getItem('uploadAuditLog');
+                if (uploadAuditRaw) { try { AppState.uploadAuditLog = JSON.parse(uploadAuditRaw); } catch (_) { AppState.uploadAuditLog = []; } }
+                const queuedUploadsRaw = localStorage.getItem('queuedUploads');
+                if (queuedUploadsRaw) { try { AppState.queuedUploads = JSON.parse(queuedUploadsRaw); } catch (_) { AppState.queuedUploads = []; } }
+                const themeCatalogRaw = localStorage.getItem('themeCatalog');
+                if (themeCatalogRaw) { try { AppState.themeCatalog = JSON.parse(themeCatalogRaw); } catch (_) { AppState.themeCatalog = {}; } }
+                AppState.activeThemeId = localStorage.getItem('activeThemeId') || AppState.activeThemeId || 'whaticket-blue';
                 const backupMode = localStorage.getItem('autoBackupStorageMode');
                 if (backupMode === 'download' || backupMode === 'file' || backupMode === 'ask') {
                     AppState.autoBackupStorageMode = backupMode === 'ask' ? 'download' : backupMode;
@@ -5555,6 +5722,13 @@
                 if (AppState.controlPasswordHash) localStorage.setItem('controlPasswordHash', AppState.controlPasswordHash);
                 if (AppState.controlLastImportedAt) localStorage.setItem('controlLastImportedAt', AppState.controlLastImportedAt);
                 localStorage.setItem('controlReports', JSON.stringify((AppState.controlReports || []).slice(0, 180)));
+                localStorage.setItem('metricEvents', JSON.stringify((AppState.metricEvents || []).slice(0, 30000)));
+                localStorage.setItem('monthlyBaselineByProfile', JSON.stringify(AppState.monthlyBaselineByProfile || {}));
+                localStorage.setItem('uploadUnlockedUntil', String(AppState.uploadUnlockedUntil || 0));
+                localStorage.setItem('uploadAuditLog', JSON.stringify((AppState.uploadAuditLog || []).slice(0, 5000)));
+                localStorage.setItem('queuedUploads', JSON.stringify((AppState.queuedUploads || []).slice(0, 300)));
+                localStorage.setItem('themeCatalog', JSON.stringify(AppState.themeCatalog || {}));
+                localStorage.setItem('activeThemeId', AppState.activeThemeId || 'whaticket-blue');
             } catch (e) {
                 console.error('Error al guardar preferencias:', e);
             }
@@ -5585,6 +5759,136 @@
         function buildWhatsAppMessage(contactName) {
             const base = (AppState.whatsappTemplate || '').trim();
             return base.replaceAll('{usuario}', contactName || '');
+        }
+
+        function getDefaultThemes() {
+            return {
+                'whaticket-blue': { id: 'whaticket-blue', name: 'Azul Whaticket', primary: '#3b82f6', accent: '#10b981', bg: '#0f172a', surface: '#1e293b', text: '#e2e8f0' },
+                'forest-green': { id: 'forest-green', name: 'Verde Bosque', primary: '#16a34a', accent: '#22c55e', bg: '#0b1f14', surface: '#163124', text: '#e7f7ee' },
+                'ocean-green': { id: 'ocean-green', name: 'Verde Océano', primary: '#0ea5a4', accent: '#14b8a6', bg: '#082f3a', surface: '#0f3f4c', text: '#d8f8f5' },
+                'sunset-orange': { id: 'sunset-orange', name: 'Naranja Atardecer', primary: '#f97316', accent: '#fb923c', bg: '#2b1308', surface: '#3e1b0b', text: '#fff2e8' },
+                'night-purple': { id: 'night-purple', name: 'Púrpura Nocturno', primary: '#8b5cf6', accent: '#a78bfa', bg: '#1a1032', surface: '#2a1a4a', text: '#f1edff' },
+                'rose-pink': { id: 'rose-pink', name: 'Rosa Rosado', primary: '#ec4899', accent: '#f472b6', bg: '#2b0f1f', surface: '#40172f', text: '#ffeaf5' },
+                'cosmic': { id: 'cosmic', name: 'Cósmico', primary: '#06b6d4', accent: '#6366f1', bg: '#050814', surface: '#121a33', text: '#e6f0ff' }
+            };
+        }
+
+        function applyTheme(themeId) {
+            const theme = (AppState.themeCatalog || {})[themeId];
+            if (!theme) return;
+            const root = document.documentElement;
+            root.style.setProperty('--accent-primary', theme.primary);
+            root.style.setProperty('--accent-secondary', theme.accent);
+            root.style.setProperty('--bg-primary', theme.bg);
+            root.style.setProperty('--bg-secondary', theme.surface);
+            root.style.setProperty('--text-primary', theme.text);
+            AppState.activeThemeId = themeId;
+            savePreferences();
+        }
+
+        function renderThemeCards() {
+            if (!elements.themeCards) return;
+            const cards = Object.values(AppState.themeCatalog || {}).map((t) => {
+                const active = t.id === AppState.activeThemeId;
+                return `<button class="metrics-card" style="text-align:left;cursor:pointer;${active ? 'outline:2px solid var(--accent-primary);' : ''}" data-theme-id="${t.id}"><div class="k">${t.name}</div><div style="display:flex;gap:6px;margin-top:8px;"><span style="width:18px;height:18px;border-radius:4px;background:${t.primary}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.accent}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.bg}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.surface}"></span></div></button>`;
+            }).join('');
+            elements.themeCards.innerHTML = cards || '<div style="color:var(--text-secondary)">Sin temas</div>';
+            elements.themeCards.querySelectorAll('[data-theme-id]').forEach((btn) => {
+                btn.onclick = () => {
+                    applyTheme(btn.getAttribute('data-theme-id'));
+                    renderThemeCards();
+                };
+            });
+        }
+
+        function inferShiftFromDateParts(dateObj) {
+            const h = dateObj.getHours();
+            if (h >= 6 && h < 14) return 'tm';
+            if (h >= 14 && h < 22) return 'tt';
+            return 'tn';
+        }
+
+        function normalizeSelectionType(raw) {
+            const val = String(raw || '').toLowerCase();
+            if (val.includes('ops')) return 'ops';
+            if (val.includes('bulk') || val.includes('masiv')) return 'bulk';
+            if (val.includes('import')) return 'import';
+            return 'manual';
+        }
+
+        function recordMetricEvent(type, payload = {}) {
+            const at = payload.at || new Date().toISOString();
+            const dateObj = new Date(at);
+            const event = {
+                id: `${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+                type,
+                at,
+                profileId: payload.profileId || AppState.activeProfileId || 'default',
+                shift: payload.shift || inferShiftFromDateParts(dateObj),
+                status: payload.status || '',
+                from: payload.from || '',
+                to: payload.to || '',
+                selectionType: normalizeSelectionType(payload.selectionType || payload.source || type),
+                contactId: payload.contactId || null
+            };
+            AppState.metricEvents.unshift(event);
+            if (AppState.metricEvents.length > 30000) AppState.metricEvents = AppState.metricEvents.slice(0, 30000);
+            savePreferences();
+        }
+
+        function drawDonut(canvas, entries, colors) {
+            if (!canvas || !canvas.getContext) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width, h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+            const total = entries.reduce((a, b) => a + b.value, 0);
+            if (!total) { ctx.fillStyle = '#94a3b8'; ctx.fillText('Sin datos', 12, 20); return; }
+            let start = -Math.PI / 2;
+            const cx = 90, cy = 90, r = 64;
+            entries.forEach((entry, idx) => {
+                const angle = (entry.value / total) * Math.PI * 2;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.arc(cx, cy, r, start, start + angle);
+                ctx.closePath();
+                ctx.fillStyle = colors[idx % colors.length];
+                ctx.fill();
+                start += angle;
+            });
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 34, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '12px sans-serif';
+            entries.slice(0, 5).forEach((entry, idx) => {
+                ctx.fillText(`${entry.label} ${Math.round((entry.value / total) * 100)}%`, 180, 22 + (idx * 18));
+            });
+        }
+
+        function drawBars(canvas, entries, color = '#3b82f6') {
+            if (!canvas || !canvas.getContext) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width, h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+            const max = Math.max(1, ...entries.map((e) => e.value));
+            const barW = Math.max(16, Math.floor((w - 40) / Math.max(1, entries.length)) - 8);
+            entries.slice(0, 12).forEach((entry, idx) => {
+                const x = 20 + idx * (barW + 8);
+                const bh = Math.max(2, Math.round((entry.value / max) * (h - 50)));
+                const y = h - 24 - bh;
+                ctx.fillStyle = color;
+                ctx.fillRect(x, y, barW, bh);
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = '10px sans-serif';
+                ctx.fillText(String(entry.value), x, y - 4);
+                ctx.save();
+                ctx.translate(x + 2, h - 8);
+                ctx.rotate(-0.35);
+                ctx.fillText(entry.label.slice(0, 14), 0, 0);
+                ctx.restore();
+            });
         }
 
         function getDuplicateReason(group) {
@@ -6590,6 +6894,113 @@
                 showNotification(`Control importado (${sourceName})`, 'success');
             };
 
+            const buildCurrentBaseline = () => {
+                const profileId = AppState.activeProfileId || 'default';
+                const map = {};
+                (AppState.contacts || []).filter((c) => (c.profileId || 'default') === profileId).forEach((c) => {
+                    const key = normalizePhoneToE164(c.phone || '') || String(c.id);
+                    if (!key) return;
+                    map[key] = {
+                        id: c.id,
+                        phone: c.phone || '',
+                        status: c.status || 'sin revisar',
+                        name: c.name || '',
+                        updatedAt: c.lastUpdated || c.lastEditedAt || c.lastImportedAt || ''
+                    };
+                });
+                return map;
+            };
+
+            const exportMonthlyFull = () => {
+                const profileId = AppState.activeProfileId || 'default';
+                const baselineMap = buildCurrentBaseline();
+                const profileContacts = (AppState.contacts || []).filter((c) => (c.profileId || 'default') === profileId);
+                const transitions30d = (AppState.statusTransitions || []).filter((t) => (t.profileId || 'default') === profileId && withinLastHours(t.at, 24 * 30));
+                const payload = {
+                    schema_version: '1.0.0',
+                    exportType: 'nexo-monthly-full-v1',
+                    profile_id: profileId,
+                    generated_at: new Date().toISOString(),
+                    range_start: new Date(Date.now() - (24 * 30 * 60 * 60 * 1000)).toISOString(),
+                    range_end: new Date().toISOString(),
+                    users: profileContacts,
+                    movements_30d: transitions30d,
+                    baseline: baselineMap
+                };
+                const json = JSON.stringify(payload, null, 2);
+                downloadFile(json, `nexo_monthly_full_${profileId}_${new Date().toISOString().slice(0,10)}.json`, 'application/json;charset=utf-8;');
+                AppState.monthlyBaselineByProfile[profileId] = { generatedAt: payload.generated_at, map: baselineMap };
+                savePreferences();
+                addToHistory('Export mensual full', `Perfil ${profileId}: ${profileContacts.length} usuarios`);
+                showNotification('Export mensual full generado y baseline actualizado', 'success');
+            };
+
+            const exportDailyDelta = () => {
+                const profileId = AppState.activeProfileId || 'default';
+                const baseline = AppState.monthlyBaselineByProfile?.[profileId]?.map || {};
+                const current = buildCurrentBaseline();
+                const newUsers = [];
+                const statusChanges = [];
+                Object.entries(current).forEach(([key, nowUser]) => {
+                    const old = baseline[key];
+                    if (!old) {
+                        newUsers.push({ type: 'new_user', key, ...nowUser });
+                        return;
+                    }
+                    if ((old.status || '') !== (nowUser.status || '')) {
+                        statusChanges.push({ type: 'status_change', key, from: old.status, to: nowUser.status, name: nowUser.name, phone: nowUser.phone, at: nowUser.updatedAt || new Date().toISOString() });
+                    }
+                });
+                const dailyTransitions = (AppState.statusTransitions || []).filter((t) => (t.profileId || 'default') === profileId && withinLastHours(t.at, 24));
+                const payload = {
+                    schema_version: '1.0.0',
+                    exportType: 'nexo-daily-delta-v1',
+                    profile_id: profileId,
+                    generated_at: new Date().toISOString(),
+                    baseline_generated_at: AppState.monthlyBaselineByProfile?.[profileId]?.generatedAt || '',
+                    range_start: new Date(new Date().setHours(0, 0, 0, 0)).toISOString(),
+                    range_end: new Date().toISOString(),
+                    new_users: newUsers,
+                    status_changes: statusChanges,
+                    daily_transitions: dailyTransitions
+                };
+                const csvLines = ['type,key,name,phone,from,to,at']
+                    .concat(newUsers.map((r) => `new_user,${r.key},"${(r.name||'').replace(/"/g,'""')}","${r.phone||''}",,,${r.updatedAt || ''}`))
+                    .concat(statusChanges.map((r) => `status_change,${r.key},"${(r.name||'').replace(/"/g,'""')}","${r.phone||''}","${r.from}","${r.to}",${r.at}`));
+                downloadFile(JSON.stringify(payload, null, 2), `nexo_daily_delta_${profileId}_${new Date().toISOString().slice(0,10)}.json`, 'application/json;charset=utf-8;');
+                downloadFile(csvLines.join('\n'), `nexo_daily_delta_${profileId}_${new Date().toISOString().slice(0,10)}.csv`, 'text/csv;charset=utf-8;');
+                addToHistory('Export diario delta', `Perfil ${profileId}: ${newUsers.length} nuevos / ${statusChanges.length} cambios`);
+                showNotification(`Delta diario exportado (${newUsers.length} nuevos, ${statusChanges.length} cambios)`, 'success');
+                return { payload, csv: csvLines.join('\n') };
+            };
+
+            const ensureUploadUnlocked = () => {
+                if (Date.now() < (AppState.uploadUnlockedUntil || 0)) return true;
+                const typed = window.prompt('Clave para subir reporte');
+                const ok = String(typed || '') === 'Master123';
+                AppState.uploadAuditLog.unshift({ at: new Date().toISOString(), profileId: AppState.activeProfileId || 'default', ok, action: 'upload-auth' });
+                if (ok) {
+                    AppState.uploadUnlockedUntil = Date.now() + (10 * 60 * 1000);
+                    savePreferences();
+                    return true;
+                }
+                savePreferences();
+                showNotification('Clave incorrecta para subir reporte', 'error');
+                return false;
+            };
+
+            const queueReportUpload = async (reportObj, label) => {
+                const profileId = AppState.activeProfileId || 'default';
+                const payload = JSON.stringify(reportObj, null, 2);
+                const queued = { at: new Date().toISOString(), profileId, label, size: payload.length };
+                AppState.queuedUploads.unshift(queued);
+                if (window.electronAPI?.queueUpload) {
+                    try { await window.electronAPI.queueUpload({ profileId, label, payload }); } catch (_) {}
+                }
+                savePreferences();
+                showNotification('Encolado para subir', 'success');
+            };
+
             const updateMidnightButtonState = () => {
                 if (!elements.midnightExportBtn) return;
                 if (AppState.midnightExportPending) elements.midnightExportBtn.classList.add('btn-midnight-pulse');
@@ -6609,6 +7020,58 @@
                         exportControlFile('auto');
                     }
                 }, 30000);
+            };
+
+            const getFilteredMetricEvents = () => {
+                const from = elements.metricsFromDate?.value ? new Date(`${elements.metricsFromDate.value}T00:00:00`).getTime() : 0;
+                const to = elements.metricsToDate?.value ? new Date(`${elements.metricsToDate.value}T23:59:59`).getTime() : Number.MAX_SAFE_INTEGER;
+                const shift = elements.metricsShiftFilter?.value || 'all';
+                const status = elements.metricsStatusFilter?.value || 'all';
+                const selectionType = elements.metricsSelectionTypeFilter?.value || 'all';
+                const onlyChanges = !!elements.metricsOnlyChanges?.checked;
+                return (AppState.metricEvents || []).filter((ev) => {
+                    if ((ev.profileId || 'default') !== (AppState.activeProfileId || 'default')) return false;
+                    const at = new Date(ev.at || 0).getTime();
+                    if (!Number.isFinite(at) || at < from || at > to) return false;
+                    if (shift !== 'all' && String(ev.shift || '').toLowerCase() !== shift) return false;
+                    if (status !== 'all' && String(ev.status || ev.to || '').toLowerCase() !== status) return false;
+                    if (selectionType !== 'all' && normalizeSelectionType(ev.selectionType) !== selectionType) return false;
+                    if (onlyChanges && ev.type !== 'status_changed') return false;
+                    return true;
+                });
+            };
+
+            const renderMetricChartsFromEvents = () => {
+                const events = getFilteredMetricEvents();
+                const statusMap = new Map();
+                const selMap = new Map();
+                const transMap = new Map();
+                events.forEach((ev) => {
+                    if (ev.status || ev.to) {
+                        const st = String(ev.status || ev.to || '').toLowerCase();
+                        statusMap.set(st, (statusMap.get(st) || 0) + 1);
+                    }
+                    const sel = normalizeSelectionType(ev.selectionType || ev.type);
+                    selMap.set(sel, (selMap.get(sel) || 0) + 1);
+                    if (ev.from && ev.to) {
+                        const key = `${ev.from}→${ev.to}`;
+                        transMap.set(key, (transMap.get(key) || 0) + 1);
+                    }
+                });
+                const statusEntries = Array.from(statusMap.entries()).map(([label, value]) => ({ label, value })).sort((a,b)=>b.value-a.value);
+                const selEntries = Array.from(selMap.entries()).map(([label, value]) => ({ label, value })).sort((a,b)=>b.value-a.value);
+                const transEntries = Array.from(transMap.entries()).map(([label, value]) => ({ label, value })).sort((a,b)=>b.value-a.value).slice(0, 12);
+                drawDonut(elements.statusDonutChart, statusEntries, ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#ef4444','#22d3ee']);
+                drawDonut(elements.selectionDonutChart, selEntries, ['#14b8a6','#3b82f6','#f97316','#8b5cf6','#ef4444']);
+                drawBars(elements.transitionBarChart, transEntries, '#22c55e');
+            };
+
+            const syncMetricsFilters = () => {
+                const statusOptions = STATUS_OPTIONS.map((s) => `<option value="${s.id}">${s.label}</option>`).join('');
+                if (elements.metricsStatusFilter && !elements.metricsStatusFilter.dataset.bound) {
+                    elements.metricsStatusFilter.innerHTML = `<option value="all">Estado: todos</option>${statusOptions}`;
+                    elements.metricsStatusFilter.dataset.bound = '1';
+                }
             };
 
             if (elements.showQuickMetricsOption) {
@@ -6644,14 +7107,19 @@
                     const topShift = Object.values(shiftTotals).sort((a,b) => b.total-a.total)[0] || null;
                     const topShiftText = topShift ? `${String(topShift.shift).toUpperCase()} (${topShift.total})` : 'sin datos';
                     const buttonsPerHour = Math.round(((buttons24h.length / 24) + Number.EPSILON) * 100) / 100;
+                    const filteredEvents = getFilteredMetricEvents();
+                    const opTotal = filteredEvents.filter((e) => ['operation_created', 'status_changed'].includes(e.type)).length;
+                    const newUsers = filteredEvents.filter((e) => e.type === 'user_created').length;
+                    const statusChanges = filteredEvents.filter((e) => e.type === 'status_changed').length;
+                    const usersInRange = new Set(filteredEvents.map((e) => e.contactId).filter(Boolean)).size;
 
                     if (elements.metricsDateLabel) elements.metricsDateLabel.textContent = `Métricas de las últimas 24h`;
-                    if (elements.metricEditedToday) elements.metricEditedToday.textContent = String(editedToday);
-                    if (elements.metricEditedYesterday) elements.metricEditedYesterday.textContent = String(editedYesterday);
+                    if (elements.metricEditedToday) elements.metricEditedToday.textContent = String(opTotal || editedToday);
+                    if (elements.metricEditedYesterday) elements.metricEditedYesterday.textContent = String(usersInRange || editedYesterday);
                     if (elements.metricTopShift) elements.metricTopShift.textContent = topShiftText;
-                    if (elements.metricTransitions24h) elements.metricTransitions24h.textContent = String(transitions24h.length);
+                    if (elements.metricTransitions24h) elements.metricTransitions24h.textContent = String(statusChanges || transitions24h.length);
                     if (elements.metricTopShift24h) elements.metricTopShift24h.textContent = topShiftText;
-                    if (elements.metricButtonsPerHour) elements.metricButtonsPerHour.textContent = String(buttonsPerHour);
+                    if (elements.metricButtonsPerHour) elements.metricButtonsPerHour.textContent = String(buttonsPerHour || newUsers);
                     const allTransitions = buildTransitionSummary();
                     renderTransitionTable(allTransitions);
                     const transitionRows = allTransitions.map(([key, count]) => {
@@ -6729,9 +7197,19 @@
                         }
                     }
 
+                    renderMetricChartsFromEvents();
+
                     if (elements.metricsModal) elements.metricsModal.classList.add('active');
                 };
             }
+
+            syncMetricsFilters();
+            [elements.metricsShiftFilter, elements.metricsFromDate, elements.metricsToDate, elements.metricsStatusFilter, elements.metricsSelectionTypeFilter, elements.metricsOnlyChanges].forEach((el) => {
+                if (!el) return;
+                el.onchange = () => {
+                    if (elements.metricsModal?.classList.contains('active')) renderMetricChartsFromEvents();
+                };
+            });
 
             if (elements.metricsFilterLastBatchBtn) {
                 elements.metricsFilterLastBatchBtn.onclick = () => {
@@ -6745,6 +7223,24 @@
 
             if (elements.exportFullSnapshotBtn) elements.exportFullSnapshotBtn.onclick = exportFullSnapshot;
             if (elements.importFullSnapshotBtn) elements.importFullSnapshotBtn.onclick = importFullSnapshot;
+            if (elements.exportMonthlyFullBtn) elements.exportMonthlyFullBtn.onclick = exportMonthlyFull;
+            if (elements.exportDailyDeltaBtn) elements.exportDailyDeltaBtn.onclick = exportDailyDelta;
+            if (elements.resetBaselineBtn) {
+                elements.resetBaselineBtn.onclick = () => {
+                    const profileId = AppState.activeProfileId || 'default';
+                    if (!confirm(`¿Resetear baseline mensual del perfil ${profileId}?`)) return;
+                    delete AppState.monthlyBaselineByProfile[profileId];
+                    savePreferences();
+                    showNotification('Baseline mensual reseteado', 'warning');
+                };
+            }
+            if (elements.uploadReportBtn) {
+                elements.uploadReportBtn.onclick = async () => {
+                    if (!ensureUploadUnlocked()) return;
+                    const delta = exportDailyDelta();
+                    await queueReportUpload(delta.payload, 'daily-delta');
+                };
+            }
             if (elements.importControlBtn) {
                 elements.importControlBtn.onclick = async () => {
                     if (!ensureControlPasswordAccess()) return;
@@ -6761,6 +7257,63 @@
                     } catch (e) {
                         reportError('importControlFile', e);
                         showNotification(`No se pudo importar archivo de control: ${e?.message || e}`, 'error');
+                    }
+                };
+            }
+
+            if (elements.openThemesOption && elements.themesModal) {
+                elements.openThemesOption.onclick = () => {
+                    renderThemeCards();
+                    elements.themesModal.classList.add('active');
+                    elements.userOptionsModal.classList.remove('active');
+                };
+            }
+            if (elements.closeThemesModal) elements.closeThemesModal.onclick = () => elements.themesModal.classList.remove('active');
+            if (elements.saveCustomThemeBtn) {
+                elements.saveCustomThemeBtn.onclick = () => {
+                    const name = String(elements.themeNameInput?.value || '').trim() || `Tema ${new Date().toLocaleDateString('es-ES')}`;
+                    let id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `theme-${Date.now()}`;
+                    while (AppState.themeCatalog[id]) id = `${id}-2`;
+                    AppState.themeCatalog[id] = {
+                        id,
+                        name,
+                        primary: elements.themePrimary?.value || '#3b82f6',
+                        accent: elements.themeAccent?.value || '#10b981',
+                        bg: elements.themeBg?.value || '#0f172a',
+                        surface: elements.themeSurface?.value || '#1e293b',
+                        text: elements.themeText?.value || '#e2e8f0'
+                    };
+                    applyTheme(id);
+                    renderThemeCards();
+                    showNotification('Tema personalizado guardado', 'success');
+                };
+            }
+            if (elements.exportThemesBtn) {
+                elements.exportThemesBtn.onclick = () => {
+                    downloadFile(JSON.stringify({ schema_version: '1.0.0', generated_at: new Date().toISOString(), themes: AppState.themeCatalog || {} }, null, 2), 'themes.json', 'application/json;charset=utf-8;');
+                };
+            }
+            if (elements.importThemesBtn) {
+                elements.importThemesBtn.onclick = async () => {
+                    try {
+                        const files = await window.electronAPI?.openImportDialog?.();
+                        const selected = Array.isArray(files) ? files.find((f) => /themes\.json$|\.json$/i.test(f)) : null;
+                        if (!selected) return;
+                        const text = await window.electronAPI.readTextFile(selected);
+                        const parsed = JSON.parse(text);
+                        const incoming = parsed?.themes || {};
+                        Object.values(incoming).forEach((theme) => {
+                            if (!theme?.name) return;
+                            let id = theme.id || theme.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                            while (AppState.themeCatalog[id]) id = `${id}-2`;
+                            AppState.themeCatalog[id] = { ...theme, id };
+                        });
+                        savePreferences();
+                        renderThemeCards();
+                        showNotification('Temas importados y mergeados', 'success');
+                    } catch (e) {
+                        reportError('importThemes', e);
+                        showNotification('No se pudo importar themes.json', 'error');
                     }
                 };
             }
@@ -7340,6 +7893,7 @@
                 };
 
                 AppState.contacts.push(newContact);
+                recordMetricEvent('user_created', { profileId: AppState.activeProfileId || 'default', contactId: newContact.id, status: newContact.status, selectionType: 'manual' });
                 addToHistory('Contacto agregado manualmente', name);
                 detectDuplicates();
                 saveData();
@@ -7583,6 +8137,9 @@
                 };
                 loadHistory();
                 loadPreferences();
+                AppState.themeCatalog = { ...getDefaultThemes(), ...(AppState.themeCatalog || {}) };
+                if (!AppState.themeCatalog[AppState.activeThemeId]) AppState.activeThemeId = 'whaticket-blue';
+                applyTheme(AppState.activeThemeId);
                 ensureActiveProfile();
                 refreshProfilesUI();
                 loadOpsData();

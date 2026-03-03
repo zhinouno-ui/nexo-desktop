@@ -163,3 +163,50 @@ Ese comando ejecuta: build Windows NSIS, crea tag `v<version>`, hace push y publ
 
 - A partir de `1.1.18` cada actualización debe documentar **qué cambió vs la versión anterior** en `CHANGELOG.md`.
 - Objetivo: facilitar pruebas regresivas y saber exactamente qué validar antes de publicar el próximo release.
+
+## Métricas por perfil (rápidas + gráficas)
+
+- Centro de métricas por **perfil activo** (PC01/PC02/etc).
+- Filtros disponibles:
+  - Rango de fechas (`desde`/`hasta`, día 00:00→00:00).
+  - Turno (06-14, 14-22, 22-06).
+  - Estado, tipo de selección y `solo cambios`.
+- Gráficas incluidas:
+  - Donut por estados.
+  - Donut por tipo de selección.
+  - Barras por transiciones de estado.
+
+## Exportes de control
+
+- **Mensual Full** (`nexo-monthly-full-v1`): snapshot completo por perfil + baseline mensual.
+- **Diario Delta** (`nexo-daily-delta-v1`): usuarios nuevos y cambios de estado contra baseline mensual.
+- El delta sale en **JSON + CSV** para uso máquina y Excel.
+- El snapshot completo se mantiene separado para auditoría periódica.
+
+## Baseline y auditoría
+
+- Al exportar mensual se guarda baseline por perfil (`monthlyBaselineByProfile`).
+- El diario compara estado actual vs baseline:
+  - nuevo usuario => `new_user`
+  - estado cambiado => `status_change`
+- Se puede resetear baseline por perfil desde métricas (acción manual).
+
+## Subida restringida (stub local)
+
+- Botón `Subir reporte` protegido por clave (`Master123`).
+- Si la clave es válida, habilita subida por **10 minutos**.
+- En esta base la subida se encola localmente en `userData/uploads_queue/<profileId>/`.
+
+## Temas (tipo Whaticket)
+
+- Modal de temas con presets y tema personalizado.
+- Export/Import de `themes.json` para compartir entre PCs.
+- Import hace merge y renombra IDs en conflicto.
+
+## Self-check de exportes
+
+```bash
+npm run selfcheck:exports
+```
+
+Valida que baseline mensual + delta diario detecten correctamente nuevos usuarios y cambios de estado.
