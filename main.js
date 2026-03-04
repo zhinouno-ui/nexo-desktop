@@ -529,6 +529,71 @@ async function tryInstallOnClose() {
   }
 }
 
+
+async function resolveInstallerForInstall() {
+  const explicit = downloadedUpdateMeta?.cachedPath || downloadedUpdateMeta?.downloadedFile || '';
+  if (explicit && fssync.existsSync(explicit)) {
+    return {
+      installerPath: explicit,
+      version: downloadedUpdateMeta?.version || detectVersionFromName(explicit) || '',
+      source: 'downloaded-meta'
+    };
+  }
+
+  const cached = await getCachedInstallers().catch(() => []);
+  const current = app.getVersion();
+  const candidate = (cached || []).find((it) => it?.fullPath && fssync.existsSync(it.fullPath) && compareVersions(it.version, current) > 0);
+  if (candidate) {
+    return { installerPath: candidate.fullPath, version: candidate.version || detectVersionFromName(candidate.fullPath), source: 'cache-fallback' };
+  }
+
+  return { installerPath: '', version: '', source: 'none' };
+}
+
+async function launchUpdateAssistant(installerPath, version) {
+  if (!installerPath || !fssync.existsSync(installerPath)) {
+    throw new Error('No se encontró el instalador descargado para actualizar.');
+  }
+  const detached = spawn(process.execPath, [
+    '--update-assistant',
+    `--installer=${installerPath}`,
+    `--version=${version || ''}`
+  ], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: false
+  });
+  detached.unref();
+  await persistCurrentVersionMeta({ reason: 'before-install', targetVersion: version || '' });
+  isQuitting = true;
+  setTimeout(() => app.quit(), 120);
+}
+
+async function tryInstallOnClose() {
+  if (installAttemptInProgress) return false;
+  if (!app.isPackaged) return false;
+  if (!installOnCloseArmed) return false;
+  if (downloadedUpdateMeta?.suspicious) return false;
+  installAttemptInProgress = true;
+  try {
+    const resolved = await resolveInstallerForInstall();
+    if (!resolved.installerPath) return false;
+    lastUpdateAttempt = { at: new Date().toISOString(), stage: 'installing-on-close', ok: null, message: resolved.version || '' };
+    await appendErrorLog('updater:install-on-close', new Error('Install armed on window close'), {
+      installer: resolved.installerPath,
+      version: resolved.version,
+      source: resolved.source
+    });
+    await launchUpdateAssistant(resolved.installerPath, resolved.version);
+    return true;
+  } catch (error) {
+    await appendErrorLog('updater:install-on-close-failed', error, {});
+    return false;
+  } finally {
+    installAttemptInProgress = false;
+  }
+}
+
 async function handleUpdateDownloaded(info) {
   const downloadedFile = info?.downloadedFile || '';
   const version = info?.version || detectVersionFromName(downloadedFile) || '';
@@ -975,5 +1040,5 @@ app.on('before-quit', () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // mantener proceso vivo para tareas en segundo plano/tray
 });
