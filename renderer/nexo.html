@@ -2196,6 +2196,84 @@
         body.perf-mode .loading-preview-track { animation: none !important; }
         body.perf-mode .cards-grid { gap: 8px !important; }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+
+        body.light-mode .header,
+        body.light-mode .search-bar,
+        body.light-mode .progress-bar-container,
+        body.light-mode .contact-card,
+        body.light-mode .list-item,
+        body.light-mode .chart-card,
+        body.light-mode .metrics-card,
+        body.light-mode .modal-content {
+            background: #f8fbff !important;
+            color: var(--text-primary);
+            border-color: rgba(100,116,139,.26) !important;
+            box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        }
+        body.light-mode .chart-card canvas,
+        body.light-mode .loading-preview-bg {
+            background: #eef4fb !important;
+        }
+        body.light-mode .search-input.ghost-value-active {
+            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
+            color:#64748b;
+        }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+        }
+        body.perf-mode .loading-preview-track { animation: none !important; }
+        body.perf-mode .cards-grid { gap: 8px !important; }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -2577,6 +2655,12 @@
                     <input id="perfDebugToggle" type="checkbox">
                     <label for="perfDebugToggle" style="color:var(--text-secondary);">Modo debug performance</label>
                 </div>
+                <div id="perfDebugPanel" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px 4px 2px;font-size:.78rem;color:var(--text-secondary);">
+                    <div>DOM items: <strong id="perfDomItems">0</strong></div>
+                    <div>Filtro: <strong id="perfFilterMs">0ms</strong></div>
+                    <div>Render: <strong id="perfRenderMs">0ms</strong></div>
+                    <div>Long tasks: <strong id="perfLongTasks">0</strong></div>
+                </div>
             </div>
             <div class="modal-actions">
                 <button id="closeUserOptionsModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
@@ -2942,7 +3026,7 @@
             filteredContacts: [],
             selectedContacts: new Set(),
             currentPage: 1,
-            itemsPerPage: 20,
+            itemsPerPage: 400,
             searchTerm: '',
             statusFilter: '',
             originFilter: '',
@@ -3007,7 +3091,10 @@
             themeCatalog: {},
             activeThemeId: 'whaticket-blue',
             lightMode: false,
-            profilePageMap: {}
+            profilePageMap: {},
+            perfStats: { filterMs: 0, renderMs: 0, domItems: 0, longTasks: 0 },
+            searchIndex: { allIds: [], byId: new Map(), byStatus: new Map(), byShift: new Map(), byProfile: new Map(), byPhoneType: new Map(), byOrigin: new Map() },
+            searchIndexDirty: true
         };
 
         function ensureReviewMilestonesState() {
@@ -3147,6 +3234,10 @@
             updateStatusText: $('#updateStatusText'),
             updateProgressFill: $('#updateProgressFill'),
             perfDebugToggle: $('#perfDebugToggle'),
+            perfDomItems: $('#perfDomItems'),
+            perfFilterMs: $('#perfFilterMs'),
+            perfRenderMs: $('#perfRenderMs'),
+            perfLongTasks: $('#perfLongTasks'),
             appLoadingOverlay: $('#appLoadingOverlay'),
             appLoadingText: $('#appLoadingText'),
             appLoadingProgress: $('#appLoadingProgress'),
@@ -4814,6 +4905,7 @@
         }
 
         function saveData(force = false) {
+            AppState.searchIndexDirty = true;
             pendingContactMutations += 1;
             const elapsed = Date.now() - lastContactSaveAt;
             if (force || pendingContactMutations >= CONTACT_SAVE_BATCH_SIZE || elapsed >= CONTACT_SAVE_MAX_WAIT_MS) {
@@ -5261,54 +5353,98 @@
             return String(contact?.lastImportBatchId || contact?.importBatchId || '').trim();
         }
 
-        function applyFilters() {
+        function mapPush(map, key, id) {
+            if (!map.has(key)) map.set(key, []);
+            map.get(key).push(id);
+        }
+
+        function rebuildSearchIndex() {
+            const idx = { allIds: [], byId: new Map(), byStatus: new Map(), byShift: new Map(), byProfile: new Map(), byPhoneType: new Map(), byOrigin: new Map() };
+            for (const contact of (AppState.contacts || [])) {
+                buildContactDerivedFields(contact);
+                const id = contact.id;
+                idx.allIds.push(id);
+                idx.byId.set(id, contact);
+                mapPush(idx.byStatus, normalizeSearchText(contact.status), id);
+                mapPush(idx.byShift, normalizeSearchText(contact.assignedShift), id);
+                mapPush(idx.byProfile, String(contact.profileId || 'default'), id);
+                const phoneType = hasMissingUsername(contact) ? 'missing-user' : (contact.phoneAlert ? 'suspicious' : ((contact.phone || '').trim() ? 'with' : 'without'));
+                mapPush(idx.byPhoneType, phoneType, id);
+                mapPush(idx.byOrigin, normalizeSearchText(contact.origin), id);
+            }
+            AppState.searchIndex = idx;
+            AppState.searchIndexDirty = false;
+        }
+
+        function intersectIds(baseIds, allowedSet) {
+            if (!allowedSet) return baseIds;
+            return baseIds.filter((id) => allowedSet.has(id));
+        }
+
+        function applyFiltersIndexed() {
+            const t0 = performance.now();
             const parsedQuery = parseSearchQuery(AppState.searchTerm);
             const selectedStatus = AppState.statusFilter || parsedQuery.status;
             const selectedOrigin = AppState.originFilter || parsedQuery.origin;
             const selectedShift = AppState.shiftFilter || parsedQuery.shift;
+            const activeProfile = AppState.activeProfileId || 'default';
             const editStats = getEditDayStats();
+            let ids = (AppState.searchIndex.byProfile.get(activeProfile) || []).slice();
 
-            AppState.filteredContacts = AppState.contacts.filter(contact => {
-                buildContactDerivedFields(contact);
-                const matchesSearch = parsedQuery.terms.length === 0 || parsedQuery.terms.every(term => contact._searchKey.includes(term));
-                const matchesStatus = !selectedStatus || normalizeSearchText(contact.status) === selectedStatus;
-                const isLastUploadFilter = selectedOrigin === '__last_upload__';
-                const matchesOrigin = isLastUploadFilter
-                    ? (AppState.lastImportBatchId && getContactBatchId(contact) === AppState.lastImportBatchId)
-                    : (!selectedOrigin || normalizeSearchText(contact.origin) === selectedOrigin || (normalizeSearchText(selectedOrigin) === 'operaciones panel' && !!contact.ops));
-                const activeProfile = AppState.activeProfileId || 'default';
-                const matchesProfile = (contact.profileId || 'default') === activeProfile;
-                const matchesShift = !selectedShift || normalizeSearchText(contact.assignedShift) === selectedShift;
-
-                let matchesPhone = true;
-                if (AppState.phoneFilter === 'with') matchesPhone = !!(contact.phone || '').trim();
-                else if (AppState.phoneFilter === 'without') matchesPhone = !(contact.phone || '').trim();
-                else if (AppState.phoneFilter === 'missing-user') matchesPhone = hasMissingUsername(contact);
-                else if (AppState.phoneFilter === 'suspicious') matchesPhone = !!contact.phoneAlert;
-
-                let matchesOps = true;
-                if (AppState.opsFilter === 'matched') matchesOps = !!contact.ops;
-                else if (AppState.opsFilter === 'nomatch') matchesOps = !contact.ops;
-
-                let matchesEditActivity = true;
-                const editedDay = getIsoDay(contact.lastEditedAt);
-                if (AppState.editActivityFilter === 'today10plus') {
-                    const today = getIsoDay(new Date());
-                    matchesEditActivity = editStats.todayCount > 10 && editedDay === today;
-                } else if (AppState.editActivityFilter === 'any10plus') {
-                    matchesEditActivity = !!editedDay && editStats.hotDays.has(editedDay);
-                }
-
-                return matchesProfile && matchesSearch && matchesStatus && matchesOrigin && matchesShift && matchesPhone && matchesOps && matchesEditActivity;
-            });
-
+            if (selectedStatus) ids = intersectIds(ids, new Set(AppState.searchIndex.byStatus.get(selectedStatus) || []));
+            if (selectedShift) ids = intersectIds(ids, new Set(AppState.searchIndex.byShift.get(selectedShift) || []));
+            if (AppState.phoneFilter && AppState.phoneFilter !== 'all') {
+                const bucket = AppState.phoneFilter === 'with' ? 'with' : AppState.phoneFilter === 'without' ? 'without' : AppState.phoneFilter;
+                ids = intersectIds(ids, new Set(AppState.searchIndex.byPhoneType.get(bucket) || []));
+            }
+            if (selectedOrigin === '__last_upload__') {
+                const lastBatch = AppState.lastImportBatchId;
+                ids = ids.filter((id) => {
+                    const c = AppState.searchIndex.byId.get(id);
+                    return lastBatch && getContactBatchId(c) === lastBatch;
+                });
+            } else if (selectedOrigin) {
+                const norm = normalizeSearchText(selectedOrigin);
+                ids = norm === 'operaciones panel' ? ids.filter((id) => !!AppState.searchIndex.byId.get(id)?.ops) : intersectIds(ids, new Set(AppState.searchIndex.byOrigin.get(norm) || []));
+            }
+            if (AppState.opsFilter === 'matched') ids = ids.filter((id) => !!AppState.searchIndex.byId.get(id)?.ops);
+            else if (AppState.opsFilter === 'nomatch') ids = ids.filter((id) => !AppState.searchIndex.byId.get(id)?.ops);
+            if (parsedQuery.terms.length) {
+                ids = ids.filter((id) => {
+                    const c = AppState.searchIndex.byId.get(id);
+                    return parsedQuery.terms.every((term) => (c?._searchKey || '').includes(term));
+                });
+            }
+            if (AppState.editActivityFilter !== 'all') {
+                ids = ids.filter((id) => {
+                    const c = AppState.searchIndex.byId.get(id);
+                    const editedDay = getIsoDay(c?.lastEditedAt);
+                    if (AppState.editActivityFilter === 'today10plus') {
+                        const today = getIsoDay(new Date());
+                        return editStats.todayCount > 10 && editedDay === today;
+                    }
+                    if (AppState.editActivityFilter === 'any10plus') return !!editedDay && editStats.hotDays.has(editedDay);
+                    return true;
+                });
+            }
+            let contacts = ids.map((id) => AppState.searchIndex.byId.get(id)).filter(Boolean);
             if (AppState.opsFilter === 'top50' || AppState.opsFilter === 'top100') {
                 const limit = AppState.opsFilter === 'top50' ? 50 : 100;
-                AppState.filteredContacts = AppState.filteredContacts
-                    .filter(c => c.ops)
-                    .sort((a, b) => (b.ops?.score || 0) - (a.ops?.score || 0))
-                    .slice(0, limit);
+                contacts = contacts.filter(c => c.ops).sort((a,b)=>(b.ops?.score||0)-(a.ops?.score||0)).slice(0, limit);
             }
+            AppState.filteredContacts = contacts;
+            AppState.perfStats.filterMs = Math.round(performance.now() - t0);
+        }
+
+        function updatePerfPanel() {
+            if (elements.perfDomItems) elements.perfDomItems.textContent = String(AppState.perfStats.domItems || 0);
+            if (elements.perfFilterMs) elements.perfFilterMs.textContent = `${AppState.perfStats.filterMs || 0}ms`;
+            if (elements.perfRenderMs) elements.perfRenderMs.textContent = `${AppState.perfStats.renderMs || 0}ms`;
+            if (elements.perfLongTasks) elements.perfLongTasks.textContent = String(AppState.perfStats.longTasks || 0);
+        }
+
+        function applyFilters() {
+            applyFiltersIndexed();
         }
 
         function updateStats() {
@@ -6074,20 +6210,21 @@
             const start = (AppState.currentPage - 1) * AppState.itemsPerPage;
             const end = start + AppState.itemsPerPage;
             const pageContacts = AppState.filteredContacts.slice(start, end);
-            
             if (pageContacts.length === 0 && AppState.filteredContacts.length > 0 && AppState.currentPage > 1) {
                 const totalPages = Math.max(1, Math.ceil(AppState.filteredContacts.length / AppState.itemsPerPage));
                 AppState.currentPage = Math.min(AppState.currentPage, totalPages);
                 renderPaginatedView(renderFunc);
                 return;
             }
-            
+            const virtualLimit = AppState.currentView === 'cards' ? 140 : 220;
+            const renderContacts = pageContacts.slice(0, virtualLimit);
+            AppState.perfStats.domItems = renderContacts.length;
             if (AppState.currentView === 'cards') {
-                elements.cardsView.innerHTML = pageContacts.length > 0 
-                    ? pageContacts.map(renderFunc).join('') 
+                elements.cardsView.innerHTML = renderContacts.length > 0
+                    ? renderContacts.map(renderFunc).join('') + (pageContacts.length > virtualLimit ? `<div style="grid-column:1/-1;padding:10px;color:var(--text-secondary);text-align:center;">Mostrando ${virtualLimit} de ${pageContacts.length} en esta página para priorizar fluidez.</div>` : '')
                     : '<div style="text-align: center; padding: 50px; color: var(--text-secondary); grid-column: 1 / -1;">No se encontraron contactos</div>';
             } else {
-                const listItems = pageContacts.map(renderFunc).join('');
+                const listItems = renderContacts.map(renderFunc).join('');
                 elements.listView.innerHTML = `
                     <div class="list-header">
                         <div><input type="checkbox" id="selectAllCheckbox"></div>
@@ -6099,14 +6236,14 @@
                         <div>Acciones</div>
                     </div>
                     ${listItems || '<div style="text-align: center; padding: 50px; color: var(--text-secondary); grid-column: 1 / -1;">No se encontraron contactos</div>'}
+                    ${pageContacts.length > virtualLimit ? `<div style="padding:10px 20px;color:var(--text-secondary);">Mostrando ${virtualLimit} de ${pageContacts.length} en esta página para priorizar fluidez.</div>` : ''}
                 `;
-                
                 const selectAllCheckbox = $('#selectAllCheckbox');
                 if (selectAllCheckbox) {
-                    const areAllOnPageSelected = pageContacts.length > 0 && pageContacts.every(c => AppState.selectedContacts.has(c.id));
+                    const areAllOnPageSelected = renderContacts.length > 0 && renderContacts.every(c => AppState.selectedContacts.has(c.id));
                     selectAllCheckbox.checked = areAllOnPageSelected;
                     selectAllCheckbox.onchange = (e) => {
-                        pageContacts.forEach(c => {
+                        renderContacts.forEach(c => {
                             if (e.target.checked) AppState.selectedContacts.add(c.id);
                             else AppState.selectedContacts.delete(c.id);
                         });
@@ -6115,7 +6252,6 @@
                     };
                 }
             }
-            
             renderPagination();
         }
 
@@ -6757,6 +6893,7 @@
         }
 
         function renderNow() {
+            const renderStartAt = performance.now();
             const isShiftsView = AppState.currentView === 'shifts';
             elements.mainApp.classList.toggle('shifts-mode', isShiftsView);
 
@@ -6773,6 +6910,7 @@
 
             elements.quickReview.style.display = 'none';
             AppState.activeShift = null;
+            if (AppState.searchIndexDirty || !AppState.searchIndex?.byId || AppState.searchIndex.byId.size !== AppState.contacts.length) rebuildSearchIndex();
             applyFilters();
             AppState.filteredContacts.sort((a, b) => {
                 if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
@@ -6788,6 +6926,23 @@
             renderPaginatedView(AppState.currentView === 'cards' ? createCard : createListItem);
             updateBulkActionsBar();
             updateOpsUploadReminder();
+            AppState.perfStats.renderMs = Math.round(performance.now() - renderStartAt);
+            updatePerfPanel();
+        }
+
+        let renderQueued = false;
+        function render(force = false) {
+            if (force) {
+                renderQueued = false;
+                renderNow();
+                return;
+            }
+            if (renderQueued) return;
+            renderQueued = true;
+            requestAnimationFrame(() => {
+                renderQueued = false;
+                renderNow();
+            });
         }
 
         let renderQueued = false;
@@ -7291,7 +7446,20 @@
                     document.body.classList.toggle('perf-mode', AppState.perfDebug);
                     localStorage.setItem('perfDebugMode', AppState.perfDebug ? '1' : '0');
                     showNotification(AppState.perfDebug ? 'Modo rendimiento activado: animaciones y efectos mínimos' : 'Modo rendimiento desactivado', 'info');
+                    updatePerfPanel();
                 };
+                updatePerfPanel();
+            }
+            if (window.PerformanceObserver) {
+                try {
+                    const po = new PerformanceObserver((list) => {
+                        const entries = list.getEntries() || [];
+                        if (!entries.length) return;
+                        AppState.perfStats.longTasks += entries.length;
+                        updatePerfPanel();
+                    });
+                    po.observe({ entryTypes: ['longtask'] });
+                } catch (_) {}
             }
             if (elements.checkUpdatesOption && window.electronAPI?.checkForUpdates) {
                 elements.checkUpdatesOption.onclick = async () => {
