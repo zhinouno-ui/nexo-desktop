@@ -347,7 +347,7 @@
             position: relative;
         }
         .search-input:focus { border-color: var(--accent-primary); outline: none; }
-        .search-input.ghost-value { color: #334155; font-style: italic; }
+        .search-input.ghost-value { color: var(--text-secondary); font-style: italic; }
         .search-input.ghost-value-active { background: linear-gradient(90deg, rgba(15,23,42,.96), rgba(51,65,85,.92)); color:#94a3b8; }
         .btn-midnight-pulse { animation: pulseMidnight 1s ease-in-out infinite; box-shadow: 0 0 0 2px rgba(239,68,68,.35) inset; }
         @keyframes pulseMidnight { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.03); opacity:.75; } }
@@ -2040,6 +2040,84 @@
             scroll-behavior: auto !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+
+        body.light-mode .header,
+        body.light-mode .search-bar,
+        body.light-mode .progress-bar-container,
+        body.light-mode .contact-card,
+        body.light-mode .list-item,
+        body.light-mode .chart-card,
+        body.light-mode .metrics-card,
+        body.light-mode .modal-content {
+            background: #f8fbff !important;
+            color: var(--text-primary);
+            border-color: rgba(100,116,139,.26) !important;
+            box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        }
+        body.light-mode .chart-card canvas,
+        body.light-mode .loading-preview-bg {
+            background: #eef4fb !important;
+        }
+        body.light-mode .search-input.ghost-value-active {
+            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
+            color:#64748b;
+        }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+        }
+        body.perf-mode .loading-preview-track { animation: none !important; }
+        body.perf-mode .cards-grid { gap: 8px !important; }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -2452,6 +2530,7 @@
         <div class="modal-content" style="max-width: 760px;">
             <div class="modal-header"><i class="fas fa-chart-line"></i> Centro de métricas</div>
             <div id="metricsDateLabel" style="color:var(--text-secondary); margin-bottom:8px;">Resumen diario</div>
+            <div id="metricsOpsSummary" style="color:var(--text-secondary); margin-bottom:8px; font-size:.9rem;">Movimientos ops hoy: - · turno actual: -</div>
             <div class="metrics-filters">
                 <select id="metricsShiftFilter" class="filter-select">
                     <option value="all">Turno: todos</option>
@@ -2947,6 +3026,7 @@
             uploadReportBtn: $('#uploadReportBtn'),
             resetBaselineBtn: $('#resetBaselineBtn'),
             metricsDateLabel: $('#metricsDateLabel'),
+            metricsOpsSummary: $('#metricsOpsSummary'),
             metricsFilterLastBatchBtn: $('#metricsFilterLastBatchBtn'),
             metricsDeleteLastBatchBtn: $('#metricsDeleteLastBatchBtn'),
             exportFullSnapshotBtn: $('#exportFullSnapshotBtn'),
@@ -3671,8 +3751,37 @@
         }
 
 
+        let auxSaveTimer = null;
+        function queueAuxStorageSave() {
+            if (auxSaveTimer) clearTimeout(auxSaveTimer);
+            auxSaveTimer = setTimeout(() => {
+                auxSaveTimer = null;
+                try {
+                    localStorage.setItem('buttonPressEvents', JSON.stringify((AppState.buttonPressEvents || []).slice(0, 20000)));
+                    localStorage.setItem('statusTransitions', JSON.stringify((AppState.statusTransitions || []).slice(0, 5000)));
+                    localStorage.setItem('contactsHistory', JSON.stringify(AppState.history || []));
+                } catch (e) {
+                    reportError('queueAuxStorageSave', e);
+                }
+            }, 1000);
+        }
+
+        function flushAuxStorageSave() {
+            if (auxSaveTimer) {
+                clearTimeout(auxSaveTimer);
+                auxSaveTimer = null;
+            }
+            try {
+                localStorage.setItem('buttonPressEvents', JSON.stringify((AppState.buttonPressEvents || []).slice(0, 20000)));
+                localStorage.setItem('statusTransitions', JSON.stringify((AppState.statusTransitions || []).slice(0, 5000)));
+                localStorage.setItem('contactsHistory', JSON.stringify(AppState.history || []));
+            } catch (e) {
+                reportError('flushAuxStorageSave', e);
+            }
+        }
+
         function saveButtonPressEvents() {
-            try { localStorage.setItem('buttonPressEvents', JSON.stringify((AppState.buttonPressEvents || []).slice(0, 20000))); } catch (e) { reportError('saveButtonPressEvents', e); }
+            queueAuxStorageSave();
         }
 
         function saveShiftSnapshots() {
@@ -3680,19 +3789,11 @@
         }
 
         function saveStatusTransitions() {
-            try {
-                localStorage.setItem('statusTransitions', JSON.stringify((AppState.statusTransitions || []).slice(0, 5000)));
-            } catch (e) {
-                reportError('saveStatusTransitions', e);
-            }
+            queueAuxStorageSave();
         }
 
         function saveHistory() {
-            try {
-                localStorage.setItem('contactsHistory', JSON.stringify(AppState.history));
-            } catch (e) {
-                reportError('saveHistory', e);
-            }
+            queueAuxStorageSave();
         }
 
         function loadHistory() {
@@ -3965,6 +4066,28 @@
             return parseCSV(text);
         }
 
+
+        function parseDelimitedWithMapping(text, mapping = {}) {
+            const delimiter = mapping.delimiter || detectDelimiter(text);
+            const lines = String(text || '').split(/\r?\n/).filter(Boolean);
+            if (lines.length < 2) return [];
+            const split = (line) => delimiter === ',' ? parseCsvRow(line) : String(line || '').split(delimiter).map((v) => v.trim());
+            const rows = lines.map(split);
+            const nameIdx = Number(mapping.nameIdx ?? -1);
+            const phoneIdx = Number(mapping.phoneIdx ?? -1);
+            const tagIdx = Number(mapping.tagIdx ?? -1);
+            const out = [];
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i] || [];
+                const name = nameIdx >= 0 ? String(row[nameIdx] || '').trim() : '';
+                const phone = phoneIdx >= 0 ? normalizePhoneNumber(row[phoneIdx] || '') : '';
+                const origin = tagIdx >= 0 ? String(row[tagIdx] || '').trim() : '';
+                if (!name && !phone) continue;
+                out.push({ name: name || phone, phone: phone || '', origin: origin || '', status: 'sin revisar' });
+            }
+            return out;
+        }
+
         async function persistContactsChunkedForImport(contacts) {
             if (!(window.nexoStore && typeof window.nexoStore.importContactsChunk === 'function')) return false;
             const chunkSize = 400;
@@ -4003,9 +4126,9 @@
                 if (delimiter === ',') return parseCsvRow(line);
                 return String(line || '').split(delimiter).map((v) => v.trim());
             };
-            const rows = lines.slice(0, 21).map((l) => parsePreviewRow(l));
+            const rows = lines.slice(0, 11).map((l) => parsePreviewRow(l));
             const header = rows[0] || [];
-            const dataRows = rows.slice(1, 21);
+            const dataRows = rows.slice(1, 11);
 
             const colOptions = ['(vacío)', ...header];
             const fillSelect = (el, preferredRegex) => {
@@ -4043,8 +4166,10 @@
             };
 
             const renderTable = () => {
-                const head = header.map((h) => `<th>${h || '(columna)'}</th>`).join('');
-                const body = dataRows.map((row) => `<tr>${header.map((_,i)=>`<td>${(row[i]||'').toString().replace(/</g,'&lt;')}</td>`).join('')}</tr>`).join('');
+                const activeIdx = header.map((_, i) => i).filter((i) => dataRows.some((row) => String(row[i] || "").trim()));
+                const idx = activeIdx.length ? activeIdx : header.map((_, i) => i);
+                const head = idx.map((i) => `<th>${header[i] || "(columna)"}</th>`).join("");
+                const body = dataRows.map((row) => `<tr>${idx.map((i)=>`<td>${(row[i]||"").toString().replace(/</g,"&lt;")}</td>`).join("")}</tr>`).join("");
                 elements.importDiagTableWrap.innerHTML = `<table class="import-diag-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
             };
 
@@ -4072,11 +4197,11 @@
             return new Promise((resolve) => {
                 elements.importDiagCancel.onclick = () => {
                     elements.importDiagnosticsModal.classList.remove('active');
-                    resolve(false);
+                    resolve({ ok: false });
                 };
                 elements.importDiagContinue.onclick = () => {
                     elements.importDiagnosticsModal.classList.remove('active');
-                    resolve(true);
+                    resolve({ ok: true, mapping: { delimiter, nameIdx: parseInt(elements.importMapName?.value || "-1",10), phoneIdx: parseInt(elements.importMapPhone?.value || "-1",10), tagIdx: parseInt(elements.importMapTag?.value || "-1",10) } });
                 };
             });
         }
@@ -4106,15 +4231,28 @@
                 const text = await file.text();
                 const profileIdForFile = AppState.splitImportByFile && selectedFiles.length > 1 ? ensureProfileByName((file.name || '').replace(/\.[^.]+$/, '')) : (AppState.activeProfileId || 'default');
                 const profileLabel = (AppState.profiles.find(p => p.id === profileIdForFile)?.name || 'Base principal');
-                const okPreview = await showImportDiagnosticsPanel(file.name, text, profileLabel);
-                if (!okPreview) continue;
+                const previewResult = await showImportDiagnosticsPanel(file.name, text, profileLabel);
+                if (!previewResult?.ok) continue;
                 if (AppState.importCancelRequested) break;
 
                 setLoadingState(true, `Parseando… ${file.name}`, 10, true);
-                const parsedContacts = await perfMark('import parse', () => parseContactsInWorker(file.name, String(text || ''), ({ processed = 0, total = 0 }) => {
-                    const pct = total > 0 ? Math.round((processed / total) * 45) : 0;
-                    setLoadingState(true, `Parseando… ${processed}/${total}`, 10 + pct, true);
-                }));
+                let parsedContacts = [];
+                try {
+                    parsedContacts = await perfMark('import parse', () => parseContactsInWorker(file.name, String(text || ''), ({ processed = 0, total = 0 }) => {
+                        const pct = total > 0 ? Math.round((processed / total) * 45) : 0;
+                        setLoadingState(true, `Parseando… ${processed}/${total}`, 10 + pct, true);
+                    }));
+                } catch (parseErr) {
+                    reportError('import-parse-worker', parseErr, { file: file.name });
+                }
+                if (!Array.isArray(parsedContacts) || parsedContacts.length === 0) {
+                    parsedContacts = parseDelimitedWithMapping(text, previewResult?.mapping || {});
+                    if (parsedContacts.length) {
+                        showNotification(`Lectura asistida aplicada en ${file.name}: ${parsedContacts.length} filas`, "info");
+                    } else {
+                        throw new Error(`No se pudo leer ${file.name}. Revisá mapeo de columnas.`);
+                    }
+                }
 
                 setLoadingState(true, `Integrando… ${file.name}`, 60, true);
                 console.info('[import] merge start', { file: file.name, rows: parsedContacts.length });
@@ -4259,7 +4397,9 @@
                     const { byAlias, importedRows } = await parseOperationsCsvChunked(String(e.target.result || ''), ({ processed = 0, total = 0 }) => {
                         const pct = total > 0 ? Math.min(99, Math.round((processed / total) * 100)) : 0;
                         setSaveState('pending', `Procesando operaciones ${pct}%`);
+                        setLoadingState(true, `Procesando operaciones ${processed}/${total}`, pct, false);
                     });
+                    setLoadingState(true, "Aplicando operaciones…", 100, false);
                     mergeOpsProfiles(byAlias);
                     syncOpsToContacts({ createNewUsers: true });
                     detectDuplicates();
@@ -4503,6 +4643,8 @@
         }
 
         let saveDebounceTimer = null;
+        let lastLoadingPreviewAt = 0;
+        let lastStorageDiagAt = 0;
         let pendingContactMutations = 0;
         let lastContactSaveAt = 0;
         const CONTACT_SAVE_BATCH_SIZE = 100;
@@ -4538,7 +4680,10 @@
                 manageAutomaticBackup();
                 maybeDownloadAutomaticBackup('save');
                 setSaveState('ok', `Guardado ${new Date().toLocaleTimeString('es-ES')}`);
-                refreshStorageDiagnostics();
+                if (Date.now() - lastStorageDiagAt > 15000) {
+                    lastStorageDiagAt = Date.now();
+                    refreshStorageDiagnostics();
+                }
                 lastContactSaveAt = Date.now();
                 pendingContactMutations = 0;
             } catch (e) {
@@ -4558,7 +4703,10 @@
                     manageAutomaticBackup();
                     maybeDownloadAutomaticBackup('save-recovery');
                     setSaveState('ok', `Guardado ${new Date().toLocaleTimeString('es-ES')}`);
+                    if (Date.now() - lastStorageDiagAt > 15000) {
+                    lastStorageDiagAt = Date.now();
                     refreshStorageDiagnostics();
+                }
                     return;
                 } catch (e2) {
                     reportError('saveData-recovery', e2);
@@ -4569,7 +4717,10 @@
                         manageAutomaticBackup();
                         maybeDownloadAutomaticBackup('save-critical-space');
                         setSaveState('warn', 'Guardado parcial (espacio justo)');
-                        refreshStorageDiagnostics();
+                        if (Date.now() - lastStorageDiagAt > 15000) {
+                    lastStorageDiagAt = Date.now();
+                    refreshStorageDiagnostics();
+                }
                         showNotification('Se guardaron contactos priorizando espacio local', 'info');
                         return;
                     } catch (e3) {
@@ -4676,7 +4827,10 @@
                     render();
                     manageAutomaticBackup();
                     setSaveState('ok', `Cargado ${new Date().toLocaleTimeString('es-ES')}`);
+                    if (Date.now() - lastStorageDiagAt > 15000) {
+                    lastStorageDiagAt = Date.now();
                     refreshStorageDiagnostics();
+                }
                     announceGeneral(`Base cargada: ${AppState.contacts.length} contactos`, 'success');
                 } else {
                     elements.uploadScreen.classList.remove('hidden');
@@ -4963,13 +5117,26 @@
                     <div class="history-item" style="display:flex;justify-content:space-between;align-items:center;">
                         <div><strong>${p.name}</strong><div class="history-item-muted">${AppState.contacts.filter(c => (c.profileId || 'default') === p.id).length} contactos</div></div>
                         <div style="display:flex;gap:8px;">
-                            <button class="btn" onclick="switchProfile('${p.id}')">Abrir</button>
-                            <button class="btn" onclick="renameProfile('${p.id}')">Renombrar</button>${p.id !== 'default' ? `<button class="btn btn-danger" onclick="deleteProfile('${p.id}')">Borrar</button>` : ''}
+                            <button class="btn" data-profile-action="open" data-profile-id="${p.id}">Abrir</button>
+                            <button class="btn" data-profile-action="rename" data-profile-id="${p.id}">Renombrar</button>${p.id !== 'default' ? `<button class="btn btn-danger" data-profile-action="delete" data-profile-id="${p.id}">Borrar</button>` : ''}
                         </div>
                     </div>
                 `).join('');
             }
             if (elements.splitImportByFileToggle) elements.splitImportByFileToggle.checked = !!AppState.splitImportByFile;
+            if (elements.profilesList && !elements.profilesList.dataset.boundActions) {
+                elements.profilesList.dataset.boundActions = "1";
+                elements.profilesList.onclick = (ev) => {
+                    const btn = ev.target.closest("[data-profile-action]");
+                    if (!btn) return;
+                    const action = btn.getAttribute("data-profile-action");
+                    const pid = btn.getAttribute("data-profile-id");
+                    if (!pid) return;
+                    if (action === "open") window.switchProfile(pid);
+                    else if (action === "rename") window.renameProfile(pid);
+                    else if (action === "delete") window.deleteProfile(pid);
+                };
+            }
         }
 
         window.switchProfile = (profileId) => {
@@ -6831,12 +6998,19 @@
             if (elements.appLoadingText) elements.appLoadingText.textContent = message;
             if (elements.appLoadingProgress) elements.appLoadingProgress.style.width = `${Math.max(0, Math.min(100, progress ?? 0))}%`;
             if (elements.cancelImportBtn) elements.cancelImportBtn.style.display = cancelable ? 'inline-flex' : 'none';
-            if (active) renderLoadingPreview();
+            if (active) {
+                const now = Date.now();
+                if (now - lastLoadingPreviewAt > (AppState.perfDebug ? 900 : 350)) {
+                    lastLoadingPreviewAt = now;
+                    renderLoadingPreview();
+                }
+            }
         }
 
         function renderLoadingPreview() {
             if (!elements.loadingPreviewTrack) return;
-            const rows = (AppState.contacts || []).slice(0, 60).map((c) => (
+            const previewLimit = AppState.perfDebug ? 20 : 60;
+            const rows = (AppState.contacts || []).slice(0, previewLimit).map((c) => (
                 `<div class="loading-preview-row"><div>${(c.name || 'Sin nombre').toString().replace(/</g, '&lt;')}</div><div>${(c.phone || '-').toString().replace(/</g, '&lt;')}</div><div>${(c.status || 'sin revisar').toString().replace(/</g, '&lt;')}</div></div>`
             )).join('');
             elements.loadingPreviewTrack.innerHTML = rows || '<div class="loading-preview-row"><div>Sin datos</div><div>-</div><div>sin revisar</div></div>';
@@ -7023,7 +7197,7 @@
                     AppState.perfDebug = !!e.target.checked;
                     document.body.classList.toggle('perf-mode', AppState.perfDebug);
                     localStorage.setItem('perfDebugMode', AppState.perfDebug ? '1' : '0');
-                    showNotification(`Modo debug performance ${AppState.perfDebug ? 'activado' : 'desactivado'}`, 'info');
+                    showNotification(AppState.perfDebug ? 'Modo rendimiento activado: animaciones y efectos mínimos' : 'Modo rendimiento desactivado', 'info');
                 };
             }
             if (elements.checkUpdatesOption && window.electronAPI?.checkForUpdates) {
@@ -7626,6 +7800,10 @@
                     const usersInRange = new Set(filteredEvents.map((e) => e.contactId).filter(Boolean)).size;
 
                     if (elements.metricsDateLabel) elements.metricsDateLabel.textContent = `Métricas de las últimas 24h`;
+                    if (elements.metricsOpsSummary) {
+                        const opsSummary = getOpsSummaryForMetrics();
+                        elements.metricsOpsSummary.textContent = `Movimientos ops hoy: ${opsSummary.day} · turno ${String(opsSummary.shiftNow || "-").toUpperCase()}: ${opsSummary.shift}`;
+                    }
                     if (elements.metricEditedToday) elements.metricEditedToday.textContent = String(opTotal || editedToday);
                     if (elements.metricEditedYesterday) elements.metricEditedYesterday.textContent = String(usersInRange || editedYesterday);
                     if (elements.metricTopShift) elements.metricTopShift.textContent = topShiftText;
@@ -7977,14 +8155,14 @@
 
             window.addEventListener('beforeunload', () => {
                 saveData(true);
-                saveHistory();
+                flushAuxStorageSave();
                 savePreferences(true);
             });
 
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'hidden') {
                     saveData(true);
-                    saveHistory();
+                    flushAuxStorageSave();
                     savePreferences(true);
                 }
             });
@@ -8705,7 +8883,10 @@
                 await perfMark('init/hidratacion', async () => loadData());
                 ensureReviewMilestonesState();
                 setLoadingState(false, 'Listo', 100, false);
-                refreshStorageDiagnostics();
+                if (Date.now() - lastStorageDiagAt > 15000) {
+                    lastStorageDiagAt = Date.now();
+                    refreshStorageDiagnostics();
+                }
                 updateExportUrgencyBadge();
                 setInterval(() => { if (AppState.contacts.length) render(); else updateExportUrgencyBadge(); }, 300000);
                 setInterval(() => { refreshStorageDiagnostics(); }, 45000);
