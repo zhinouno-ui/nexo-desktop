@@ -28,6 +28,8 @@ let currentZoomFactor = 1.0;
 let dbCache = null;
 let dbCacheLoadedAt = 0;
 let downloadedUpdateMeta = null;
+let installOnCloseArmed = false;
+let installAttemptInProgress = false;
 let appTray = null;
 let pendingImportDeepLink = null;
 let lastUpdateAttempt = { at: null, stage: 'idle', ok: null, message: '' };
@@ -481,11 +483,19 @@ function createWindow() {
     if (pendingImportDeepLink) mainWindow.webContents.send('deep-link:import', pendingImportDeepLink);
   });
 
-  mainWindow.on('close', () => {
-    if (!isQuitting && process.platform !== 'darwin') {
-      isQuitting = true;
-      app.quit();
+  mainWindow.on('close', async (event) => {
+    if (isQuitting || process.platform === 'darwin') return;
+    if (installOnCloseArmed) {
+      event.preventDefault();
+      const started = await tryInstallOnClose();
+      if (!started) {
+        isQuitting = true;
+        app.quit();
+      }
+      return;
     }
+    isQuitting = true;
+    app.quit();
   });
 
   mainWindow.on('closed', () => {
@@ -563,6 +573,71 @@ async function startInstallerAndQuit(installerPath) {
   setTimeout(() => app.quit(), 100);
 }
 
+
+async function resolveInstallerForInstall() {
+  const explicit = downloadedUpdateMeta?.cachedPath || downloadedUpdateMeta?.downloadedFile || '';
+  if (explicit && fssync.existsSync(explicit)) {
+    return {
+      installerPath: explicit,
+      version: downloadedUpdateMeta?.version || detectVersionFromName(explicit) || '',
+      source: 'downloaded-meta'
+    };
+  }
+
+  const cached = await getCachedInstallers().catch(() => []);
+  const current = app.getVersion();
+  const candidate = (cached || []).find((it) => it?.fullPath && fssync.existsSync(it.fullPath) && compareVersions(it.version, current) > 0);
+  if (candidate) {
+    return { installerPath: candidate.fullPath, version: candidate.version || detectVersionFromName(candidate.fullPath), source: 'cache-fallback' };
+  }
+
+  return { installerPath: '', version: '', source: 'none' };
+}
+
+async function launchUpdateAssistant(installerPath, version) {
+  if (!installerPath || !fssync.existsSync(installerPath)) {
+    throw new Error('No se encontró el instalador descargado para actualizar.');
+  }
+  const detached = spawn(process.execPath, [
+    '--update-assistant',
+    `--installer=${installerPath}`,
+    `--version=${version || ''}`
+  ], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: false
+  });
+  detached.unref();
+  await persistCurrentVersionMeta({ reason: 'before-install', targetVersion: version || '' });
+  isQuitting = true;
+  setTimeout(() => app.quit(), 120);
+}
+
+async function tryInstallOnClose() {
+  if (installAttemptInProgress) return false;
+  if (!app.isPackaged) return false;
+  if (!installOnCloseArmed) return false;
+  if (downloadedUpdateMeta?.suspicious) return false;
+  installAttemptInProgress = true;
+  try {
+    const resolved = await resolveInstallerForInstall();
+    if (!resolved.installerPath) return false;
+    lastUpdateAttempt = { at: new Date().toISOString(), stage: 'installing-on-close', ok: null, message: resolved.version || '' };
+    await appendErrorLog('updater:install-on-close', new Error('Install armed on window close'), {
+      installer: resolved.installerPath,
+      version: resolved.version,
+      source: resolved.source
+    });
+    await launchUpdateAssistant(resolved.installerPath, resolved.version);
+    return true;
+  } catch (error) {
+    await appendErrorLog('updater:install-on-close-failed', error, {});
+    return false;
+  } finally {
+    installAttemptInProgress = false;
+  }
+}
+
 async function handleUpdateDownloaded(info) {
   const downloadedFile = info?.downloadedFile || '';
   const version = info?.version || detectVersionFromName(downloadedFile) || '';
@@ -629,6 +704,7 @@ async function handleUpdateDownloaded(info) {
 
   await pruneCachedInstallers(getUpdateCacheDir(), 3).catch(() => {});
 
+  installOnCloseArmed = true;
   downloadedUpdateMeta = {
     version,
     downloadedFile: cachedPath || downloadedFile,
@@ -900,29 +976,16 @@ ipcMain.handle('updater:install', async (_event, payload) => {
     };
   }
 
-  const installerPath = downloadedUpdateMeta?.cachedPath || downloadedUpdateMeta?.downloadedFile || '';
-  if (!installerPath || !fssync.existsSync(installerPath)) {
-    return { ok: false, message: 'No se encontró el instalador descargado para actualizar.' };
-  }
-
   try {
-    lastUpdateAttempt = { at: new Date().toISOString(), stage: 'installing', ok: null, message: downloadedUpdateMeta?.version || '' };
-    const detached = spawn(process.execPath, [
-      '--update-assistant',
-      `--installer=${installerPath}`,
-      `--version=${downloadedUpdateMeta?.version || ''}`
-    ], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: false
-    });
-    detached.unref();
-    await persistCurrentVersionMeta({ reason: 'before-install', targetVersion: downloadedUpdateMeta?.version || '' });
-    isQuitting = true;
-    setTimeout(() => app.quit(), 120);
+    const resolved = await resolveInstallerForInstall();
+    if (!resolved.installerPath) {
+      return { ok: false, message: 'No se encontró el instalador descargado para actualizar.' };
+    }
+    lastUpdateAttempt = { at: new Date().toISOString(), stage: 'installing', ok: null, message: resolved.version || '' };
+    await launchUpdateAssistant(resolved.installerPath, resolved.version);
     return { ok: true };
   } catch (error) {
-    await appendErrorLog('updater:install-assistant', error, { installerPath });
+    await appendErrorLog('updater:install-assistant', error, { installerPath: downloadedUpdateMeta?.cachedPath || downloadedUpdateMeta?.downloadedFile || '' });
     const candidate = await resolveRollbackInstaller();
     if (candidate) {
       await appendErrorLog('updater:auto-rollback-install-failure', error, { installer: candidate.fullPath, version: candidate.version });

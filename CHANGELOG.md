@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.22 - cierre y actualización automática
+
+### Fix crítico updater (pedido operativo)
+- El botón **Cerrar y actualizar** ahora intenta instalar también usando fallback desde cache, incluso si la metadata en memoria se perdió.
+- Al cerrar con la **X** en Windows/Linux, si hay update descargada y válida, se ejecuta automáticamente el asistente de actualización antes de cerrar.
+- Se arma/desarma estado de `installOnClose` al descargar update para evitar cierres sin instalar cuando ya estaba lista.
+- Logging adicional para trazabilidad del intento de instalación al cerrar.
+
 ## 1.1.21 - filtros y fluidez de revisión
 
 ### Búsqueda y revisión más práctica
