@@ -210,3 +210,40 @@ npm run selfcheck:exports
 ```
 
 Valida que baseline mensual + delta diario detecten correctamente nuevos usuarios y cambios de estado.
+
+
+## Performance (22k contactos): cómo medir y dónde mirar
+
+Para validar que no haya freezes de UI:
+
+1. Abrir **Ajustes → Modo debug performance**.
+2. Revisar panel debug:
+   - `DOM items`
+   - `Filtro (ms)`
+   - `Render (ms)`
+   - `Long tasks` + `Top long tasks`
+3. En DevTools, usar pestaña **Performance** y grabar 10s mientras:
+   - se scrollea,
+   - se aplica búsqueda/filtro,
+   - se cambia estado de usuario.
+
+### Instrumentación interna
+
+Nexo reporta métricas de etapas clave:
+
+- `filterMs`
+- `renderContactsMs`
+- `renderMs`
+- `saveMs`
+- `longTasks` y top duraciones por etapa
+
+Además, el renderer marca etapa activa (`filter`, `renderContacts`, `stats`, `save`) para poder asociar long tasks a una fase concreta.
+
+### Estrategia de rendimiento aplicada
+
+- Virtualización de contactos (tarjetas/lista) con ventana visible + buffer.
+- Límite de nodos simultáneos en DOM para evitar reconstrucciones masivas.
+- Modo `perf-large` para desactivar efectos costosos por ítem en datasets grandes.
+- Agregación de métricas en Web Worker.
+- Guardado diferido/debounced con flush en idle cuando está disponible.
+
