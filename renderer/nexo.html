@@ -1931,6 +1931,11 @@
                     <option value="tt">Turno 2 (14-22)</option>
                     <option value="tn">Turno 3 (22-06)</option>
                 </select>
+                <div style="display:flex;gap:6px;align-items:center;grid-column:span 2;flex-wrap:wrap;">
+                    <button id="metricsShiftMorningBtn" class="btn" style="padding:6px 10px;">Turno Mañana (08-14)</button>
+                    <button id="metricsShiftAfternoonBtn" class="btn" style="padding:6px 10px;">Turno Tarde (14-20)</button>
+                    <button id="metricsShiftResetBtn" class="btn" style="padding:6px 10px;">Quitar lapso</button>
+                </div>
                 <input id="metricsFromDate" type="date" class="origin-input" style="margin-top:0;">
                 <input id="metricsToDate" type="date" class="origin-input" style="margin-top:0;">
                 <select id="metricsStatusFilter" class="filter-select">
@@ -1980,6 +1985,8 @@
                     <option value="monthly">Reporte Completo (Mensual)</option>
                 </select>
                 <button id="exportControlBtn" class="btn"><i class="fas fa-file-export"></i> Exportar control</button>
+                <button id="exportDailyNexoBtn" class="btn"><i class="fas fa-file-export"></i> Exportar Log Diario (.nexo)</button>
+                <button id="exportFullNexoBtn" class="btn"><i class="fas fa-archive"></i> Exportar Full (.nexo)</button>
                 <button id="uploadReportBtn" class="btn"><i class="fas fa-upload"></i> Subir reporte seleccionado</button>
                 <button id="resetBaselineBtn" class="btn"><i class="fas fa-eraser"></i> Reset baseline</button>
             </div>
@@ -2331,6 +2338,7 @@
             controlReports: [],
             metricEvents: [],
             monthlyBaselineByProfile: {},
+            metricsHourRange: null,
             uploadUnlockedUntil: 0,
             uploadAuditLog: [],
             queuedUploads: [],
@@ -2436,6 +2444,9 @@
             metricShiftRanking: $('#metricShiftRanking'),
             controlReportsSummary: $('#controlReportsSummary'),
             metricsShiftFilter: $('#metricsShiftFilter'),
+            metricsShiftMorningBtn: $('#metricsShiftMorningBtn'),
+            metricsShiftAfternoonBtn: $('#metricsShiftAfternoonBtn'),
+            metricsShiftResetBtn: $('#metricsShiftResetBtn'),
             metricsFromDate: $('#metricsFromDate'),
             metricsToDate: $('#metricsToDate'),
             metricsStatusFilter: $('#metricsStatusFilter'),
@@ -2452,6 +2463,8 @@
             metricsOpsSummary: $('#metricsOpsSummary'),
             metricsFilterLastBatchBtn: $('#metricsFilterLastBatchBtn'),
             metricsDeleteLastBatchBtn: $('#metricsDeleteLastBatchBtn'),
+            exportDailyNexoBtn: $('#exportDailyNexoBtn'),
+            exportFullNexoBtn: $('#exportFullNexoBtn'),
             exportFullSnapshotBtn: $('#exportFullSnapshotBtn'),
             importFullSnapshotBtn: $('#importFullSnapshotBtn'),
             importControlBtn: $('#importControlBtn'),
@@ -7462,6 +7475,7 @@
                 const from = elements.metricsFromDate?.value ? new Date(`${elements.metricsFromDate.value}T00:00:00`).getTime() : 0;
                 const to = elements.metricsToDate?.value ? new Date(`${elements.metricsToDate.value}T23:59:59`).getTime() : Number.MAX_SAFE_INTEGER;
                 const shift = elements.metricsShiftFilter?.value || 'all';
+                const hourRange = AppState.metricsHourRange;
                 const status = elements.metricsStatusFilter?.value || 'all';
                 const selectionType = elements.metricsSelectionTypeFilter?.value || 'all';
                 const onlyChanges = !!elements.metricsOnlyChanges?.checked;
@@ -7469,6 +7483,15 @@
                     if ((ev.profileId || 'default') !== (AppState.activeProfileId || 'default')) return false;
                     const at = new Date(ev.at || 0).getTime();
                     if (!Number.isFinite(at) || at < from || at > to) return false;
+                    if (hourRange && Number.isFinite(hourRange.from) && Number.isFinite(hourRange.to)) {
+                        const dt = new Date(at);
+                        const h = dt.getHours() + (dt.getMinutes() / 60);
+                        if (hourRange.from <= hourRange.to) {
+                            if (!(h >= hourRange.from && h < hourRange.to)) return false;
+                        } else {
+                            if (!(h >= hourRange.from || h < hourRange.to)) return false;
+                        }
+                    }
                     if (shift !== 'all' && String(ev.shift || '').toLowerCase() !== shift) return false;
                     if (status !== 'all' && String(ev.status || ev.to || '').toLowerCase() !== status) return false;
                     if (selectionType !== 'all' && normalizeSelectionType(ev.selectionType) !== selectionType) return false;
@@ -7583,6 +7606,9 @@
                 elements.showQuickMetricsOption.onclick = () => {
                     const now = new Date();
                     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+                    if (elements.metricsFromDate) elements.metricsFromDate.value = today;
+                    if (elements.metricsToDate) elements.metricsToDate.value = today;
+                    AppState.metricsHourRange = null;
                     const yesterdayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
                     const yesterday = yesterdayDate.toISOString().slice(0, 10);
                     const dayFromIso = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : '');
@@ -7742,6 +7768,54 @@
                 return { mode: 'daily', payload: delta?.payload || null };
             };
             if (elements.exportControlBtn) elements.exportControlBtn.onclick = () => exportControlBySelection();
+            if (elements.exportDailyNexoBtn) {
+                elements.exportDailyNexoBtn.onclick = async () => {
+                    if (!window.api?.exportDaily) {
+                        showNotification('API de export diario no disponible', 'warning');
+                        return;
+                    }
+                    const result = await window.api.exportDaily();
+                    if (result?.ok) {
+                        addToHistory('Export .nexo diario', result.filePath || '');
+                        showNotification(`Log diario exportado: ${result.filePath || 'ok'}`, 'success');
+                    } else {
+                        showNotification(`Error export diario: ${result?.message || 'desconocido'}`, 'error');
+                    }
+                };
+            }
+            if (elements.exportFullNexoBtn) {
+                elements.exportFullNexoBtn.onclick = async () => {
+                    if (!window.api?.exportFull) {
+                        showNotification('API de export full no disponible', 'warning');
+                        return;
+                    }
+                    const result = await window.api.exportFull();
+                    if (result?.ok) {
+                        addToHistory('Export .nexo full', result.filePath || '');
+                        showNotification(`Backup full exportado: ${result.filePath || 'ok'}`, 'success');
+                    } else {
+                        showNotification(`Error export full: ${result?.message || 'desconocido'}`, 'error');
+                    }
+                };
+            }
+            if (elements.metricsShiftMorningBtn) {
+                elements.metricsShiftMorningBtn.onclick = () => {
+                    AppState.metricsHourRange = { from: 8, to: 14, label: 'Mañana 08-14' };
+                    if (elements.metricsModal?.classList.contains('active')) renderMetricChartsFromEvents();
+                };
+            }
+            if (elements.metricsShiftAfternoonBtn) {
+                elements.metricsShiftAfternoonBtn.onclick = () => {
+                    AppState.metricsHourRange = { from: 14, to: 20, label: 'Tarde 14-20' };
+                    if (elements.metricsModal?.classList.contains('active')) renderMetricChartsFromEvents();
+                };
+            }
+            if (elements.metricsShiftResetBtn) {
+                elements.metricsShiftResetBtn.onclick = () => {
+                    AppState.metricsHourRange = null;
+                    if (elements.metricsModal?.classList.contains('active')) renderMetricChartsFromEvents();
+                };
+            }
             if (elements.resetBaselineBtn) {
                 elements.resetBaselineBtn.onclick = () => {
                     const profileId = AppState.activeProfileId || 'default';

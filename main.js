@@ -59,22 +59,120 @@ function getProfilesMetaPath() {
   return path.join(app.getPath('userData'), 'profiles.json');
 }
 
+function getProfilesDir() {
+  return path.join(app.getPath('userData'), 'profiles');
+}
+
+function getExportsDir() {
+  return path.join(app.getPath('userData'), 'exports');
+}
+
+function safeSlug(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/(^-|-$)/g, '')
+    .toLowerCase() || 'perfil';
+}
+
+async function resolveUniqueProfileFileName(baseName) {
+  await fs.mkdir(getProfilesDir(), { recursive: true });
+  let candidate = `${baseName}.json`;
+  let n = 2;
+  while (fssync.existsSync(path.join(getProfilesDir(), candidate))) {
+    candidate = `${baseName}-${n}.json`;
+    n += 1;
+  }
+  return candidate;
+}
+
+async function ensureProfileStorageFile(profile) {
+  if (!profile || !profile.id) return profile;
+  await fs.mkdir(getProfilesDir(), { recursive: true });
+  if (!profile.fileName) {
+    const preferred = `${safeSlug(profile.name)}-${safeSlug(profile.id)}.json`;
+    const preferredPath = path.join(getProfilesDir(), preferred);
+    profile.fileName = fssync.existsSync(preferredPath)
+      ? preferred
+      : await resolveUniqueProfileFileName(`${safeSlug(profile.name)}-${safeSlug(profile.id)}`);
+  }
+  const fullPath = path.join(getProfilesDir(), profile.fileName);
+  if (!fssync.existsSync(fullPath)) {
+    await fs.writeFile(fullPath, JSON.stringify({ id: profile.id, name: profile.name, createdAt: new Date().toISOString() }, null, 2), 'utf8');
+  }
+  return profile;
+}
+
 async function readProfilesMeta() {
   try {
     const raw = await fs.readFile(getProfilesMetaPath(), 'utf8');
     const parsed = JSON.parse(raw);
     const profiles = Array.isArray(parsed?.profiles) ? parsed.profiles : [];
-    return profiles.length ? profiles : [{ id: 'default', name: 'Base principal' }];
+    const safeProfiles = profiles.length ? profiles : [{ id: 'default', name: 'Base principal' }];
+    for (const profile of safeProfiles) {
+      await ensureProfileStorageFile(profile);
+    }
+    return safeProfiles;
   } catch {
-    return [{ id: 'default', name: 'Base principal' }];
+    const fallback = [{ id: 'default', name: 'Base principal' }];
+    for (const profile of fallback) {
+      await ensureProfileStorageFile(profile);
+    }
+    return fallback;
   }
 }
 
 async function writeProfilesMeta(profiles) {
   const safe = Array.isArray(profiles) && profiles.length ? profiles : [{ id: 'default', name: 'Base principal' }];
+  for (const profile of safe) {
+    await ensureProfileStorageFile(profile);
+  }
   await fs.mkdir(path.dirname(getProfilesMetaPath()), { recursive: true });
   await fs.writeFile(getProfilesMetaPath(), JSON.stringify({ profiles: safe }, null, 2), 'utf8');
   return safe;
+}
+
+async function writeProfileExportFile(prefix, payloadText) {
+  await fs.mkdir(getExportsDir(), { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:]/g, '-').slice(0, 19);
+  const out = path.join(getExportsDir(), `${prefix}_${stamp}.nexo`);
+  await fs.writeFile(out, payloadText, 'utf8');
+  return out;
+}
+
+async function buildDailyExportFromDb() {
+  const db = await readDb();
+  const contacts = Array.isArray(db.contactsData) ? db.contactsData : [];
+  const transitions = Array.isArray(db.extraStorage?.statusTransitions) ? db.extraStorage.statusTransitions : [];
+  return runExportWorker({ type: 'daily-log', contacts, transitions, nowIso: new Date().toISOString() });
+}
+
+async function buildFullExportFromDb() {
+  const db = await readDb();
+  return runExportWorker({ type: 'full', state: db, nowIso: new Date().toISOString() });
+}
+
+let midnightExportTimer = null;
+function scheduleMidnightDailyExport() {
+  if (midnightExportTimer) clearTimeout(midnightExportTimer);
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(24, 0, 0, 0);
+  const delay = Math.max(1000, next.getTime() - now.getTime());
+  midnightExportTimer = setTimeout(async () => {
+    try {
+      const result = await buildDailyExportFromDb();
+      if (result?.ok && result?.jsonText) {
+        const filePath = await writeProfileExportFile('daily-log', result.jsonText);
+        perfLog('export:daily:auto', 'done', { filePath });
+      }
+    } catch (error) {
+      appendErrorLog('export:daily:auto', error).catch(() => {});
+    } finally {
+      scheduleMidnightDailyExport();
+    }
+  }, delay);
 }
 
 function runExportWorker(payload) {
@@ -823,9 +921,10 @@ ipcMain.handle('profile:create', async (_event, payload) => {
   if (!name) return { ok: false, message: 'Nombre inválido' };
   const profiles = await readProfilesMeta();
   const id = `pf_${Date.now()}_${Math.floor(Math.random()*9999)}`;
-  profiles.push({ id, name });
+  const profile = { id, name, fileName: await resolveUniqueProfileFileName(`${safeSlug(name)}-${safeSlug(id)}`) };
+  profiles.push(profile);
   await writeProfilesMeta(profiles);
-  return { ok: true, profile: { id, name }, profiles };
+  return { ok: true, profile, profiles };
 });
 ipcMain.handle('profile:rename', async (_event, payload) => {
   const id = String(payload?.id || '');
@@ -834,14 +933,29 @@ ipcMain.handle('profile:rename', async (_event, payload) => {
   const profiles = await readProfilesMeta();
   const p = profiles.find((x) => x.id === id);
   if (!p) return { ok: false, message: 'Perfil no encontrado' };
+  const oldFileName = p.fileName;
   p.name = name;
+  if (oldFileName) {
+    const nextFileName = await resolveUniqueProfileFileName(`${safeSlug(name)}-${safeSlug(id)}`);
+    const oldPath = path.join(getProfilesDir(), oldFileName);
+    const newPath = path.join(getProfilesDir(), nextFileName);
+    if (fssync.existsSync(oldPath)) {
+      await fs.rename(oldPath, newPath);
+    }
+    p.fileName = nextFileName;
+  }
   await writeProfilesMeta(profiles);
   return { ok: true, profiles };
 });
 ipcMain.handle('profile:delete', async (_event, payload) => {
   const id = String(payload?.id || '');
   if (!id || id === 'default') return { ok: false, message: 'No permitido' };
-  const profiles = (await readProfilesMeta()).filter((p) => p.id !== id);
+  const prev = await readProfilesMeta();
+  const target = prev.find((p) => p.id === id);
+  const profiles = prev.filter((p) => p.id !== id);
+  if (target?.fileName) {
+    await fs.unlink(path.join(getProfilesDir(), target.fileName)).catch(() => {});
+  }
   await writeProfilesMeta(profiles);
   return { ok: true, profiles };
 });
@@ -858,6 +972,35 @@ ipcMain.handle('profile:resolveImportMode', async () => {
   return { mode: map[result.response] || 'cancel' };
 });
 ipcMain.handle('export:build', async (_event, payload) => runExportWorker(payload || {}));
+ipcMain.handle('export:daily', async () => {
+  const result = await buildDailyExportFromDb();
+  if (!result?.ok) return { ok: false, message: result?.message || 'No se pudo exportar diario' };
+  const filePath = await writeProfileExportFile('daily-log', result.jsonText || '{}');
+  return { ok: true, filePath, csvText: result.csvText || '' };
+});
+ipcMain.handle('export:full', async () => {
+  const result = await buildFullExportFromDb();
+  if (!result?.ok) return { ok: false, message: result?.message || 'No se pudo exportar full' };
+  const filePath = await writeProfileExportFile('full-backup', result.jsonText || '{}');
+  return { ok: true, filePath };
+});
+ipcMain.handle('import:data', async (_event, payload) => {
+  const filePath = String(payload?.filePath || '').trim();
+  if (!filePath) return { ok: false, message: 'Ruta inválida' };
+  const raw = await fs.readFile(filePath, 'utf8');
+  let parsed = null;
+  try { parsed = JSON.parse(raw); } catch (_) {}
+  const choice = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Importar en PERFIL ACTUAL', 'Crear NUEVO PERFIL', 'Importar en PERFIL EXISTENTE', 'Cancelar'],
+    defaultId: 0,
+    cancelId: 3,
+    title: 'Importar archivo',
+    message: '¿Dónde querés importar los datos?'
+  });
+  const modes = ['current-overwrite', 'new-profile', 'select-existing', 'cancel'];
+  return { ok: true, filePath, mode: modes[choice.response] || 'cancel', parsed, raw, profiles: await readProfilesMeta() };
+});
 
 
 ipcMain.handle('store:queueDelta', async (_event, payload) => {
@@ -1108,6 +1251,7 @@ app.whenReady().then(async () => {
     }
   }
   await persistCurrentVersionMeta({ reason: 'startup', installer: cachedCurrent ? path.basename(cachedCurrent) : '' });
+  scheduleMidnightDailyExport();
   if (!app.isPackaged) {
     sendUpdaterStatus('not-available', { message: 'Modo desarrollo: auto-update desactivado.' });
   } else {
