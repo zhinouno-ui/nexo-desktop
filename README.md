@@ -47,20 +47,20 @@ Muestra estados:
 `package.json` usa `build.publish` con GitHub:
 
 - `owner: zhinouno-ui`
-- `repo: Nexo.exe`
+- `repo: nexo-desktop`
 
 Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHub en `package.json`.
 
 ## Flujo correcto de publicación (OBLIGATORIO para updater)
 
-1. Subir versión en `package.json` (ej. `1.1.12`).
+1. Subir versión en `package.json` (ej. `1.1.18`).
 2. Commit y push a rama principal.
 3. Crear y subir tag de release:
    ```bash
-   git tag v1.1.12
-   git push origin v1.1.12
+   git tag v1.1.18
+   git push origin v1.1.18
    ```
-4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest`, **sincroniza versión desde el tag** (`vX.Y.Z`) y genera el Release automáticamente.
+4. GitHub Actions ejecuta `.github/workflows/release.yml` en `windows-latest` y genera/publica el Release automáticamente desde la versión definida en `package.json`.
 5. Verificar que el Release tenga assets:
    - instalador NSIS (`*.exe`)
    - `latest.yml`
@@ -69,8 +69,6 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 6. Instalar una versión anterior en las PCs y abrir app para detectar la nueva.
 
 > Importante: **subir archivos al repo (commits) NO sirve para auto-update**. `electron-updater` busca metadatos/artefactos en **GitHub Releases**.
-
-> Control de seguridad: el workflow valida que el instalador generado incluya exactamente la versión del tag; si no coincide, falla el release.
 
 > El Release debe incluir sí o sí: instalador `.exe`, `latest.yml` y `*.blockmap` para que `electron-updater` funcione.
 
@@ -84,7 +82,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 ## Release automatizado con GitHub Actions
 
 - Workflow: `.github/workflows/release.yml`.
-- Trigger: push de tags `v*.*.*` (ej. `v1.1.12`).
+- Trigger: push de tags `v*.*.*` (ej. `v1.1.18`).
 - Build en `windows-latest` para generar NSIS real para Windows.
 - Publica Release con nombre `Nexo vX.Y.Z` y sube automáticamente los assets de `nexo-desktop/dist`.
 
@@ -105,7 +103,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 ## Descarga manual (seguro)
 
-- En **Ajustes** existe la opción para abrir `https://github.com/zhinouno-ui/Nexo.exe/releases/latest` como fallback manual.
+- En **Ajustes** existe la opción para abrir `https://github.com/zhinouno-ui/nexo-desktop/releases/latest` como fallback manual.
 
 ## Exportación mejorada
 
@@ -116,7 +114,7 @@ Antes de construir/publicar, editar esos valores con tu owner/repo real de GitHu
 
 ## Rollback y logs
 
-- Se guarda cache de instaladores descargados en `AppData\Roaming\Nexo\update-cache`.
+- Se guarda cache de instaladores descargados en `AppData\Roaming\Nexo\updates-cache`.
 - Desde Ajustes podés intentar `Volver a versión anterior` (usa instalador cacheado local).
 - Log de errores en `AppData\Roaming\Nexo\nexo-error.log`.
 - Se bloquea instalación automática cuando un instalador pesa menos de 10MB o más de 500MB (requiere confirmación manual para forzar).
@@ -133,4 +131,119 @@ Resumen: **8/8 implementadas** y reforzadas en esta base.
 - [x] Verificador de update sospechosa por tamaño (`<10MB` o `>500MB`) con confirmación para forzar.
 - [x] Limpieza de duplicación visual de storage en estado de guardado.
 - [x] Refuerzo de origen: en reimportación de contacto existente se actualiza al origen nuevo y se registra historial de origen por usuario.
+
+
+
+
+## Perfiles multi-base (base)
+
+- Soporta hasta 8 perfiles (bases) desde la UI.
+- Puede importar múltiples CSV creando/seleccionando perfil por archivo.
+- Cada contacto guarda `profileId` para separar bases en la misma instalación.
+- Cada import crea snapshot local por perfil (`bk_profile_*`) para recuperación rápida.
+
+## Release manual simplificado
+
+```bash
+npm run release
+```
+
+Ese comando ejecuta: build Windows NSIS, crea tag `v<version>`, hace push y publica release con `gh`.
+
+
+
+## Diagnóstico rápido de updater
+
+- Atajo: `Ctrl+Shift+U` en la ventana principal para ver versión, canal, estado de `latest.yml`, cache y ruta de log.
+- Log persistente del updater: `AppData\Roaming\Nexo\logs\updater.log`.
+- Cache de instaladores: se mantiene automáticamente en las **últimas 3 versiones** en `AppData\Roaming\Nexo\updates-cache`.
+
+
+## Registro de cambios por versión
+
+- A partir de `1.1.18` cada actualización debe documentar **qué cambió vs la versión anterior** en `CHANGELOG.md`.
+- Objetivo: facilitar pruebas regresivas y saber exactamente qué validar antes de publicar el próximo release.
+
+## Métricas por perfil (rápidas + gráficas)
+
+- Centro de métricas por **perfil activo** (PC01/PC02/etc).
+- Filtros disponibles:
+  - Rango de fechas (`desde`/`hasta`, día 00:00→00:00).
+  - Turno (06-14, 14-22, 22-06).
+  - Estado, tipo de selección y `solo cambios`.
+- Gráficas incluidas:
+  - Donut por estados.
+  - Donut por tipo de selección.
+  - Barras por transiciones de estado.
+
+## Exportes de control
+
+- **Mensual Full** (`nexo-monthly-full-v1`): snapshot completo por perfil + baseline mensual.
+- **Diario Delta** (`nexo-daily-delta-v1`): usuarios nuevos y cambios de estado contra baseline mensual.
+- El delta sale en **JSON + CSV** para uso máquina y Excel.
+- El snapshot completo se mantiene separado para auditoría periódica.
+
+## Baseline y auditoría
+
+- Al exportar mensual se guarda baseline por perfil (`monthlyBaselineByProfile`).
+- El diario compara estado actual vs baseline:
+  - nuevo usuario => `new_user`
+  - estado cambiado => `status_change`
+- Se puede resetear baseline por perfil desde métricas (acción manual).
+
+## Subida restringida (stub local)
+
+- Botón `Subir reporte` protegido por clave (`Master123`).
+- Si la clave es válida, habilita subida por **10 minutos**.
+- En esta base la subida se encola localmente en `userData/uploads_queue/<profileId>/`.
+
+## Temas (tipo Whaticket)
+
+- Modal de temas con presets y tema personalizado.
+- Export/Import de `themes.json` para compartir entre PCs.
+- Import hace merge y renombra IDs en conflicto.
+
+## Self-check de exportes
+
+```bash
+npm run selfcheck:exports
+```
+
+Valida que baseline mensual + delta diario detecten correctamente nuevos usuarios y cambios de estado.
+
+
+## Performance (22k contactos): cómo medir y dónde mirar
+
+Para validar que no haya freezes de UI:
+
+1. Abrir **Ajustes → Modo debug performance**.
+2. Revisar panel debug:
+   - `DOM items`
+   - `Filtro (ms)`
+   - `Render (ms)`
+   - `Long tasks` + `Top long tasks`
+3. En DevTools, usar pestaña **Performance** y grabar 10s mientras:
+   - se scrollea,
+   - se aplica búsqueda/filtro,
+   - se cambia estado de usuario.
+
+### Instrumentación interna
+
+Nexo reporta métricas de etapas clave:
+
+- `filterMs`
+- `renderContactsMs`
+- `renderMs`
+- `saveMs`
+- `longTasks` y top duraciones por etapa
+
+Además, el renderer marca etapa activa (`filter`, `renderContacts`, `stats`, `save`) para poder asociar long tasks a una fase concreta.
+
+### Estrategia de rendimiento aplicada
+
+- Virtualización de contactos (tarjetas/lista) con ventana visible + buffer.
+- Límite de nodos simultáneos en DOM para evitar reconstrucciones masivas.
+- Modo `perf-large` para desactivar efectos costosos por ítem en datasets grandes.
+- Agregación de métricas en Web Worker.
+- Guardado diferido/debounced con flush en idle cuando está disponible.
 
