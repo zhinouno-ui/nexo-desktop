@@ -3200,6 +3200,112 @@
             opacity: .25 !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+
+        body.light-mode .header,
+        body.light-mode .search-bar,
+        body.light-mode .progress-bar-container,
+        body.light-mode .contact-card,
+        body.light-mode .list-item,
+        body.light-mode .chart-card,
+        body.light-mode .metrics-card,
+        body.light-mode .modal-content {
+            background: #f8fbff !important;
+            color: var(--text-primary);
+            border-color: rgba(100,116,139,.26) !important;
+            box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        }
+        body.light-mode .chart-card canvas,
+        body.light-mode .loading-preview-bg {
+            background: #eef4fb !important;
+        }
+        body.light-mode .search-input.ghost-value-active {
+            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
+            color:#64748b;
+        }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+        }
+        body.perf-mode .loading-preview-track { animation: none !important; }
+        body.perf-mode .cards-grid { gap: 8px !important; }
+
+
+        .cards-grid,
+        .list-view {
+            contain: layout style;
+            content-visibility: auto;
+        }
+        .cards-grid.virtual-scroll,
+        .list-view.virtual-scroll {
+            max-height: 68vh;
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+        .virtual-spacer { width: 100%; pointer-events: none; }
+        body.perf-large .contact-card,
+        body.perf-large .list-item {
+            box-shadow: none !important;
+        }
+        body.perf-large .contact-card::after,
+        body.perf-large .list-item::after,
+        body.perf-large .list-item-main::before,
+        body.perf-large .list-status-bg-icon {
+            display: none !important;
+        }
+        body.perf-large .contact-card::before,
+        body.perf-large .list-item::before {
+            opacity: .25 !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -5351,17 +5457,10 @@
             const batchId = `imp_${Date.now()}`;
             const batchFiles = [];
 
-        function detectDelimiter(text) {
-            const lines = String(text || '').split(/\r?\n/).slice(0, 8).filter(Boolean);
-            const candidates = [',', ';', '\t'];
-            let best = ',';
-            let bestScore = -1;
-            candidates.forEach((d) => {
-                const score = lines.reduce((acc, line) => acc + (line.split(d).length - 1), 0);
-                if (score > bestScore) { bestScore = score; best = d; }
-            });
-            return best;
-        }
+            if (selectedFiles.length === 0) return;
+            AppState.importCancelRequested = false;
+            const importStarted = Date.now();
+            setLoadingState(true, 'Leyendo archivo…', 2, true);
 
             try {
             const snapshotStamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -6261,20 +6360,36 @@
                     const pid = c?.profileId || 'default';
                     profileCounts[pid] = (profileCounts[pid] || 0) + 1;
                 });
+                const profileList = Array.isArray(AppState.profiles) && AppState.profiles.length
+                    ? AppState.profiles
+                    : [{ id: 'default', name: 'Base principal' }];
                 if (elements.profileSelect) {
-                    elements.profileSelect.innerHTML = (AppState.profiles || []).map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+                    const selectOptions = profileList.map((profile) => `<option value="${profile.id}">${profile.name}</option>`).join('');
+                    elements.profileSelect.innerHTML = selectOptions;
                     elements.profileSelect.value = AppState.activeProfileId;
                 }
                 if (elements.profilesList) {
-                    elements.profilesList.innerHTML = (AppState.profiles || []).map((p) => `
-                        <div class="history-item" style="display:flex;justify-content:space-between;align-items:center;">
-                            <div><strong>${p.name}</strong><div class="history-item-muted">${profileCounts[p.id] || 0} contactos</div></div>
-                            <div style="display:flex;gap:8px;">
-                                <button class="btn" data-profile-action="open" data-profile-id="${p.id}">Abrir</button>
-                                <button class="btn" data-profile-action="rename" data-profile-id="${p.id}">Renombrar</button>${p.id !== 'default' ? `<button class="btn btn-danger" data-profile-action="delete" data-profile-id="${p.id}">Borrar</button>` : ''}
-                            </div>
-                        </div>
-                    `).join('');
+                    const profileRows = [];
+                    profileList.forEach((profile, index) => {
+                        try {
+                            const profileId = profile?.id || `profile_${index}`;
+                            const profileName = String(profile?.name || `Perfil ${index + 1}`);
+                            const contactsForProfile = profileCounts[profileId] || 0;
+                            const canDelete = profileId !== 'default';
+                            profileRows.push(`
+                                <div class="history-item" style="display:flex;justify-content:space-between;align-items:center;">
+                                    <div><strong>${profileName}</strong><div class="history-item-muted">${contactsForProfile} contactos</div></div>
+                                    <div style="display:flex;gap:8px;">
+                                        <button class="btn" data-profile-action="open" data-profile-id="${profileId}">Abrir</button>
+                                        <button class="btn" data-profile-action="rename" data-profile-id="${profileId}">Renombrar</button>${canDelete ? `<button class="btn btn-danger" data-profile-action="delete" data-profile-id="${profileId}">Borrar</button>` : ''}
+                                    </div>
+                                </div>
+                            `);
+                        } catch (profileError) {
+                            reportError('refreshProfilesUI:profile-row', profileError, { index });
+                        }
+                    });
+                    elements.profilesList.innerHTML = profileRows.join('');
                 }
                 if (elements.splitImportByFileToggle) elements.splitImportByFileToggle.checked = !!AppState.splitImportByFile;
                 if (elements.profilesList && !elements.profilesList.dataset.boundActions) {
@@ -6292,22 +6407,6 @@
                 }
             } catch (e) {
                 reportError('refreshProfilesUI', e);
-            }
-            const ms = Math.round(performance.now() - t0);
-            recordStageCost(name, ms);
-            AppState.currentPerfStage = prev;
-            return res;
-        }
-
-        function timeit(label, fn) {
-            return withPerfStage(label, fn);
-        }
-
-        function updatePerfPanel() {
-            if (elements.perfDomItems) elements.perfDomItems.textContent = String(AppState.perfStats.domItems || 0);
-            if (elements.perfFilterMs) {
-                const extra = AppState.perfStageCosts?.filter?.last ? ` (${AppState.perfStageCosts.filter.last}ms)` : '';
-                elements.perfFilterMs.textContent = `${AppState.perfStats.filterMs || 0}ms${extra}`;
             }
             if (elements.perfRenderMs) {
                 const extra = AppState.perfStageCosts?.renderContacts?.last ? ` (${AppState.perfStageCosts.renderContacts.last}ms)` : '';
@@ -10539,6 +10638,7 @@
                 };
                 loadHistory();
                 loadPreferences();
+                await syncProfilesFromMain();
                 AppState.currentPage = Math.max(1, Number(AppState.profilePageMap?.[AppState.activeProfileId || 'default'] || AppState.currentPage || 1));
                 AppState.themeCatalog = { ...getDefaultThemes(), ...(AppState.themeCatalog || {}) };
                 if (!AppState.themeCatalog[AppState.activeThemeId]) AppState.activeThemeId = 'whaticket-blue';
