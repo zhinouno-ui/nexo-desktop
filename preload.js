@@ -50,3 +50,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('updater:status', listener);
   }
 });
+
+contextBridge.exposeInMainWorld('api', {
+  exportDaily: () => ipcRenderer.invoke('export:daily'),
+  exportFull: () => ipcRenderer.invoke('export:full'),
+  importData: (filePath) => ipcRenderer.invoke('import:data', { filePath })
+});

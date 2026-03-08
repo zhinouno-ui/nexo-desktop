@@ -15,17 +15,29 @@ function toCsvRows(rows) {
   try {
     const payload = workerData || {};
     const type = String(payload.type || 'full');
-    const now = new Date();
+    const now = new Date(payload.nowIso || Date.now());
     const day = now.toISOString().slice(0, 10);
+    const dayStart = new Date(now);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayStartMs = dayStart.getTime();
+    const nowMs = now.getTime();
+    const inLast24h = (iso) => {
+      const ts = new Date(iso || 0).getTime();
+      return Number.isFinite(ts) && ts >= (nowMs - 24 * 60 * 60 * 1000) && ts <= nowMs;
+    };
+    const inToday = (iso) => {
+      const ts = new Date(iso || 0).getTime();
+      return Number.isFinite(ts) && ts >= dayStartMs && ts <= nowMs;
+    };
 
     if (type === 'daily-log') {
       const contacts = Array.isArray(payload.contacts) ? payload.contacts : [];
       const transitions = Array.isArray(payload.transitions) ? payload.transitions : [];
       const touched = contacts.filter((c) => {
         const at = c?.lastEditedAt || c?.lastUpdated || '';
-        return at && String(at).slice(0, 10) === day;
+        return inLast24h(at);
       });
-      const rows = transitions.filter((t) => String(t?.at || '').slice(0, 10) === day).map((t) => ({
+      const rows = transitions.filter((t) => inLast24h(t?.at)).map((t) => ({
         at: t.at || '',
         contactId: t.contactId || '',
         from: t.from || '',
@@ -37,6 +49,8 @@ function toCsvRows(rows) {
         exportType: 'nexo-daily-log-v1',
         exportedAt: new Date().toISOString(),
         day,
+        window: { from: new Date(nowMs - 24 * 60 * 60 * 1000).toISOString(), to: now.toISOString() },
+        todayCount: transitions.filter((t) => inToday(t?.at)).length,
         touchedUsers: touched,
         transitions: rows
       };

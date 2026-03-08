@@ -183,6 +183,17 @@ Ese comando ejecuta: build Windows NSIS, crea tag `v<version>`, hace push y publ
 - El delta sale en **JSON + CSV** para uso máquina y Excel.
 - El snapshot completo se mantiene separado para auditoría periódica.
 
+## Exportación `.nexo` y supervisión
+
+- El bridge expone APIs asíncronas para supervisión operativa:
+  - `window.api.exportDaily()`
+  - `window.api.exportFull()`
+  - `window.api.importData(filePath)`
+- `exportDaily` genera un **Log Diario** (`daily-log_*.nexo`) con actividad de las últimas 24h.
+- `exportFull` genera un **Full Backup** (`full-backup_*.nexo`) desde la DB local actual.
+- Los archivos se guardan en `userData/exports/`.
+- A las 00:00, el proceso main genera automáticamente un log diario en la misma carpeta (`auto-export`).
+
 ## Baseline y auditoría
 
 - Al exportar mensual se guarda baseline por perfil (`monthlyBaselineByProfile`).
@@ -246,4 +257,3 @@ Además, el renderer marca etapa activa (`filter`, `renderContacts`, `stats`, `s
 - Modo `perf-large` para desactivar efectos costosos por ítem en datasets grandes.
 - Agregación de métricas en Web Worker.
 - Guardado diferido/debounced con flush en idle cuando está disponible.
-
