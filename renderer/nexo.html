@@ -2988,6 +2988,112 @@
             opacity: .25 !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+
+        body.light-mode .header,
+        body.light-mode .search-bar,
+        body.light-mode .progress-bar-container,
+        body.light-mode .contact-card,
+        body.light-mode .list-item,
+        body.light-mode .chart-card,
+        body.light-mode .metrics-card,
+        body.light-mode .modal-content {
+            background: #f8fbff !important;
+            color: var(--text-primary);
+            border-color: rgba(100,116,139,.26) !important;
+            box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        }
+        body.light-mode .chart-card canvas,
+        body.light-mode .loading-preview-bg {
+            background: #eef4fb !important;
+        }
+        body.light-mode .search-input.ghost-value-active {
+            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
+            color:#64748b;
+        }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+        }
+        body.perf-mode .loading-preview-track { animation: none !important; }
+        body.perf-mode .cards-grid { gap: 8px !important; }
+
+
+        .cards-grid,
+        .list-view {
+            contain: layout style;
+            content-visibility: auto;
+        }
+        .cards-grid.virtual-scroll,
+        .list-view.virtual-scroll {
+            max-height: 68vh;
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+        .virtual-spacer { width: 100%; pointer-events: none; }
+        body.perf-large .contact-card,
+        body.perf-large .list-item {
+            box-shadow: none !important;
+        }
+        body.perf-large .contact-card::after,
+        body.perf-large .list-item::after,
+        body.perf-large .list-item-main::before,
+        body.perf-large .list-status-bg-icon {
+            display: none !important;
+        }
+        body.perf-large .contact-card::before,
+        body.perf-large .list-item::before {
+            opacity: .25 !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -5126,10 +5232,17 @@
             const batchId = `imp_${Date.now()}`;
             const batchFiles = [];
 
-            if (selectedFiles.length === 0) return;
-            AppState.importCancelRequested = false;
-            const importStarted = Date.now();
-            setLoadingState(true, 'Leyendo archivo…', 2, true);
+        function detectDelimiter(text) {
+            const lines = String(text || '').split(/\r?\n/).slice(0, 8).filter(Boolean);
+            const candidates = [',', ';', '\t'];
+            let best = ',';
+            let bestScore = -1;
+            candidates.forEach((d) => {
+                const score = lines.reduce((acc, line) => acc + (line.split(d).length - 1), 0);
+                if (score > bestScore) { bestScore = score; best = d; }
+            });
+            return best;
+        }
 
             try {
             const snapshotStamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -5596,7 +5709,9 @@
             const safeContacts = sanitizeContactsForStorage(AppState.contacts);
             AppState.currentPerfStage = 'save';
             try {
-                if (window.nexoStore && typeof window.nexoStore.patch === 'function') {
+                if (window.nexoStore && typeof window.nexoStore.asyncSaveRequest === 'function') {
+                    window.nexoStore.asyncSaveRequest({ contactsData: safeContacts });
+                } else if (window.nexoStore && typeof window.nexoStore.patch === 'function') {
                     await window.nexoStore.patch({ contactsData: safeContacts });
                 } else {
                     localStorage.setItem('contactsData', JSON.stringify(safeContacts));
@@ -5985,12 +6100,34 @@
             }
         }
 
-        function ensureProfileByName(name) {
+        async function syncProfilesFromMain() {
+            if (!window.electronAPI?.listProfiles) return;
+            try {
+                const result = await window.electronAPI.listProfiles();
+                const profiles = Array.isArray(result?.profiles) ? result.profiles : [];
+                if (profiles.length) {
+                    AppState.profiles = profiles;
+                    ensureActiveProfile();
+                }
+            } catch (_) {}
+        }
+
+        async function ensureProfileByName(name) {
             const n = normalizeProfileName(name).slice(0, 60);
             if (!n) return AppState.activeProfileId;
             const existing = AppState.profiles.find(p => normalizeSearchText(p.name) === normalizeSearchText(n));
             if (existing) return existing.id;
             if (AppState.profiles.length >= 8) return AppState.activeProfileId;
+            if (window.electronAPI?.createProfile) {
+                try {
+                    const created = await window.electronAPI.createProfile({ name: n });
+                    if (created?.ok && created?.profile?.id) {
+                        AppState.profiles = Array.isArray(created.profiles) ? created.profiles : AppState.profiles.concat([created.profile]);
+                        savePreferences();
+                        return created.profile.id;
+                    }
+                } catch (_) {}
+            }
             const id = `pf_${Date.now()}_${Math.floor(Math.random()*9999)}`;
             AppState.profiles.push({ id, name: n });
             savePreferences();
@@ -6048,7 +6185,7 @@
             if (elements.profilesModal) elements.profilesModal.classList.remove('active');
         };
 
-        window.renameProfile = (profileId) => {
+        window.renameProfile = async (profileId) => {
             const profile = (AppState.profiles || []).find((p) => p.id === profileId);
             if (!profile) return;
             const nextName = normalizeProfileName(window.prompt('Nuevo nombre del perfil', profile.name || '') || '').slice(0, 60);
@@ -6058,20 +6195,38 @@
                 showNotification('Ya existe un perfil con ese nombre', 'warning');
                 return;
             }
-            profile.name = nextName;
+            if (window.electronAPI?.renameProfile) {
+                try {
+                    const r = await window.electronAPI.renameProfile({ id: profileId, name: nextName });
+                    if (r?.ok && Array.isArray(r.profiles)) AppState.profiles = r.profiles;
+                    else profile.name = nextName;
+                } catch (_) { profile.name = nextName; }
+            } else {
+                profile.name = nextName;
+            }
             savePreferences();
             refreshProfilesUI();
             render();
             showNotification('Perfil renombrado', 'success');
         };
 
-        window.deleteProfile = (profileId) => {
+        window.deleteProfile = async (profileId) => {
             if (profileId === 'default') return;
             const count = AppState.contacts.filter(c => (c.profileId || 'default') === profileId).length;
             const ok = confirm(`¿Borrar perfil y ${count} contactos asociados?`);
             if (!ok) return;
             AppState.contacts = AppState.contacts.filter(c => (c.profileId || 'default') !== profileId);
-            AppState.profiles = AppState.profiles.filter(p => p.id !== profileId);
+            if (window.electronAPI?.deleteProfile) {
+                try {
+                    const r = await window.electronAPI.deleteProfile({ id: profileId });
+                    if (r?.ok && Array.isArray(r.profiles)) AppState.profiles = r.profiles;
+                    else AppState.profiles = AppState.profiles.filter(p => p.id !== profileId);
+                } catch (_) {
+                    AppState.profiles = AppState.profiles.filter(p => p.id !== profileId);
+                }
+            } else {
+                AppState.profiles = AppState.profiles.filter(p => p.id !== profileId);
+            }
             ensureActiveProfile();
             detectDuplicates();
             saveData();
@@ -6230,7 +6385,7 @@
             const key = `stats_${profileId}`;
             const current = AppState.statsCacheByProfile?.[key];
             if (!current) return;
-            const norm = (x) => String(x || '').toLowerCase();
+            const norm = (x) => String((x ?? 'Sin Estado')).toLowerCase();
             const from = norm(fromStatus);
             const to = norm(toStatus);
             if (from === to) return;
@@ -7177,10 +7332,15 @@
             if (event) event.stopPropagation();
             const contact = AppState.searchIndex?.byId?.get(id) || AppState.contacts.find(c => c.id === id);
             if (contact && confirm(`¿Eliminar "${contact.name}"?`)) {
+                const oldStatus = contact.status || 'Sin Estado';
+                adjustStatsCountersForStatus(contact.profileId || 'default', oldStatus, 'Sin Estado');
                 AppState.contacts = AppState.contacts.filter(c => c.id !== id);
                 AppState.selectedContacts.delete(id);
                 addToHistory('Contacto eliminado', contact.name);
-                enqueueStatusDelta(contact, oldStatus, requestedStatus, eventAt);
+                if (window.nexoStore?.queueDelta) {
+                    window.nexoStore.queueDelta({ type: 'contact-delete', id: contact.id, at: new Date().toISOString() }).catch(() => {});
+                    scheduleStatusDeltaFlush('contact-delete');
+                }
                 saveData(false, { deltaOnly: true });
                 render();
                 showNotification('Contacto eliminado', 'success');
@@ -7709,9 +7869,22 @@
                 await window.electronAPI.openExternal(fallback);
             }
             if (contact) {
-                contact.lastMessageSentAt = new Date().toISOString();
+                const eventAt = contact.lastMessageSentAt || new Date().toISOString();
+                const currentStatus = contact.status || 'Sin Estado';
+                contact.lastMessageSentAt = eventAt;
                 touchContactEdit(contact, 'whatsapp_open');
-                enqueueStatusDelta(contact, oldStatus, requestedStatus, eventAt);
+                if (window.nexoStore?.queueDelta) {
+                    window.nexoStore.queueDelta({
+                        type: 'contact-touch',
+                        id: contact.id,
+                        status: currentStatus,
+                        lastMessageSentAt: eventAt,
+                        lastEditReason: 'whatsapp_open',
+                        lastEditedAt: contact.lastEditedAt || eventAt,
+                        lastUpdated: contact.lastUpdated || eventAt
+                    }).catch(() => {});
+                    scheduleStatusDeltaFlush('whatsapp-open');
+                }
                 saveData(false, { deltaOnly: true });
                 render();
             }
@@ -8256,7 +8429,8 @@
                 elements.userOptionsModal.classList.add('active');
             };
             if (elements.manageProfilesBtn) {
-                elements.manageProfilesBtn.onclick = () => {
+                elements.manageProfilesBtn.onclick = async () => {
+                    await syncProfilesFromMain();
                     refreshProfilesUI();
                     elements.profilesModal && elements.profilesModal.classList.add('active');
                 };
@@ -8570,8 +8744,19 @@
                         }
                     }
                 };
-                downloadFile(JSON.stringify(payload, null, 2), `nexo_full_snapshot_${new Date().toISOString().slice(0,10)}.json`, 'application/json;charset=utf-8;');
-                showNotification('Snapshot completo exportado', 'success');
+                if (window.electronAPI?.buildExport) {
+                    window.electronAPI.buildExport({ type: 'full', state: payload.state }).then((result) => {
+                        if (result?.ok && result?.jsonText) {
+                            downloadFile(result.jsonText, `nexo_full_snapshot_${new Date().toISOString().slice(0,10)}.json`, 'application/json;charset=utf-8;');
+                            showNotification('Snapshot completo exportado', 'success');
+                        } else {
+                            throw new Error(result?.message || 'No se pudo generar export completo');
+                        }
+                    }).catch((err) => showNotification(`Error exportando snapshot: ${err?.message || err}`, 'error'));
+                } else {
+                    downloadFile(JSON.stringify(payload, null, 2), `nexo_full_snapshot_${new Date().toISOString().slice(0,10)}.json`, 'application/json;charset=utf-8;');
+                    showNotification('Snapshot completo exportado', 'success');
+                }
             };
 
             const importFullSnapshot = async () => {
@@ -8584,13 +8769,28 @@
                     const state = parsed?.state || parsed;
                     if (!Array.isArray(state.contacts)) throw new Error('El snapshot no incluye contactos válidos');
                     const sourceName = (parsed?.sourceDevice || parsed?.deviceName || 'Equipo importado').slice(0, 40);
+                    const modeResult = await (window.electronAPI?.resolveImportMode ? window.electronAPI.resolveImportMode() : Promise.resolve({ mode: 'new-profile' }));
+                    const mode = modeResult?.mode || 'new-profile';
+                    if (mode === 'cancel') return;
+                    if (mode === 'current-overwrite') {
+                        AppState.contacts = AppState.contacts.filter((c) => (c.profileId || 'default') !== (AppState.activeProfileId || 'default'));
+                    }
                     const profileBase = `import-${Date.now()}`;
                     const incomingProfiles = Array.isArray(state.profiles) && state.profiles.length ? state.profiles : [{ id: 'default', name: 'Base principal' }];
                     const profileMap = new Map();
                     incomingProfiles.forEach((p, idx) => {
-                        const newId = `${profileBase}-${idx}`;
+                        let newId = `${profileBase}-${idx}`;
+                        if (mode === 'select-existing') {
+                            const opts = (AppState.profiles || []).map((pr, i) => `${i+1}. ${pr.name}`).join('\n');
+                            const selectedIdx = Number(prompt(`Seleccioná perfil destino (número):\n${opts}`, '1')) - 1;
+                            const selected = (AppState.profiles || [])[Math.max(0, selectedIdx)] || (AppState.profiles || [])[0];
+                            newId = selected?.id || newId;
+                        } else if (mode !== 'current-overwrite') {
+                            AppState.profiles.push({ id: newId, name: `${sourceName} · ${p.name || `Perfil ${idx+1}`}` });
+                        } else {
+                            newId = AppState.activeProfileId || 'default';
+                        }
                         profileMap.set(p.id || 'default', newId);
-                        AppState.profiles.push({ id: newId, name: `${sourceName} · ${p.name || `Perfil ${idx+1}`}` });
                     });
                     const importedContacts = (Array.isArray(state.contacts) ? state.contacts : []).map((c) => ({ ...c, id: Date.now() + Math.floor(Math.random()*1000000), profileId: profileMap.get(c.profileId || 'default') || profileBase }));
                     AppState.contacts = AppState.contacts.concat(importedContacts);

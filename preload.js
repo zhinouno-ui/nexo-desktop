@@ -9,7 +9,8 @@ contextBridge.exposeInMainWorld('nexoStore', {
   exportBackup: () => ipcRenderer.invoke('app:exportBackup'),
   importContactsChunk: (payload) => ipcRenderer.invoke('store:importContactsChunk', payload),
   queueDelta: (delta) => ipcRenderer.invoke('store:queueDelta', delta),
-  flushDeltas: (reason) => ipcRenderer.invoke('store:flushDeltas', reason || 'manual')
+  flushDeltas: (reason) => ipcRenderer.invoke('store:flushDeltas', reason || 'manual'),
+  asyncSaveRequest: (payload) => ipcRenderer.send('async-save-request', payload || {})
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -27,6 +28,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openErrorLog: () => ipcRenderer.invoke('app:openErrorLog'),
   logError: (payload) => ipcRenderer.invoke('app:logError', payload),
   queueUpload: (payload) => ipcRenderer.invoke('app:queueUpload', payload),
+
+  listProfiles: () => ipcRenderer.invoke('profile:list'),
+  createProfile: (payload) => ipcRenderer.invoke('profile:create', payload || {}),
+  renameProfile: (payload) => ipcRenderer.invoke('profile:rename', payload || {}),
+  deleteProfile: (payload) => ipcRenderer.invoke('profile:delete', payload || {}),
+  resolveImportMode: () => ipcRenderer.invoke('profile:resolveImportMode'),
+  buildExport: (payload) => ipcRenderer.invoke('export:build', payload || {}),
+
   zoomIn: () => ipcRenderer.invoke('zoom:in'),
   zoomOut: () => ipcRenderer.invoke('zoom:out'),
   zoomReset: () => ipcRenderer.invoke('zoom:reset'),

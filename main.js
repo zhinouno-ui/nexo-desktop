@@ -4,6 +4,7 @@ const fssync = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { autoUpdater } = require('electron-updater');
+const { Worker } = require('worker_threads');
 
 const MIN_UPDATE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_UPDATE_SIZE_BYTES = 500 * 1024 * 1024;
@@ -52,6 +53,40 @@ function getUpdateCacheDir() {
 
 function getCurrentVersionMetaPath() {
   return path.join(app.getPath('userData'), 'current-version.json');
+}
+
+function getProfilesMetaPath() {
+  return path.join(app.getPath('userData'), 'profiles.json');
+}
+
+async function readProfilesMeta() {
+  try {
+    const raw = await fs.readFile(getProfilesMetaPath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    const profiles = Array.isArray(parsed?.profiles) ? parsed.profiles : [];
+    return profiles.length ? profiles : [{ id: 'default', name: 'Base principal' }];
+  } catch {
+    return [{ id: 'default', name: 'Base principal' }];
+  }
+}
+
+async function writeProfilesMeta(profiles) {
+  const safe = Array.isArray(profiles) && profiles.length ? profiles : [{ id: 'default', name: 'Base principal' }];
+  await fs.mkdir(path.dirname(getProfilesMetaPath()), { recursive: true });
+  await fs.writeFile(getProfilesMetaPath(), JSON.stringify({ profiles: safe }, null, 2), 'utf8');
+  return safe;
+}
+
+function runExportWorker(payload) {
+  return new Promise((resolve, reject) => {
+    const workerPath = path.join(__dirname, 'workers', 'export-worker.js');
+    const worker = new Worker(workerPath, { workerData: payload });
+    worker.once('message', (msg) => resolve(msg));
+    worker.once('error', reject);
+    worker.once('exit', (code) => {
+      if (code !== 0) reject(new Error(`export-worker exited with code ${code}`));
+    });
+  });
 }
 
 async function persistCurrentVersionMeta(extra = {}) {
@@ -255,19 +290,50 @@ async function applyStoreDelta(db, delta) {
   if (!db || typeof db !== 'object') return db;
   if (!delta || typeof delta !== 'object') return db;
   const type = String(delta.type || '').toLowerCase();
+  const contacts = Array.isArray(db.contactsData) ? db.contactsData : [];
+  const findContact = (id) => contacts.find((c) => c && String(c.id) === String(id));
+
   if (type === 'contact-status') {
     const id = delta.id;
     if (!id) return db;
-    const contacts = Array.isArray(db.contactsData) ? db.contactsData : [];
-    const contact = contacts.find((c) => c && c.id === id);
+    const contact = findContact(id);
     if (!contact) return db;
     contact.status = delta.status || contact.status;
     contact.lastUpdated = delta.lastUpdated || contact.lastUpdated || new Date().toISOString();
     contact.lastEditedAt = delta.lastEditedAt || contact.lastEditedAt || contact.lastUpdated;
     return db;
   }
+
+  if (type === 'contact-delete') {
+    const id = delta.id;
+    if (!id) return db;
+    db.contactsData = contacts.filter((c) => String(c?.id) !== String(id));
+    return db;
+  }
+
+  if (type === 'contact-touch') {
+    const id = delta.id;
+    if (!id) return db;
+    const contact = findContact(id);
+    if (!contact) return db;
+    if (delta.lastMessageSentAt) contact.lastMessageSentAt = delta.lastMessageSentAt;
+    if (delta.lastEditedAt) contact.lastEditedAt = delta.lastEditedAt;
+    if (delta.lastUpdated) contact.lastUpdated = delta.lastUpdated;
+    if (delta.lastEditReason) contact.lastEditReason = delta.lastEditReason;
+    return db;
+  }
+
   return db;
 }
+
+ipcMain.on('async-save-request', (_event, payload) => {
+  const safePayload = payload && typeof payload === 'object' ? payload : {};
+  queueWrite(safePayload).catch((error) => {
+    appendErrorLog('async-save-request', error, {
+      keys: Object.keys(safePayload || {})
+    }).catch(() => {});
+  });
+});
 
 async function flushPendingStoreDeltas(reason = 'timer') {
   if (deltaFlushInFlight) return { ok: false, skipped: true };
@@ -750,6 +816,49 @@ async function getUpdaterDiagnostics(lastAttempt = lastUpdateAttempt) {
 }
 
 ipcMain.handle('store:getAll', async () => readDb());
+
+ipcMain.handle('profile:list', async () => ({ profiles: await readProfilesMeta() }));
+ipcMain.handle('profile:create', async (_event, payload) => {
+  const name = String(payload?.name || '').trim().slice(0, 60);
+  if (!name) return { ok: false, message: 'Nombre inválido' };
+  const profiles = await readProfilesMeta();
+  const id = `pf_${Date.now()}_${Math.floor(Math.random()*9999)}`;
+  profiles.push({ id, name });
+  await writeProfilesMeta(profiles);
+  return { ok: true, profile: { id, name }, profiles };
+});
+ipcMain.handle('profile:rename', async (_event, payload) => {
+  const id = String(payload?.id || '');
+  const name = String(payload?.name || '').trim().slice(0, 60);
+  if (!id || !name) return { ok: false, message: 'Datos inválidos' };
+  const profiles = await readProfilesMeta();
+  const p = profiles.find((x) => x.id === id);
+  if (!p) return { ok: false, message: 'Perfil no encontrado' };
+  p.name = name;
+  await writeProfilesMeta(profiles);
+  return { ok: true, profiles };
+});
+ipcMain.handle('profile:delete', async (_event, payload) => {
+  const id = String(payload?.id || '');
+  if (!id || id === 'default') return { ok: false, message: 'No permitido' };
+  const profiles = (await readProfilesMeta()).filter((p) => p.id !== id);
+  await writeProfilesMeta(profiles);
+  return { ok: true, profiles };
+});
+ipcMain.handle('profile:resolveImportMode', async () => {
+  const result = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Crear perfil nuevo', 'Importar en perfil actual (pisar)', 'Seleccionar perfil existente', 'Cancelar'],
+    defaultId: 0,
+    cancelId: 3,
+    title: 'Importar archivo',
+    message: '¿Cómo querés importar estos datos?'
+  });
+  const map = ['new-profile', 'current-overwrite', 'select-existing', 'cancel'];
+  return { mode: map[result.response] || 'cancel' };
+});
+ipcMain.handle('export:build', async (_event, payload) => runExportWorker(payload || {}));
+
 
 ipcMain.handle('store:queueDelta', async (_event, payload) => {
   const delta = payload && typeof payload === 'object' ? payload : null;
