@@ -7,7 +7,9 @@ contextBridge.exposeInMainWorld('nexoStore', {
   backupNow: () => ipcRenderer.invoke('store:backupNow'),
   openDataFolder: () => ipcRenderer.invoke('app:openDataFolder'),
   exportBackup: () => ipcRenderer.invoke('app:exportBackup'),
-  importContactsChunk: (payload) => ipcRenderer.invoke('store:importContactsChunk', payload)
+  importContactsChunk: (payload) => ipcRenderer.invoke('store:importContactsChunk', payload),
+  queueDelta: (delta) => ipcRenderer.invoke('store:queueDelta', delta),
+  flushDeltas: (reason) => ipcRenderer.invoke('store:flushDeltas', reason || 'manual')
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {

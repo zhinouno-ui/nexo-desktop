@@ -246,6 +246,57 @@ async function writeDb(data) {
 }
 
 let writeQueue = Promise.resolve();
+
+let pendingStoreDeltas = [];
+let pendingDeltaFlushTimer = null;
+let deltaFlushInFlight = false;
+
+async function applyStoreDelta(db, delta) {
+  if (!db || typeof db !== 'object') return db;
+  if (!delta || typeof delta !== 'object') return db;
+  const type = String(delta.type || '').toLowerCase();
+  if (type === 'contact-status') {
+    const id = delta.id;
+    if (!id) return db;
+    const contacts = Array.isArray(db.contactsData) ? db.contactsData : [];
+    const contact = contacts.find((c) => c && c.id === id);
+    if (!contact) return db;
+    contact.status = delta.status || contact.status;
+    contact.lastUpdated = delta.lastUpdated || contact.lastUpdated || new Date().toISOString();
+    contact.lastEditedAt = delta.lastEditedAt || contact.lastEditedAt || contact.lastUpdated;
+    return db;
+  }
+  return db;
+}
+
+async function flushPendingStoreDeltas(reason = 'timer') {
+  if (deltaFlushInFlight) return { ok: false, skipped: true };
+  if (!pendingStoreDeltas.length) return { ok: true, flushed: 0 };
+  deltaFlushInFlight = true;
+  try {
+    const deltas = pendingStoreDeltas.splice(0, pendingStoreDeltas.length);
+    const db = await readDb();
+    for (const delta of deltas) {
+      await applyStoreDelta(db, delta);
+    }
+    await queueWrite(db);
+    perfLog('store:delta-flush', 'done', { reason, count: deltas.length });
+    return { ok: true, flushed: deltas.length };
+  } catch (error) {
+    await appendErrorLog('store:delta-flush', error, { reason, queued: pendingStoreDeltas.length });
+    return { ok: false, message: error?.message || String(error) };
+  } finally {
+    deltaFlushInFlight = false;
+  }
+}
+
+function scheduleDeltaFlush(ms = 10000, reason = 'timer') {
+  if (pendingDeltaFlushTimer) clearTimeout(pendingDeltaFlushTimer);
+  pendingDeltaFlushTimer = setTimeout(() => {
+    pendingDeltaFlushTimer = null;
+    flushPendingStoreDeltas(reason).catch(() => {});
+  }, ms);
+}
 function queueWrite(data) {
   const started = Date.now();
   writeQueue = writeQueue.then(async () => {
@@ -402,6 +453,10 @@ function createWindow() {
     }
     isQuitting = true;
     app.quit();
+  });
+
+  mainWindow.on('minimize', () => {
+    if (pendingStoreDeltas.length) scheduleDeltaFlush(10000, 'minimized-10s');
   });
 
   mainWindow.on('closed', () => {
@@ -695,6 +750,16 @@ async function getUpdaterDiagnostics(lastAttempt = lastUpdateAttempt) {
 }
 
 ipcMain.handle('store:getAll', async () => readDb());
+
+ipcMain.handle('store:queueDelta', async (_event, payload) => {
+  const delta = payload && typeof payload === 'object' ? payload : null;
+  if (!delta) return { ok: false, message: 'delta inválido' };
+  pendingStoreDeltas.push(delta);
+  scheduleDeltaFlush(10000, 'idle-10s');
+  return { ok: true, queued: pendingStoreDeltas.length };
+});
+ipcMain.handle('store:flushDeltas', async (_event, reason = 'manual') => flushPendingStoreDeltas(String(reason || 'manual')));
+
 ipcMain.handle('store:getCacheMeta', async () => ({ cached: !!dbCache, loadedAt: dbCacheLoadedAt || null }));
 ipcMain.handle('store:setAll', async (_event, data) => {
   const started = Date.now();
@@ -972,6 +1037,8 @@ app.on('open-url', (event, url) => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  if (pendingDeltaFlushTimer) clearTimeout(pendingDeltaFlushTimer);
+  flushPendingStoreDeltas('before-quit').catch(() => {});
 });
 
 app.on('window-all-closed', () => {

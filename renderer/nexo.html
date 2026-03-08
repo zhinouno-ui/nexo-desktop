@@ -2882,6 +2882,112 @@
             opacity: .25 !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+
+        body.light-mode .header,
+        body.light-mode .search-bar,
+        body.light-mode .progress-bar-container,
+        body.light-mode .contact-card,
+        body.light-mode .list-item,
+        body.light-mode .chart-card,
+        body.light-mode .metrics-card,
+        body.light-mode .modal-content {
+            background: #f8fbff !important;
+            color: var(--text-primary);
+            border-color: rgba(100,116,139,.26) !important;
+            box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        }
+        body.light-mode .chart-card canvas,
+        body.light-mode .loading-preview-bg {
+            background: #eef4fb !important;
+        }
+        body.light-mode .search-input.ghost-value-active {
+            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
+            color:#64748b;
+        }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+        }
+        body.perf-mode .loading-preview-track { animation: none !important; }
+        body.perf-mode .cards-grid { gap: 8px !important; }
+
+
+        .cards-grid,
+        .list-view {
+            contain: layout style;
+            content-visibility: auto;
+        }
+        .cards-grid.virtual-scroll,
+        .list-view.virtual-scroll {
+            max-height: 68vh;
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+        .virtual-spacer { width: 100%; pointer-events: none; }
+        body.perf-large .contact-card,
+        body.perf-large .list-item {
+            box-shadow: none !important;
+        }
+        body.perf-large .contact-card::after,
+        body.perf-large .list-item::after,
+        body.perf-large .list-item-main::before,
+        body.perf-large .list-status-bg-icon {
+            display: none !important;
+        }
+        body.perf-large .contact-card::before,
+        body.perf-large .list-item::before {
+            opacity: .25 !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -3728,7 +3834,9 @@
             perfStageCosts: {},
             statsDirty: true,
             lastStatsAt: 0,
-            statsCacheByProfile: {}
+            statsCacheByProfile: {},
+            pendingStatusDeltas: [],
+            deltaQueueTimer: null
         };
 
         function ensureReviewMilestonesState() {
@@ -5517,10 +5625,11 @@
             return true;
         }
 
-        function saveData(force = false) {
+        function saveData(force = false, options = {}) {
             AppState.searchIndexDirty = true;
             AppState.statsDirty = true;
-            contactsDirty = true;
+            const deltaOnly = !!options?.deltaOnly;
+            if (!deltaOnly) contactsDirty = true;
             pendingContactMutations += 1;
             setSaveState('pending', 'Guardado diferido');
             if (force) {
@@ -6089,6 +6198,10 @@
             return res;
         }
 
+        function timeit(label, fn) {
+            return withPerfStage(label, fn);
+        }
+
         function updatePerfPanel() {
             if (elements.perfDomItems) elements.perfDomItems.textContent = String(AppState.perfStats.domItems || 0);
             if (elements.perfFilterMs) {
@@ -6101,13 +6214,34 @@
             }
             if (elements.perfLongTasks) elements.perfLongTasks.textContent = String(AppState.perfStats.longTasks || 0);
             if (elements.perfLongTasksTop) {
-                const top = (AppState.perfStats.longTaskTop || []).slice(0, 3).map((x) => `${x.name} ${Math.round(x.duration)}ms`).join(' · ');
-                elements.perfLongTasksTop.textContent = top || '-';
+                const topLong = (AppState.perfStats.longTaskTop || []).slice(0, 3).map((x) => `${x.name} ${Math.round(x.duration)}ms`).join(' · ');
+                const topStages = Object.entries(AppState.perfStageCosts || {}).sort((a,b)=>((b[1]?.last||0)-(a[1]?.last||0))).slice(0,3).map(([k,v])=>`${k}:${v.last}ms`).join(' · ');
+                elements.perfLongTasksTop.textContent = [topLong, topStages].filter(Boolean).join(' || ') || '-';
             }
         }
 
         function applyFilters() {
             applyFiltersIndexed();
+        }
+
+
+        function adjustStatsCountersForStatus(profileId, fromStatus, toStatus) {
+            if (!profileId) profileId = 'default';
+            const key = `stats_${profileId}`;
+            const current = AppState.statsCacheByProfile?.[key];
+            if (!current) return;
+            const norm = (x) => String(x || '').toLowerCase();
+            const from = norm(fromStatus);
+            const to = norm(toStatus);
+            if (from === to) return;
+            const dec = (field) => { current[field] = Math.max(0, (current[field] || 0) - 1); };
+            const inc = (field) => { current[field] = (current[field] || 0) + 1; };
+            const mapField = (st) => st === 'sin revisar' ? 'unreviewed' : st === 'contactado' ? 'contactado' : st === 'revisado' ? 'revisado' : st === 'jugando' ? 'jugando' : st === 'sin wsp' ? 'sinWsp' : st === 'no interesado' ? 'noInteresado' : '';
+            const ff = mapField(from); const tf = mapField(to);
+            if (ff) dec(ff);
+            if (tf) inc(tf);
+            if (from === 'sin revisar' && to !== 'sin revisar') inc('reviewed');
+            if (from !== 'sin revisar' && to === 'sin revisar') dec('reviewed');
         }
 
         function updateStats() {
@@ -7046,7 +7180,8 @@
                 AppState.contacts = AppState.contacts.filter(c => c.id !== id);
                 AppState.selectedContacts.delete(id);
                 addToHistory('Contacto eliminado', contact.name);
-                saveData();
+                enqueueStatusDelta(contact, oldStatus, requestedStatus, eventAt);
+                saveData(false, { deltaOnly: true });
                 render();
                 showNotification('Contacto eliminado', 'success');
             }
@@ -7061,6 +7196,36 @@
             });
         };
 
+
+
+        function scheduleStatusDeltaFlush(reason = 'idle-10s') {
+            if (AppState.deltaQueueTimer) clearTimeout(AppState.deltaQueueTimer);
+            AppState.deltaQueueTimer = setTimeout(async () => {
+                const deltas = (AppState.pendingStatusDeltas || []).splice(0, AppState.pendingStatusDeltas.length);
+                if (!deltas.length) return;
+                if (!(window.nexoStore && typeof window.nexoStore.queueDelta === 'function')) return;
+                await timeit('updateState', async () => {
+                    for (const d of deltas) {
+                        try { await window.nexoStore.queueDelta(d); } catch (_) {}
+                    }
+                    try { await window.nexoStore.flushDeltas(reason); } catch (_) {}
+                });
+            }, 10000);
+        }
+
+        function enqueueStatusDelta(contact, fromStatus, toStatus, at) {
+            if (!contact?.id) return;
+            AppState.pendingStatusDeltas.push({
+                type: 'contact-status',
+                id: contact.id,
+                fromStatus,
+                status: toStatus,
+                lastUpdated: at || new Date().toISOString(),
+                lastEditedAt: at || new Date().toISOString(),
+                profileId: contact.profileId || 'default'
+            });
+            scheduleStatusDeltaFlush('idle-10s');
+        }
 
         window.changeContactStatus = (id, newStatus, event, source = 'common', meta = {}) => {
             try {
@@ -7081,12 +7246,14 @@
                 touchContactEdit(contact, source === 'shift' ? 'turno_transfer' : 'status_transfer');
                 addToHistory('Crédito de competencia transferido', `${contact.name}: ahora cuenta para ${String(contact.shiftReviewedByShift || '-').toUpperCase()}`, contact.id);
                 setSaveState('pending', 'Guardando cambios...');
-                saveData();
+                enqueueStatusDelta(contact, oldStatus, requestedStatus, eventAt);
+                saveData(false, { deltaOnly: true });
                 render();
                 return;
             }
 
             contact.status = requestedStatus;
+            adjustStatsCountersForStatus(contact.profileId || 'default', oldStatus, requestedStatus);
             updateCompetitionCredit(contact, requestedStatus, source, { shiftOverride: shiftByEvent, atOverride: eventAt });
             try { setReviewMetadata(contact, requestedStatus); } catch (e) { console.error('Error metadata estado:', e); }
             touchContactEdit(contact, source === 'shift' ? 'turno_status' : 'status_change');
@@ -7544,7 +7711,8 @@
             if (contact) {
                 contact.lastMessageSentAt = new Date().toISOString();
                 touchContactEdit(contact, 'whatsapp_open');
-                saveData();
+                enqueueStatusDelta(contact, oldStatus, requestedStatus, eventAt);
+                saveData(false, { deltaOnly: true });
                 render();
             }
             addToHistory('WhatsApp abierto', `${contact?.name || normalized}`);
@@ -9206,6 +9374,7 @@
 
             window.addEventListener('beforeunload', () => {
                 flushSaveQueue('beforeunload');
+                if (window.nexoStore?.flushDeltas) window.nexoStore.flushDeltas('beforeunload').catch(() => {});
                 flushAuxStorageSave();
                 savePreferences(true);
             });
@@ -9216,6 +9385,7 @@
                     setTimeout(() => {
                         if (document.visibilityState === 'hidden' && contactsDirty && Date.now() - hiddenAt >= 10000) {
                             flushSaveQueue('hidden-10s');
+                            if (window.nexoStore?.flushDeltas) window.nexoStore.flushDeltas('hidden-10s').catch(() => {});
                         }
                     }, 10050);
                 } else {
@@ -9229,6 +9399,7 @@
                 if (document.visibilityState === 'hidden') return;
                 if (Date.now() - lastInteractionAt >= 30000) {
                     flushSaveQueue('idle-30s');
+                    if (window.nexoStore?.flushDeltas) window.nexoStore.flushDeltas('idle-30s').catch(() => {});
                 }
             }, 5000);
 
@@ -9680,7 +9851,8 @@
                 recordMetricEvent('user_created', { profileId: AppState.activeProfileId || 'default', contactId: newContact.id, status: newContact.status, selectionType: 'manual' });
                 addToHistory('Contacto agregado manualmente', name);
                 detectDuplicates();
-                saveData();
+                enqueueStatusDelta(contact, oldStatus, requestedStatus, eventAt);
+                saveData(false, { deltaOnly: true });
                 render();
                 resetAddSingleModalState();
                 $('#addSingleModal').classList.remove('active');
