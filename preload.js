@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('nexoStore', {
   getAll: () => ipcRenderer.invoke('store:getAll'),
+  getState: () => ipcRenderer.invoke('store:getAll'),
   setAll: (data) => ipcRenderer.invoke('store:setAll', data),
   patch: (partial) => ipcRenderer.invoke('store:patch', partial),
   backupNow: () => ipcRenderer.invoke('store:backupNow'),
@@ -53,6 +54,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 contextBridge.exposeInMainWorld('api', {
   exportDaily: () => ipcRenderer.invoke('export:daily'),
+  exportBackup: () => ipcRenderer.invoke('export:full'),
   exportFull: () => ipcRenderer.invoke('export:full'),
   importData: (filePath) => ipcRenderer.invoke('import:data', { filePath })
 });

@@ -3518,6 +3518,112 @@
             opacity: .25 !important;
         }
 
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+
+        body.light-mode .header,
+        body.light-mode .search-bar,
+        body.light-mode .progress-bar-container,
+        body.light-mode .contact-card,
+        body.light-mode .list-item,
+        body.light-mode .chart-card,
+        body.light-mode .metrics-card,
+        body.light-mode .modal-content {
+            background: #f8fbff !important;
+            color: var(--text-primary);
+            border-color: rgba(100,116,139,.26) !important;
+            box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        }
+        body.light-mode .chart-card canvas,
+        body.light-mode .loading-preview-bg {
+            background: #eef4fb !important;
+        }
+        body.light-mode .search-input.ghost-value-active {
+            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
+            color:#64748b;
+        }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+        }
+        body.perf-mode .loading-preview-track { animation: none !important; }
+        body.perf-mode .cards-grid { gap: 8px !important; }
+
+
+        .cards-grid,
+        .list-view {
+            contain: layout style;
+            content-visibility: auto;
+        }
+        .cards-grid.virtual-scroll,
+        .list-view.virtual-scroll {
+            max-height: 68vh;
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+        .virtual-spacer { width: 100%; pointer-events: none; }
+        body.perf-large .contact-card,
+        body.perf-large .list-item {
+            box-shadow: none !important;
+        }
+        body.perf-large .contact-card::after,
+        body.perf-large .list-item::after,
+        body.perf-large .list-item-main::before,
+        body.perf-large .list-status-bg-icon {
+            display: none !important;
+        }
+        body.perf-large .contact-card::before,
+        body.perf-large .list-item::before {
+            opacity: .25 !important;
+        }
+
     </style>
 </head>
 <body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
@@ -3946,8 +4052,9 @@
                     <option value="tn">Turno 3 (22-06)</option>
                 </select>
                 <div style="display:flex;gap:6px;align-items:center;grid-column:span 2;flex-wrap:wrap;">
-                    <button id="metricsShiftMorningBtn" class="btn" style="padding:6px 10px;">Turno Mañana (08-14)</button>
-                    <button id="metricsShiftAfternoonBtn" class="btn" style="padding:6px 10px;">Turno Tarde (14-20)</button>
+                    <button id="metricsShiftMorningBtn" class="btn" style="padding:6px 10px;">TM (06-14)</button>
+                    <button id="metricsShiftAfternoonBtn" class="btn" style="padding:6px 10px;">TT (14-22)</button>
+                    <button id="metricsShiftNightBtn" class="btn" style="padding:6px 10px;">TN (22-06)</button>
                     <button id="metricsShiftResetBtn" class="btn" style="padding:6px 10px;">Quitar lapso</button>
                 </div>
                 <input id="metricsFromDate" type="date" class="origin-input" style="margin-top:0;">
@@ -3991,16 +4098,13 @@
             <div class="metrics-actions">
                 <button id="metricsFilterLastBatchBtn" class="btn"><i class="fas fa-filter"></i> Filtrar última subida</button>
                 <button id="metricsDeleteLastBatchBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Borrar última subida</button>
-                <button id="exportFullSnapshotBtn" class="btn" title="Exporta snapshot completo (usuarios + historial global)"><i class="fas fa-file-export"></i> Exportar Snapshot <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo pesado para auditoría periódica. Incluye usuarios e historial global."></i></button>
                 <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
                 <button id="importControlBtn" class="btn" title="Importa control diario/mensual"><i class="fas fa-shield-alt"></i> Importar Control <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo liviano para seguimiento diario/mensual de métricas y turnos."></i></button>
-                <select id="controlExportType" class="filter-select" style="min-width:200px;">
-                    <option value="daily">Reporte Diario (Delta)</option>
-                    <option value="monthly">Reporte Completo (Mensual)</option>
-                </select>
-                <button id="exportControlBtn" class="btn"><i class="fas fa-file-export"></i> Exportar control</button>
-                <button id="exportDailyNexoBtn" class="btn"><i class="fas fa-file-export"></i> Exportar Log Diario (.nexo)</button>
-                <button id="exportFullNexoBtn" class="btn"><i class="fas fa-archive"></i> Exportar Full (.nexo)</button>
+                <div class="metrics-control-center" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <span style="color:var(--text-secondary);font-size:.82rem;">Centro de Control</span>
+                    <button id="exportDailyNexoBtn" class="btn"><i class="fas fa-file-export"></i> exportDaily()</button>
+                    <button id="exportBackupNexoBtn" class="btn"><i class="fas fa-archive"></i> exportBackup()</button>
+                </div>
                 <button id="uploadReportBtn" class="btn"><i class="fas fa-upload"></i> Subir reporte seleccionado</button>
                 <button id="resetBaselineBtn" class="btn"><i class="fas fa-eraser"></i> Reset baseline</button>
             </div>
@@ -4137,6 +4241,9 @@
         if (!hasBridge) {
             window.__nexoStoreReady = Promise.resolve();
             return;
+        }
+        if (typeof window.nexoStore.getState !== 'function') {
+            window.nexoStore.getState = () => window.nexoStore.getAll();
         }
 
         const emitStoreError = (message) => {
@@ -4461,6 +4568,7 @@
             metricsShiftFilter: $('#metricsShiftFilter'),
             metricsShiftMorningBtn: $('#metricsShiftMorningBtn'),
             metricsShiftAfternoonBtn: $('#metricsShiftAfternoonBtn'),
+            metricsShiftNightBtn: $('#metricsShiftNightBtn'),
             metricsShiftResetBtn: $('#metricsShiftResetBtn'),
             metricsFromDate: $('#metricsFromDate'),
             metricsToDate: $('#metricsToDate'),
@@ -4470,8 +4578,6 @@
             statusDonutChart: $('#statusDonutChart'),
             selectionDonutChart: $('#selectionDonutChart'),
             transitionBarChart: $('#transitionBarChart'),
-            controlExportType: $('#controlExportType'),
-            exportControlBtn: $('#exportControlBtn'),
             uploadReportBtn: $('#uploadReportBtn'),
             resetBaselineBtn: $('#resetBaselineBtn'),
             metricsDateLabel: $('#metricsDateLabel'),
@@ -4479,8 +4585,7 @@
             metricsFilterLastBatchBtn: $('#metricsFilterLastBatchBtn'),
             metricsDeleteLastBatchBtn: $('#metricsDeleteLastBatchBtn'),
             exportDailyNexoBtn: $('#exportDailyNexoBtn'),
-            exportFullNexoBtn: $('#exportFullNexoBtn'),
-            exportFullSnapshotBtn: $('#exportFullSnapshotBtn'),
+            exportBackupNexoBtn: $('#exportBackupNexoBtn'),
             importFullSnapshotBtn: $('#importFullSnapshotBtn'),
             importControlBtn: $('#importControlBtn'),
             controlPasswordPanel: $('#controlPasswordPanel'),
@@ -6645,36 +6750,6 @@
             } catch (e) {
                 reportError('refreshProfilesUI', e);
             }
-            if (elements.perfLongTasks) elements.perfLongTasks.textContent = String(AppState.perfStats.longTasks || 0);
-            if (elements.perfLongTasksTop) {
-                const topLong = (AppState.perfStats.longTaskTop || []).slice(0, 3).map((x) => `${x.name} ${Math.round(x.duration)}ms`).join(' · ');
-                const topStages = Object.entries(AppState.perfStageCosts || {}).sort((a,b)=>((b[1]?.last||0)-(a[1]?.last||0))).slice(0,3).map(([k,v])=>`${k}:${v.last}ms`).join(' · ');
-                elements.perfLongTasksTop.textContent = [topLong, topStages].filter(Boolean).join(' || ') || '-';
-            }
-        }
-
-        function applyFilters() {
-            applyFiltersIndexed();
-        }
-
-
-        function adjustStatsCountersForStatus(profileId, fromStatus, toStatus) {
-            if (!profileId) profileId = 'default';
-            const key = `stats_${profileId}`;
-            const current = AppState.statsCacheByProfile?.[key];
-            if (!current) return;
-            const norm = (x) => String((x ?? 'Sin Estado')).toLowerCase();
-            const from = norm(fromStatus);
-            const to = norm(toStatus);
-            if (from === to) return;
-            const dec = (field) => { current[field] = Math.max(0, (current[field] || 0) - 1); };
-            const inc = (field) => { current[field] = (current[field] || 0) + 1; };
-            const mapField = (st) => st === 'sin revisar' ? 'unreviewed' : st === 'contactado' ? 'contactado' : st === 'revisado' ? 'revisado' : st === 'jugando' ? 'jugando' : st === 'sin wsp' ? 'sinWsp' : st === 'no interesado' ? 'noInteresado' : '';
-            const ff = mapField(from); const tf = mapField(to);
-            if (ff) dec(ff);
-            if (tf) inc(tf);
-            if (from === 'sin revisar' && to !== 'sin revisar') inc('reviewed');
-            if (from !== 'sin revisar' && to === 'sin revisar') dec('reviewed');
         }
 
         window.switchProfile = (profileId) => {
@@ -6980,122 +7055,6 @@
             } catch (e) {
                 console.error('setReviewMetadata fallback:', e);
             }
-        }
-        function inferShiftForContact(contact, rrState) {
-            const o = normalizeUsername(contact.origin || '');
-            if (o.includes('mañana') || o.includes('manana')) return 'tm';
-            if (o.includes('tarde')) return 'tt';
-            if (o.includes('noche')) return 'tn';
-            const seq = ['tm', 'tt', 'tn'];
-            const shift = seq[rrState.i % seq.length];
-            rrState.i += 1;
-            return shift;
-        }
-
-        function getLocalCompetitionShift(date = new Date()) {
-            const hour = date.getHours();
-            if (hour >= 6 && hour < 14) return 'tm';
-            if (hour >= 14 && hour < 22) return 'tt';
-            return 'tn';
-        }
-
-        function inferShiftFromIso(isoString) {
-            if (!isoString) return '';
-            const dt = new Date(isoString);
-            if (Number.isNaN(dt.getTime())) return '';
-            return getLocalCompetitionShift(dt);
-        }
-
-        function updateCompetitionCredit(contact, newStatus, source = 'common', { forceTransfer = false, shiftOverride = '', atOverride = '' } = {}) {
-            if (!contact) return false;
-
-            if (newStatus === 'sin revisar') {
-                const changed = !!(contact.shiftReviewed || contact.shiftReviewedByShift || contact.shiftReviewedAt);
-                contact.shiftReviewed = false;
-                contact.shiftReviewedByShift = null;
-                contact.shiftReviewedAt = null;
-                return changed;
-            }
-
-            const localShift = shiftOverride || getLocalCompetitionShift(new Date());
-            const changed = forceTransfer || !contact.shiftReviewed || contact.shiftReviewedByShift !== localShift;
-            contact.shiftReviewed = true;
-            contact.shiftReviewedByShift = localShift;
-            if (changed) contact.shiftReviewedAt = atOverride || new Date().toISOString();
-            return changed;
-        }
-
-        function assignShifts() {
-            const rr = { i: 0 };
-            const activeProfile = AppState.activeProfileId || 'default';
-            AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile).forEach(c => {
-                if (!c.assignedShift) c.assignedShift = inferShiftForContact(c, rr);
-            });
-        }
-
-        function getShiftStats(shift) {
-            const activeProfile = AppState.activeProfileId || 'default';
-            const scoped = AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile);
-            const pendientes = scoped.filter(c => c.assignedShift === shift && c.status === 'sin revisar').length;
-            const revisados = scoped.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift && c.status !== 'sin revisar').length;
-            const total = revisados + pendientes;
-            const pct = total ? Math.min(100, Math.round((revisados / total) * 100)) : 0;
-            return { total, revisados, pendientes, pct };
-        }
-
-        function renderShiftsView() {
-            assignShifts();
-            const shifts = ['tm', 'tt', 'tn'];
-            const shiftStats = shifts.map(shift => ({ shift, st: getShiftStats(shift), data: AppState.shiftMode[shift] }));
-            const totals = shiftStats.reduce((acc, row) => {
-                acc.total += row.st.total;
-                acc.revisados += row.st.revisados;
-                acc.pendientes += row.st.pendientes;
-                return acc;
-            }, { total: 0, revisados: 0, pendientes: 0 });
-            const pct = totals.total ? Math.round((totals.revisados / totals.total) * 100) : 0;
-
-            const overviewCard = `
-                <div class="shifts-overview-card">
-                    <div>
-                        <div style="font-weight:800; font-size:1rem;">Vista de competencia por turnos</div>
-                        <div style="color:var(--text-secondary); font-size:.86rem; margin-top:2px;">En este modo ocultamos búsqueda/filtros generales para enfocarte en productividad por turno.</div>
-                        <div class="shifts-overview-stats" style="margin-top:8px;">
-                            <span>Total asignados: <strong>${totals.total}</strong></span>
-                            <span>Revisados: <strong>${totals.revisados}</strong></span>
-                            <span>Pendientes: <strong>${totals.pendientes}</strong></span>
-                            <span>Avance global: <strong>${pct}%</strong></span>
-                        </div>
-                    </div>
-                    <div class="shifts-overview-actions">
-                        <button class="btn" onclick="rebalanceShift('all')"><i class="fas fa-random"></i> Rebalancear todo</button>
-                        <button class="btn" onclick="closeQuickReview()"><i class="fas fa-times-circle"></i> Cerrar revisión rápida</button>
-                    </div>
-                </div>`;
-
-            const cards = shiftStats.map(({ shift, st, data }) => {
-                return `
-                <div class="shift-card">
-                    <h3>
-                        <span>${shift.toUpperCase()}</span>
-                        <input class="filter-select" style="max-width:130px;" value="${data.name}" onchange="renameShift('${shift}', this.value)">
-                    </h3>
-                    <div class="shift-card-sub">Operador y cola de revisión para este turno.</div>
-                    <div class="shift-stats">
-                        <span>Asignados: <strong>${st.total}</strong></span>
-                        <span>Revisados: <strong>${st.revisados}</strong></span>
-                        <span>Pendientes: <strong>${st.pendientes}</strong></span>
-                    </div>
-                    <div class="shift-progress"><span style="width:${st.pct}%"></span></div>
-                    <div class="shift-controls">
-                        <button class="btn" onclick="startShiftReview('${shift}')"><i class="fas fa-play"></i> Empezar revisión</button>
-                        <button class="btn" onclick="rebalanceShift('${shift}')"><i class="fas fa-random"></i> Rebalancear</button>
-                    </div>
-                </div>`;
-            }).join('');
-
-            elements.shiftsView.innerHTML = overviewCard + cards;
-            elements.shiftsView.style.display = 'grid';
         }
         function inferShiftForContact(contact, rrState) {
             const o = normalizeUsername(contact.origin || '');
@@ -8341,205 +8300,6 @@
             return 'Coincidencia múltiple';
         }
 
-        function getDefaultThemes() {
-            return {
-                'whaticket-blue': { id: 'whaticket-blue', name: 'Azul Whaticket', desc: 'Apariencia profesional y limpia', primary: '#6ea8ff', accent: '#f49ab0', bg: '#1f2d46', surface: '#2b3a54', text: '#ecf2ff' },
-                'forest-green': { id: 'forest-green', name: 'Verde Bosque', desc: 'Naturaleza relajante', primary: '#61c554', accent: '#eab308', bg: '#1b351f', surface: '#25492a', text: '#eef8ee' },
-                'ocean-green': { id: 'ocean-green', name: 'Verde Océano', desc: 'Verde azulado fresco', primary: '#2dd4bf', accent: '#f38ba8', bg: '#153443', surface: '#1d4556', text: '#e8fbff' },
-                'sunset-orange': { id: 'sunset-orange', name: 'Naranja Atardecer', desc: 'Naranja cálido y dorado', primary: '#f59e0b', accent: '#f472b6', bg: '#3a230f', surface: '#4b2d12', text: '#fff4e8' },
-                'night-purple': { id: 'night-purple', name: 'Púrpura Nocturno', desc: 'Violeta elegante con cian', primary: '#a855f7', accent: '#22d3ee', bg: '#28173f', surface: '#352050', text: '#f4ecff' },
-                'rose-pink': { id: 'rose-pink', name: 'Rosa Rosado', desc: 'Sutil y marketinero', primary: '#f72585', accent: '#fb923c', bg: '#3b1830', surface: '#4a1f3b', text: '#ffeaf5' },
-                'cosmic': { id: 'cosmic', name: 'Cósmico', desc: 'Espacio profundo con neón', primary: '#7c83ff', accent: '#ff7aa2', bg: '#0a1024', surface: '#141e3d', text: '#e8edff' }
-            };
-        }
-
-        function hexToRgb(hex) {
-            const raw = String(hex || '').replace('#', '');
-            if (!raw || (raw.length !== 3 && raw.length !== 6)) return { r: 59, g: 130, b: 246 };
-            const full = raw.length === 3 ? raw.split('').map((c) => c + c).join('') : raw;
-            const num = parseInt(full, 16);
-            return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
-        }
-
-        function applyTheme(themeId) {
-            const theme = (AppState.themeCatalog || {})[themeId];
-            if (!theme) return;
-            const root = document.documentElement;
-            const pr = hexToRgb(theme.primary);
-            root.style.setProperty('--accent-primary', theme.primary);
-            root.style.setProperty('--accent-secondary', theme.accent);
-            root.style.setProperty('--accent-success', theme.accent);
-            root.style.setProperty('--bg-primary', AppState.lightMode ? '#eef2f8' : theme.bg);
-            root.style.setProperty('--bg-secondary', AppState.lightMode ? '#f7f9fc' : theme.surface);
-            root.style.setProperty('--bg-card', AppState.lightMode ? '#dfe8f3' : theme.surface);
-            root.style.setProperty('--text-primary', AppState.lightMode ? '#1e293b' : theme.text);
-            root.style.setProperty('--text-secondary', AppState.lightMode ? '#475569' : '#cbd5e1');
-            root.style.setProperty('--border-color', AppState.lightMode ? '#b8c6db' : 'rgba(148,163,184,.35)');
-            root.style.setProperty('--hover-color', AppState.lightMode ? '#cfdcee' : '#475569');
-            root.style.setProperty('--selection-bg', `rgba(${pr.r}, ${pr.g}, ${pr.b}, ${AppState.lightMode ? '0.18' : '0.2'})`);
-            document.body.classList.toggle('light-mode', !!AppState.lightMode);
-            AppState.activeThemeId = themeId;
-            savePreferences();
-        }
-
-        function renderThemeCards() {
-            if (!elements.themeCards) return;
-            const cards = Object.values(AppState.themeCatalog || {}).map((t) => {
-                const active = t.id === AppState.activeThemeId;
-                const custom = !isSystemThemeId(t.id);
-                return `<button class="metrics-card" style="text-align:left;cursor:pointer;${active ? 'outline:2px solid var(--accent-primary);' : ''}" data-theme-id="${t.id}"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><div><div class="k" style="font-weight:700;color:var(--text-primary)">${t.name}</div><div class="k" style="margin-top:4px;min-height:32px;">${t.desc || ''}</div></div>${custom ? `<div style="display:flex;gap:6px;flex-wrap:wrap;"><span class="btn" data-theme-rename="${t.id}" style="padding:4px 8px;font-size:.72rem;">Renombrar</span><span class="btn btn-danger" data-theme-delete="${t.id}" style="padding:4px 8px;font-size:.72rem;">Borrar</span></div>` : ''}</div><div style="display:flex;gap:6px;margin-top:8px;"><span style="width:18px;height:18px;border-radius:4px;background:${t.primary}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.accent}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.bg}"></span><span style="width:18px;height:18px;border-radius:4px;background:${t.surface}"></span></div></button>`;
-            }).join('');
-            elements.themeCards.innerHTML = cards || '<div style="color:var(--text-secondary)">Sin temas</div>';
-            elements.themeCards.querySelectorAll('[data-theme-id]').forEach((btn) => {
-                btn.onclick = () => {
-                    applyTheme(btn.getAttribute('data-theme-id'));
-                    renderThemeCards();
-                };
-            });
-            elements.themeCards.querySelectorAll('[data-theme-rename]').forEach((btn) => {
-                btn.onclick = (ev) => {
-                    ev.stopPropagation();
-                    const id = btn.getAttribute('data-theme-rename');
-                    const theme = (AppState.themeCatalog || {})[id];
-                    if (!theme || isSystemThemeId(id)) return;
-                    const nextName = String(window.prompt('Nuevo nombre del tema personalizado', theme.name || '') || '').trim();
-                    if (!nextName) return;
-                    theme.name = nextName.slice(0, 60);
-                    savePreferences();
-                    renderThemeCards();
-                    showNotification('Tema renombrado', 'success');
-                };
-            });
-            elements.themeCards.querySelectorAll('[data-theme-delete]').forEach((btn) => {
-                btn.onclick = (ev) => {
-                    ev.stopPropagation();
-                    const id = btn.getAttribute('data-theme-delete');
-                    if (!id || isSystemThemeId(id)) return;
-                    if (!confirm('¿Eliminar tema personalizado?')) return;
-                    delete AppState.themeCatalog[id];
-                    if (AppState.activeThemeId === id) {
-                        AppState.activeThemeId = 'whaticket-blue';
-                        applyTheme(AppState.activeThemeId);
-                    }
-                    savePreferences();
-                    renderThemeCards();
-                    showNotification('Tema eliminado', 'info');
-                };
-            });
-        }
-
-        function inferShiftFromDateParts(dateObj) {
-            const h = dateObj.getHours();
-            if (h >= 6 && h < 14) return 'tm';
-            if (h >= 14 && h < 22) return 'tt';
-            return 'tn';
-        }
-
-        function normalizeSelectionType(raw) {
-            const val = String(raw || '').toLowerCase();
-            if (val.includes('ops')) return 'ops';
-            if (val.includes('bulk') || val.includes('masiv')) return 'bulk';
-            if (val.includes('import')) return 'import';
-            return 'manual';
-        }
-
-        function recordMetricEvent(type, payload = {}) {
-            const at = payload.at || new Date().toISOString();
-            const dateObj = new Date(at);
-            const event = {
-                id: `${Date.now()}-${Math.floor(Math.random() * 100000)}`,
-                type,
-                at,
-                profileId: payload.profileId || AppState.activeProfileId || 'default',
-                shift: payload.shift || inferShiftFromDateParts(dateObj),
-                status: payload.status || '',
-                from: payload.from || '',
-                to: payload.to || '',
-                selectionType: normalizeSelectionType(payload.selectionType || payload.source || type),
-                contactId: payload.contactId || null
-            };
-            AppState.metricEvents.unshift(event);
-            if (AppState.metricEvents.length > 30000) AppState.metricEvents = AppState.metricEvents.slice(0, 30000);
-            savePreferences();
-        }
-
-        function drawDonut(canvas, entries, colors) {
-            if (!canvas || !canvas.getContext) return;
-            const ctx = canvas.getContext('2d');
-            const w = canvas.width, h = canvas.height;
-            ctx.clearRect(0, 0, w, h);
-            const total = entries.reduce((a, b) => a + b.value, 0);
-            if (!total) { ctx.fillStyle = '#94a3b8'; ctx.fillText('Sin datos', 12, 20); return; }
-            let start = -Math.PI / 2;
-            const cx = 90, cy = 90, r = 64;
-            entries.forEach((entry, idx) => {
-                const angle = (entry.value / total) * Math.PI * 2;
-                ctx.beginPath();
-                ctx.moveTo(cx, cy);
-                ctx.arc(cx, cy, r, start, start + angle);
-                ctx.closePath();
-                ctx.fillStyle = colors[idx % colors.length];
-                ctx.fill();
-                start += angle;
-            });
-            ctx.globalCompositeOperation = 'destination-out';
-            ctx.beginPath();
-            ctx.arc(cx, cy, 34, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.fillStyle = '#cbd5e1';
-            ctx.font = '12px sans-serif';
-            entries.slice(0, 5).forEach((entry, idx) => {
-                ctx.fillText(`${entry.label} ${Math.round((entry.value / total) * 100)}%`, 180, 22 + (idx * 18));
-            });
-        }
-
-        function drawBars(canvas, entries, color = '#3b82f6') {
-            if (!canvas || !canvas.getContext) return;
-            const ctx = canvas.getContext('2d');
-            const w = canvas.width, h = canvas.height;
-            ctx.clearRect(0, 0, w, h);
-            if (!entries.length) { ctx.fillStyle = '#94a3b8'; ctx.fillText('Sin datos', 12, 20); return; }
-            const max = Math.max(1, ...entries.map((e) => e.value));
-            const barW = Math.max(16, Math.floor((w - 40) / Math.max(1, entries.length)) - 8);
-            entries.slice(0, 12).forEach((entry, idx) => {
-                const x = 20 + idx * (barW + 8);
-                const bh = Math.max(2, Math.round((entry.value / max) * (h - 50)));
-                const y = h - 24 - bh;
-                const grad = ctx.createLinearGradient(x, y, x + barW, y + bh);
-                grad.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--accent-primary').trim() || color);
-                grad.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--accent-secondary').trim() || '#10b981');
-                ctx.fillStyle = grad;
-                const radius = 6;
-                ctx.beginPath();
-                ctx.moveTo(x + radius, y);
-                ctx.lineTo(x + barW - radius, y);
-                ctx.quadraticCurveTo(x + barW, y, x + barW, y + radius);
-                ctx.lineTo(x + barW, y + bh - radius);
-                ctx.quadraticCurveTo(x + barW, y + bh, x + barW - radius, y + bh);
-                ctx.lineTo(x + radius, y + bh);
-                ctx.quadraticCurveTo(x, y + bh, x, y + bh - radius);
-                ctx.lineTo(x, y + radius);
-                ctx.quadraticCurveTo(x, y, x + radius, y);
-                ctx.closePath();
-                ctx.fill();
-                ctx.fillStyle = '#cbd5e1';
-                ctx.font = '10px sans-serif';
-                ctx.fillText(String(entry.value), x, y - 4);
-                ctx.save();
-                ctx.translate(x + 2, h - 8);
-                ctx.rotate(-0.35);
-                ctx.fillText(entry.label.slice(0, 14), 0, 0);
-                ctx.restore();
-            });
-        }
-
-        function getDuplicateReason(group) {
-            if (group.type === 'teléfono') return 'Mismo teléfono';
-            if (group.type === 'nombre') return 'Nombre coincidente';
-            return 'Coincidencia múltiple';
-        }
-
         function renderDuplicatePreview(group) {
             let result = { ...group.contacts[0] };
             for (let i = 1; i < group.contacts.length; i++) {
@@ -8712,10 +8472,15 @@
             }
             if (AppState.renderQueued) return;
             AppState.renderQueued = true;
-            requestAnimationFrame(() => {
+            const runRender = () => {
                 AppState.renderQueued = false;
                 renderNow();
-            });
+            };
+            if ((AppState.contacts?.length || 0) > 12000 && typeof requestIdleCallback === 'function') {
+                requestIdleCallback(() => runRender(), { timeout: 120 });
+                return;
+            }
+            requestAnimationFrame(() => runRender());
         }
 
         function showDuplicatesModal() {
@@ -10044,57 +9809,59 @@
                 };
             }
 
-            if (elements.exportFullSnapshotBtn) elements.exportFullSnapshotBtn.onclick = exportFullSnapshot;
             if (elements.importFullSnapshotBtn) elements.importFullSnapshotBtn.onclick = importFullSnapshot;
-            const exportControlBySelection = () => {
-                const mode = elements.controlExportType?.value || 'daily';
-                if (mode === 'monthly') {
-                    exportMonthlyFull();
-                    return { mode: 'monthly', payload: null };
+
+            const runControlExportDaily = async () => {
+                if (!window.api?.exportDaily) {
+                    showNotification('API de export diario no disponible', 'warning');
+                    return null;
                 }
-                const delta = exportDailyDelta();
-                return { mode: 'daily', payload: delta?.payload || null };
+                const result = await window.api.exportDaily();
+                if (result?.ok) {
+                    addToHistory('Export .nexo diario', result.filePath || '');
+                    showNotification(`Log diario exportado: ${result.filePath || 'ok'}`, 'success');
+                    return result;
+                }
+                showNotification(`Error export diario: ${result?.message || 'desconocido'}`, 'error');
+                return null;
             };
-            if (elements.exportControlBtn) elements.exportControlBtn.onclick = () => exportControlBySelection();
+
+            const runControlExportBackup = async () => {
+                if (!window.api?.exportFull) {
+                    showNotification('API de export backup no disponible', 'warning');
+                    return null;
+                }
+                const result = await window.api.exportFull();
+                if (result?.ok) {
+                    addToHistory('Export .nexo backup', result.filePath || '');
+                    showNotification(`Backup exportado: ${result.filePath || 'ok'}`, 'success');
+                    return result;
+                }
+                showNotification(`Error export backup: ${result?.message || 'desconocido'}`, 'error');
+                return null;
+            };
+
             if (elements.exportDailyNexoBtn) {
-                elements.exportDailyNexoBtn.onclick = async () => {
-                    if (!window.api?.exportDaily) {
-                        showNotification('API de export diario no disponible', 'warning');
-                        return;
-                    }
-                    const result = await window.api.exportDaily();
-                    if (result?.ok) {
-                        addToHistory('Export .nexo diario', result.filePath || '');
-                        showNotification(`Log diario exportado: ${result.filePath || 'ok'}`, 'success');
-                    } else {
-                        showNotification(`Error export diario: ${result?.message || 'desconocido'}`, 'error');
-                    }
-                };
+                elements.exportDailyNexoBtn.onclick = () => runControlExportDaily();
             }
-            if (elements.exportFullNexoBtn) {
-                elements.exportFullNexoBtn.onclick = async () => {
-                    if (!window.api?.exportFull) {
-                        showNotification('API de export full no disponible', 'warning');
-                        return;
-                    }
-                    const result = await window.api.exportFull();
-                    if (result?.ok) {
-                        addToHistory('Export .nexo full', result.filePath || '');
-                        showNotification(`Backup full exportado: ${result.filePath || 'ok'}`, 'success');
-                    } else {
-                        showNotification(`Error export full: ${result?.message || 'desconocido'}`, 'error');
-                    }
-                };
+            if (elements.exportBackupNexoBtn) {
+                elements.exportBackupNexoBtn.onclick = () => runControlExportBackup();
             }
             if (elements.metricsShiftMorningBtn) {
                 elements.metricsShiftMorningBtn.onclick = () => {
-                    AppState.metricsHourRange = { from: 8, to: 14, label: 'Mañana 08-14' };
+                    AppState.metricsHourRange = { from: 6, to: 14, label: 'TM 06-14' };
                     if (elements.metricsModal?.classList.contains('active')) renderMetricChartsFromEvents();
                 };
             }
             if (elements.metricsShiftAfternoonBtn) {
                 elements.metricsShiftAfternoonBtn.onclick = () => {
-                    AppState.metricsHourRange = { from: 14, to: 20, label: 'Tarde 14-20' };
+                    AppState.metricsHourRange = { from: 14, to: 22, label: 'TT 14-22' };
+                    if (elements.metricsModal?.classList.contains('active')) renderMetricChartsFromEvents();
+                };
+            }
+            if (elements.metricsShiftNightBtn) {
+                elements.metricsShiftNightBtn.onclick = () => {
+                    AppState.metricsHourRange = { from: 22, to: 6, label: 'TN 22-06' };
                     if (elements.metricsModal?.classList.contains('active')) renderMetricChartsFromEvents();
                 };
             }
@@ -10116,17 +9883,12 @@
             if (elements.uploadReportBtn) {
                 elements.uploadReportBtn.onclick = async () => {
                     if (!ensureUploadUnlocked()) return;
-                    const selected = exportControlBySelection();
-                    const mode = selected?.mode || (elements.controlExportType?.value || 'daily');
-                    if (mode === 'monthly') {
-                        showNotification('Se exportó reporte completo. Subida automática solo disponible para formato diario por ahora.', 'info');
+                    const selected = await runControlExportDaily();
+                    if (!selected?.ok) {
+                        showNotification('No se pudo preparar el log diario', 'error');
                         return;
                     }
-                    if (!selected?.payload) {
-                        showNotification('No se pudo preparar el reporte diario', 'error');
-                        return;
-                    }
-                    await queueReportUpload(selected.payload, 'daily-delta');
+                    await queueReportUpload(JSON.stringify({ filePath: selected.filePath || '', exportedAt: new Date().toISOString() }), 'daily-log');
                 };
             }
             if (elements.importControlBtn) {
@@ -11051,12 +10813,7 @@
                         const h1 = document.querySelector('#uploadScreen h1');
                         if (h1) h1.textContent = `Gestor de Contactos Masivo · v${safeVersion}`;
                     }
-                    const runtimeHash = await window.electronAPI?.getRuntimeHash?.();
-                    AppState.runtimeHash = runtimeHash?.hash || '';
-                } catch (e) { console.warn('No se pudo leer versión/hash de app', e); }
-                window.addEventListener('nexo-store-error', (event) => {
-                    if (event && event.detail) showNotification(event.detail, 'warning');
-                });
+                } catch (e) { console.warn('No se pudo leer versión de app', e); }
                 elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
                 setupEventListeners();
                 if (window.electronAPI?.onDeepLinkImport) {
