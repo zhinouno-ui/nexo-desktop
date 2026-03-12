@@ -3,8 +3,13 @@ const fs = require('fs/promises');
 const fssync = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
+const { promisify } = require('util');
 const { autoUpdater } = require('electron-updater');
 const { Worker } = require('worker_threads');
+
+const gzipAsync = promisify(zlib.gzip);
+const gunzipAsync = promisify(zlib.gunzip);
 
 const MIN_UPDATE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_UPDATE_SIZE_BYTES = 500 * 1024 * 1024;
@@ -133,24 +138,68 @@ async function writeProfilesMeta(profiles) {
   return safe;
 }
 
-async function writeProfileExportFile(prefix, payloadText) {
+async function writeProfileExportFile(prefix, payloadText, { profileName = 'base' } = {}) {
   await fs.mkdir(getExportsDir(), { recursive: true });
   const stamp = new Date().toISOString().replace(/[:]/g, '-').slice(0, 19);
-  const out = path.join(getExportsDir(), `${prefix}_${stamp}.nexo`);
-  await fs.writeFile(out, payloadText, 'utf8');
+  const out = path.join(getExportsDir(), `${safeSlug(profileName).toUpperCase()}_${prefix}_${stamp}.nexo`);
+  const gz = await gzipAsync(Buffer.from(String(payloadText || '{}'), 'utf8'));
+  await fs.writeFile(out, gz);
   return out;
 }
 
-async function buildDailyExportFromDb() {
+async function buildDailyExportFromDb(profileId = 'default') {
   const db = await readDb();
-  const contacts = Array.isArray(db.contactsData) ? db.contactsData : [];
-  const transitions = Array.isArray(db.extraStorage?.statusTransitions) ? db.extraStorage.statusTransitions : [];
-  return runExportWorker({ type: 'daily-log', contacts, transitions, nowIso: new Date().toISOString() });
+  const allContacts = Array.isArray(db.contactsData) ? db.contactsData : [];
+  const allTransitions = Array.isArray(db.extraStorage?.statusTransitions) ? db.extraStorage.statusTransitions : [];
+  const contacts = allContacts.filter((c) => String(c?.profileId || 'default') === String(profileId || 'default'));
+  const transitions = allTransitions.filter((t) => String(t?.profileId || 'default') === String(profileId || 'default'));
+  const profiles = await readProfilesMeta();
+  const activeProfile = profiles.find((p) => p.id === profileId) || profiles[0] || { id: 'default', name: 'Base principal' };
+  const lastFullAt = activeProfile?.lastFullExportAt ? new Date(activeProfile.lastFullExportAt).getTime() : 0;
+  const nowMs = Date.now();
+  const changedContacts = contacts.filter((c) => {
+    const ts = new Date(c?.lastEditedAt || c?.lastUpdated || c?.createdAt || c?.lastImportedAt || 0).getTime();
+    return Number.isFinite(ts) && ts >= Math.max(lastFullAt || 0, nowMs - 24 * 60 * 60 * 1000);
+  });
+  const deltaTransitions = transitions.filter((t) => {
+    const ts = new Date(t?.at || 0).getTime();
+    return Number.isFinite(ts) && ts >= Math.max(lastFullAt || 0, nowMs - 24 * 60 * 60 * 1000);
+  });
+  const workerResult = await runExportWorker({ type: 'daily-log', contacts: changedContacts, transitions: deltaTransitions, nowIso: new Date().toISOString() });
+  if (workerResult?.ok && workerResult?.jsonText) {
+    const parsed = JSON.parse(workerResult.jsonText);
+    parsed.metadata = {
+      profileId: activeProfile.id,
+      profileName: activeProfile.name,
+      timestamp: new Date().toISOString(),
+      isFullBackup: false,
+      lastFullExportAt: activeProfile.lastFullExportAt || null
+    };
+    workerResult.jsonText = JSON.stringify(parsed, null, 2);
+  }
+  return { ...workerResult, profile: activeProfile };
 }
 
-async function buildFullExportFromDb() {
+async function buildFullExportFromDb(profileId = 'default') {
   const db = await readDb();
-  return runExportWorker({ type: 'full', state: db, nowIso: new Date().toISOString() });
+  const profiles = await readProfilesMeta();
+  const activeProfile = profiles.find((p) => p.id === profileId) || profiles[0] || { id: 'default', name: 'Base principal' };
+  const state = {
+    ...db,
+    contactsData: (Array.isArray(db.contactsData) ? db.contactsData : []).filter((c) => String(c?.profileId || 'default') === String(profileId || 'default'))
+  };
+  const workerResult = await runExportWorker({ type: 'full', state, nowIso: new Date().toISOString() });
+  if (workerResult?.ok && workerResult?.jsonText) {
+    const parsed = JSON.parse(workerResult.jsonText);
+    parsed.metadata = {
+      profileId: activeProfile.id,
+      profileName: activeProfile.name,
+      timestamp: new Date().toISOString(),
+      isFullBackup: true
+    };
+    workerResult.jsonText = JSON.stringify(parsed, null, 2);
+  }
+  return { ...workerResult, profile: activeProfile };
 }
 
 let midnightExportTimer = null;
@@ -162,9 +211,9 @@ function scheduleMidnightDailyExport() {
   const delay = Math.max(1000, next.getTime() - now.getTime());
   midnightExportTimer = setTimeout(async () => {
     try {
-      const result = await buildDailyExportFromDb();
+      const result = await buildDailyExportFromDb('default');
       if (result?.ok && result?.jsonText) {
-        const filePath = await writeProfileExportFile('daily-log', result.jsonText);
+        const filePath = await writeProfileExportFile('DELTA', result.jsonText, { profileName: result?.profile?.name || 'base' });
         perfLog('export:daily:auto', 'done', { filePath });
       }
     } catch (error) {
@@ -972,24 +1021,44 @@ ipcMain.handle('profile:resolveImportMode', async () => {
   return { mode: map[result.response] || 'cancel' };
 });
 ipcMain.handle('export:build', async (_event, payload) => runExportWorker(payload || {}));
-ipcMain.handle('export:daily', async () => {
-  const result = await buildDailyExportFromDb();
+ipcMain.handle('export:daily', async (_event, payload) => {
+  const profileId = String(payload?.profileId || 'default');
+  const result = await buildDailyExportFromDb(profileId);
   if (!result?.ok) return { ok: false, message: result?.message || 'No se pudo exportar diario' };
-  const filePath = await writeProfileExportFile('daily-log', result.jsonText || '{}');
+  const filePath = await writeProfileExportFile('DELTA', result.jsonText || '{}', { profileName: result?.profile?.name || profileId });
   return { ok: true, filePath, csvText: result.csvText || '' };
 });
-ipcMain.handle('export:full', async () => {
-  const result = await buildFullExportFromDb();
+ipcMain.handle('export:full', async (_event, payload) => {
+  const profileId = String(payload?.profileId || 'default');
+  const result = await buildFullExportFromDb(profileId);
   if (!result?.ok) return { ok: false, message: result?.message || 'No se pudo exportar full' };
-  const filePath = await writeProfileExportFile('full-backup', result.jsonText || '{}');
+  const filePath = await writeProfileExportFile('FULL', result.jsonText || '{}', { profileName: result?.profile?.name || profileId });
+  const profiles = await readProfilesMeta();
+  const p = profiles.find((x) => x.id === profileId);
+  if (p) {
+    p.lastFullExportAt = new Date().toISOString();
+    await writeProfilesMeta(profiles);
+  }
   return { ok: true, filePath };
 });
 ipcMain.handle('import:data', async (_event, payload) => {
   const filePath = String(payload?.filePath || '').trim();
   if (!filePath) return { ok: false, message: 'Ruta inválida' };
-  const raw = await fs.readFile(filePath, 'utf8');
+  const rawBuffer = await fs.readFile(filePath);
+  let raw = '';
+  try {
+    raw = (await gunzipAsync(rawBuffer)).toString('utf8');
+  } catch {
+    raw = rawBuffer.toString('utf8');
+  }
   let parsed = null;
   try { parsed = JSON.parse(raw); } catch (_) {}
+  const profileName = String(parsed?.metadata?.profileName || parsed?.profileName || '').trim();
+  const profiles = await readProfilesMeta();
+  const existing = profiles.find((p) => safeSlug(p.name) === safeSlug(profileName));
+  if (existing) {
+    return { ok: true, filePath, mode: 'merge-existing', targetProfileId: existing.id, parsed, raw, profiles };
+  }
   const choice = await dialog.showMessageBox({
     type: 'question',
     buttons: ['Importar en PERFIL ACTUAL', 'Crear NUEVO PERFIL', 'Importar en PERFIL EXISTENTE', 'Cancelar'],
@@ -999,7 +1068,7 @@ ipcMain.handle('import:data', async (_event, payload) => {
     message: '¿Dónde querés importar los datos?'
   });
   const modes = ['current-overwrite', 'new-profile', 'select-existing', 'cancel'];
-  return { ok: true, filePath, mode: modes[choice.response] || 'cancel', parsed, raw, profiles: await readProfilesMeta() };
+  return { ok: true, filePath, mode: modes[choice.response] || 'cancel', parsed, raw, profiles };
 });
 
 

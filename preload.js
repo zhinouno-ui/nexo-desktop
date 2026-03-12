@@ -53,8 +53,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 });
 
 contextBridge.exposeInMainWorld('api', {
-  exportDaily: () => ipcRenderer.invoke('export:daily'),
-  exportBackup: () => ipcRenderer.invoke('export:full'),
-  exportFull: () => ipcRenderer.invoke('export:full'),
+  exportDaily: (payload) => ipcRenderer.invoke('export:daily', payload || {}),
+  exportBackup: (payload) => ipcRenderer.invoke('export:full', payload || {}),
+  exportFull: (payload) => ipcRenderer.invoke('export:full', payload || {}),
   importData: (filePath) => ipcRenderer.invoke('import:data', { filePath })
 });

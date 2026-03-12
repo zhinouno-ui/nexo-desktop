@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.23 - sincronización diferencial y zero-lag
+
+- Centro de métricas/exportación unificado en un solo “Centro de Control” (`exportDaily` + `exportBackup`) para eliminar duplicados de UI.
+- Exportes `.nexo` comprimidos (gzip) con metadata (`profileName`, `timestamp`, `isFullBackup`) y naming por perfil (`[DB]_FULL_[fecha]`, `[DB]_DELTA_[fecha]`).
+- Delta export real: sólo contactos/cambios posteriores al último Full (`lastFullExportAt`) para reducir tamaño de parche.
+- Import inteligente `.nexo`: autodetección de perfil existente y merge automático sin pregunta; diálogo sólo cuando no existe perfil.
+- Fix de cambio de perfil: limpieza de índices/sets en memoria + recarga silenciosa para evitar desaparición temporal de datos.
+- Compatibilidad de store global: alias `window.nexoStore.getState()` para evitar errores de acceso en renderer.
+
 ## 1.1.22 - cierre y actualización automática
 
 ### Fix crítico updater (pedido operativo)
