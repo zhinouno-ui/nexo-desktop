@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openErrorLog: () => ipcRenderer.invoke('app:openErrorLog'),
   logError: (payload) => ipcRenderer.invoke('app:logError', payload),
   queueUpload: (payload) => ipcRenderer.invoke('app:queueUpload', payload),
+  verifyAdminPassword: (password) => ipcRenderer.invoke('admin:verifyPassword', { password }),
+  hasAdminAccess: () => ipcRenderer.invoke('admin:hasAccess'),
 
   listProfiles: () => ipcRenderer.invoke('profile:list'),
   createProfile: (payload) => ipcRenderer.invoke('profile:create', payload || {}),
