@@ -12113,6 +12113,27 @@
 
         init();
     })();
+
+        // PARCHE DE EMERGENCIA - FORZAR INICIO
+setTimeout(() => {
+    console.log("Aplicando bypass de inicio...");
+    const loading = document.getElementById('appLoadingOverlay');
+    const upload = document.getElementById('uploadScreen');
+    const main = document.getElementById('mainApp');
+    
+    if (loading) loading.style.display = 'none';
+    if (upload) upload.classList.add('hidden');
+    if (main) main.style.display = 'block';
+    
+    // Si la función render existe pero está oculta por ser módulo,
+    // esto intentará llamarla.
+    try { 
+        if (typeof render === 'function') render(true); 
+    } catch(e) { 
+        console.warn("No se pudo ejecutar render() pero el Dashboard debería verse.");
+    }
+}, 2000);
+        
     </script>
 
 
