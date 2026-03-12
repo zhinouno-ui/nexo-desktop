@@ -12114,26 +12114,38 @@
         init();
     })();
 
-        // PARCHE DE EMERGENCIA - FORZAR INICIO
+// --- PARCHE DEFINITIVO ---
 setTimeout(() => {
-    console.log("Aplicando bypass de inicio...");
-    const loading = document.getElementById('appLoadingOverlay');
-    const upload = document.getElementById('uploadScreen');
-    const main = document.getElementById('mainApp');
+    console.warn("!! FORZANDO DASHBOARD !!");
     
-    if (loading) loading.style.display = 'none';
-    if (upload) upload.classList.add('hidden');
-    if (main) main.style.display = 'block';
+    // 1. Buscamos los elementos a las malas
+    const e_loading = document.getElementById('appLoadingOverlay');
+    const e_upload = document.getElementById('uploadScreen');
+    const e_app = document.getElementById('mainApp');
+    const e_loading_bar = document.getElementById('loadingOverlay');
+
+    // 2. Quitamos CUALQUIER rastro de pantallas de carga por ID o Clase
+    if (e_loading) { e_loading.style.setProperty("display", "none", "important"); e_loading.classList.add('hidden'); }
+    if (e_loading_bar) { e_loading_bar.style.setProperty("display", "none", "important"); }
     
-    // Si la función render existe pero está oculta por ser módulo,
-    // esto intentará llamarla.
-    try { 
-        if (typeof render === 'function') render(true); 
-    } catch(e) { 
-        console.warn("No se pudo ejecutar render() pero el Dashboard debería verse.");
+    // 3. Ocultamos la pantalla de "Gestor de contactos" (importar)
+    if (e_upload) {
+        e_upload.style.setProperty("display", "none", "important");
+        e_upload.classList.add('hidden');
     }
-}, 2000);
-        
+
+    // 4. Forzamos la aparición del Dashboard (el Main App)
+    if (e_app) {
+        e_app.style.setProperty("display", "block", "important");
+        e_app.style.opacity = "1";
+        e_app.style.visibility = "visible";
+    }
+
+    // 5. Intentamos gatillar el dibujado de contactos por si quedó tildado
+    try {
+       window.dispatchEvent(new Event('resize')); // Fuerza a Electron a repintar
+    } catch(e) {}
+}, 2500);
     </script>
 
 
