@@ -4265,10 +4265,10 @@
                     detectDuplicates();
                     const syncResult = syncOpsToContacts({ createNewUsers: false });
                     if (syncResult.updatedCount > 0) saveData();
-                    remountDashboardState('loadData');
                     elements.uploadScreen.classList.add('hidden');
                     elements.mainApp.style.display = 'block';
                     refreshOriginSuggestions();
+                    remountDashboardState('loadData');
                     AppState.refreshKey += 1;
                     manageAutomaticBackup();
                     setSaveState('ok', `Cargado ${new Date().toLocaleTimeString('es-ES')}`);
@@ -4941,7 +4941,9 @@
             AppState.statsDirty = true;
             applyFilters();
             calculateStats();
-            render(true);
+            const paintRender = () => render(true);
+            if (typeof requestAnimationFrame === 'function') requestAnimationFrame(paintRender);
+            else setTimeout(paintRender, 0);
         }
 
         function getStatusOption(status) {
@@ -8789,8 +8791,11 @@
             } finally {
                 try {
                     setLoadingState(false, 'Listo', 100, false);
-                    if (elements.uploadScreen) elements.uploadScreen.classList.add('hidden');
-                    if (elements.mainApp) elements.mainApp.style.display = 'block';
+                    const hasContacts = (AppState.contacts?.length || 0) > 0;
+                    const uploadScreenEl = elements.uploadScreen || $('#uploadScreen');
+                    const mainAppEl = elements.mainApp || $('#mainApp');
+                    if (uploadScreenEl) uploadScreenEl.classList.toggle('hidden', hasContacts);
+                    if (mainAppEl) mainAppEl.style.display = hasContacts ? 'block' : 'none';
                 } catch (uiFinalizeError) {
                     reportError('init:finalize-ui', uiFinalizeError);
                 }
