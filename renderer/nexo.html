@@ -3812,17 +3812,17 @@
                 <button id="manageProfilesBtn" class="btn"><i class="fas fa-layer-group"></i> Perfiles</button>
             </div>
             <div class="view-actions">
-                <button id="viewCardsBtn" class="btn active"><i class="fas fa-th"></i> Tarjetas</button>
-                <button id="viewListBtn" class="btn"><i class="fas fa-list"></i> Lista</button>
-                <button id="viewShiftsBtn" class="btn"><i class="fas fa-users-cog"></i> Turnos</button>
-                <button id="exportBtn" class="btn"><i class="fas fa-download"></i> Exportar</button>
+                <button id="viewCardsBtn" class="btn active" title="Vista de tarjetas: recomendada para revisar usuarios de a uno."><i class="fas fa-th"></i> Tarjetas</button>
+                <button id="viewListBtn" class="btn" title="Vista de lista: más compacta para escanear muchos usuarios."><i class="fas fa-list"></i> Lista</button>
+                <button id="viewShiftsBtn" class="btn" title="Modo turnos / competencia: cola optimizada para revisar contactos por TM/TT/TN."><i class="fas fa-users-cog"></i> Turnos</button>
+                <button id="exportBtn" class="btn" title="Abrir panel de exportación CSV para este perfil (filtrados o todos los contactos visibles en esta PC)."><i class="fas fa-download"></i> Exportar</button>
                 <button id="historyBtn" class="btn"><i class="fas fa-history"></i> Historial</button>
                 <button id="manageDuplicatesBtn" class="btn btn-warning"><i class="fas fa-clone"></i> Duplicados</button>
                 <button id="checkUpdatesBtn" class="btn"><i class="fas fa-cloud-download-alt"></i> Buscar updates</button>
                 <button id="settingsBtn" class="btn"><i class="fas fa-cog"></i> Ajustes</button>
-                <button id="importOpsBtn" class="btn" title="Importar agent_operations.csv"><i class="fas fa-chart-line"></i> Operaciones</button>
-                <button id="midnightExportBtn" class="btn" title="Exporte diario de control"><i class="fas fa-file-export"></i> Control 00:00</button>
-                <button id="deleteAllBtn" class="btn btn-danger"><i class="fas fa-trash-alt"></i> Borrar Todo</button>
+                <button id="importOpsBtn" class="btn" title="Importar agent_operations.csv para enriquecer contactos con actividad y sugerencias de estado."><i class="fas fa-chart-line"></i> Operaciones</button>
+                <button id="midnightExportBtn" class="btn" title="Generar archivo liviano de control (métricas y turnos, no contactos completos)."><i class="fas fa-file-export"></i> Control 00:00</button>
+                <button id="deleteAllBtn" class="btn btn-danger" title="Borrar TODOS los contactos de la base activa. Esta acción no se puede deshacer."><i class="fas fa-trash-alt"></i> Borrar Todo</button>
                 <span id="saveStateBadge" class="save-state-badge pending">● Pendiente</span>
                                 <input type="file" id="opsFileInput" accept=".csv" style="display:none;">
             </div>
@@ -4202,14 +4202,14 @@
                 </div>
             </div>
             <div class="metrics-actions">
-                <button id="metricsFilterLastBatchBtn" class="btn"><i class="fas fa-filter"></i> Filtrar última subida</button>
-                <button id="metricsDeleteLastBatchBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Borrar última subida</button>
-                <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
-                <button id="importControlBtn" class="btn" title="Importa control diario/mensual"><i class="fas fa-shield-alt"></i> Importar Control <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo liviano para seguimiento diario/mensual de métricas y turnos."></i></button>
+                <button id="metricsFilterLastBatchBtn" class="btn" title="Filtra la vista para mostrar solo la última importación de contactos."><i class="fas fa-filter"></i> Filtrar última subida</button>
+                <button id="metricsDeleteLastBatchBtn" class="btn btn-danger" title="Elimina todos los contactos pertenecientes a la última importación."><i class="fas fa-trash"></i> Borrar última subida</button>
+                <button id="importFullSnapshotBtn" class="btn" title="Importar archivo .nexo o .json con snapshot completo o delta de otra PC."><i class="fas fa-file-import"></i> Importar TODO</button>
+                <button id="importControlBtn" class="btn" title="Importar archivo de control diario/mensual para ver métricas y turnos (sin modificar contactos)."><i class="fas fa-shield-alt"></i> Importar Control <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo liviano para seguimiento diario/mensual de métricas y turnos."></i></button>
                 <div class="metrics-control-center" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                    <span style="color:var(--text-secondary);font-size:.82rem;">Centro de Control</span>
-                    <button id="exportDailyNexoBtn" class="btn"><i class="fas fa-file-export"></i> exportDaily()</button>
-                    <button id="exportBackupNexoBtn" class="btn"><i class="fas fa-archive"></i> exportBackup()</button>
+                    <span style="color:var(--text-secondary);font-size:.82rem;">Centro de Control / Sync</span>
+                    <button id="exportDailyNexoBtn" class="btn" title="Exportar DELTA diario (.nexo.gz) solo con cambios desde el último Full del perfil activo. Ideal <5MB."><i class="fas fa-file-export"></i> Exportar Diario (delta)</button>
+                    <button id="exportBackupNexoBtn" class="btn" title="Exportar FULL (.nexo.gz) del perfil activo y actualizar la marca de último backup completo."><i class="fas fa-archive"></i> Exportar FULL (.nexo)</button>
                 </div>
                 <button id="uploadReportBtn" class="btn"><i class="fas fa-upload"></i> Subir reporte seleccionado</button>
                 <button id="resetBaselineBtn" class="btn"><i class="fas fa-eraser"></i> Reset baseline</button>
@@ -7188,6 +7188,18 @@
             return 'tn';
         }
 
+        function inferShiftFromIso(isoString) {
+            if (!isoString) return '';
+            try {
+                const d = new Date(isoString);
+                const time = d.getTime();
+                if (!Number.isFinite(time)) return '';
+                return getLocalCompetitionShift(d) || '';
+            } catch (_) {
+                return '';
+            }
+        }
+
         function updateCompetitionCredit(contact, newStatus, source = 'common', { forceTransfer = false, shiftOverride = '', atOverride = '' } = {}) {
             if (!contact) return false;
 
@@ -7588,7 +7600,7 @@
             }
             btn.classList.add(`export-urgency-${urgency.level}`);
             btn.innerHTML = `${icon} Exportar <span class="urgency-badge urgency-l${urgency.level}">${urgency.text}</span>`;
-            btn.title = `Recordatorio de exportación (${urgency.next.toLocaleString('es-ES')})`;
+            btn.title = `Recordatorio de exportación CSV para este perfil (sugerido desde ${urgency.next.toLocaleString('es-ES')}). Abrí el panel para elegir filtrados/todos.`;
         }
 
 
@@ -8030,8 +8042,9 @@
                 }
             }
             if (policyNote) announceGeneral('Autopolítica aplicada: 3 recontactos sin respuesta → sin WhatsApp.', 'warn', 3000);
-            setSaveState('pending', 'Guardando cambios...');
-            saveData();
+            setSaveState('pending', 'Guardando cambios en segundo plano…');
+            // Guardado optimista: el cambio se refleja inmediatamente en UI y se persiste vía deltas en background.
+            saveData(false, { deltaOnly: true });
             render();
             } catch (statusErr) {
                 console.error('Error al cambiar estado:', statusErr);
@@ -9020,9 +9033,19 @@
             }
             if (elements.profileSelect) {
                 elements.profileSelect.onchange = (e) => {
-                    AppState.activeProfileId = e.target.value || 'default';
-                    localStorage.setItem('activeProfileId', AppState.activeProfileId);
-                    render();
+                    const nextProfileId = e.target.value || 'default';
+                    if (nextProfileId === (AppState.activeProfileId || 'default')) {
+                        return;
+                    }
+                    if (typeof window.switchProfile === 'function') {
+                        window.switchProfile(nextProfileId);
+                    } else {
+                        AppState.activeProfileId = nextProfileId;
+                        localStorage.setItem('activeProfileId', AppState.activeProfileId);
+                        AppState.searchIndexDirty = true;
+                        AppState.statsDirty = true;
+                        render();
+                    }
                 };
             }
             if (elements.addProfileBtn) {
