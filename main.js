@@ -8,6 +8,8 @@ const { promisify } = require('util');
 const { autoUpdater } = require('electron-updater');
 const { Worker } = require('worker_threads');
 
+app.disableHardwareAcceleration();
+
 const gzipAsync = promisify(zlib.gzip);
 const gunzipAsync = promisify(zlib.gunzip);
 
@@ -38,6 +40,7 @@ let installAttemptInProgress = false;
 let pendingImportDeepLink = null;
 let lastUpdateAttempt = { at: null, stage: 'idle', ok: null, message: '' };
 let isQuitting = false;
+const adminUnlockByWebContentsId = new Map();
 
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
@@ -234,6 +237,22 @@ function runExportWorker(payload) {
       if (code !== 0) reject(new Error(`export-worker exited with code ${code}`));
     });
   });
+}
+
+function getAdminSecret() {
+  return String(process.env.NEXO_ADMIN_PASSWORD || '').trim();
+}
+
+function hasAdminAccessForWebContentsId(webContentsId) {
+  const until = Number(adminUnlockByWebContentsId.get(Number(webContentsId)) || 0);
+  return Number.isFinite(until) && until > Date.now();
+}
+
+function safeEqualStrings(a, b) {
+  const aa = Buffer.from(String(a || ''), 'utf8');
+  const bb = Buffer.from(String(b || ''), 'utf8');
+  if (aa.length !== bb.length) return false;
+  return crypto.timingSafeEqual(aa, bb);
 }
 
 async function persistCurrentVersionMeta(extra = {}) {
@@ -1076,7 +1095,7 @@ ipcMain.handle('store:queueDelta', async (_event, payload) => {
   const delta = payload && typeof payload === 'object' ? payload : null;
   if (!delta) return { ok: false, message: 'delta inválido' };
   pendingStoreDeltas.push(delta);
-  scheduleDeltaFlush(10000, 'idle-10s');
+  scheduleDeltaFlush(5000, 'idle-5s');
   return { ok: true, queued: pendingStoreDeltas.length };
 });
 ipcMain.handle('store:flushDeltas', async (_event, reason = 'manual') => flushPendingStoreDeltas(String(reason || 'manual')));
@@ -1178,6 +1197,10 @@ ipcMain.handle('app:exportBackup', async () => {
   return { canceled: false, filePath: target.filePath };
 });
 ipcMain.handle('app:queueUpload', async (_event, payload) => {
+  const webContentsId = _event?.sender?.id;
+  if (!hasAdminAccessForWebContentsId(webContentsId)) {
+    return { ok: false, denied: true, message: 'Sesión admin expirada o no autorizada.' };
+  }
   const profileId = String(payload?.profileId || 'default').replace(/[^a-z0-9_-]/gi, '_');
   const label = String(payload?.label || 'report').replace(/[^a-z0-9_-]/gi, '_');
   const raw = String(payload?.payload || '{}');
@@ -1188,6 +1211,26 @@ ipcMain.handle('app:queueUpload', async (_event, payload) => {
   await fs.writeFile(out, raw, 'utf8');
   await appendErrorLog('upload-queue', new Error('queued'), { profileId, label, path: out, bytes: raw.length });
   return { ok: true, path: out };
+});
+
+ipcMain.handle('admin:verifyPassword', async (event, payload) => {
+  const typed = String(payload?.password || '').trim();
+  const configured = getAdminSecret();
+  if (!configured) {
+    return { ok: false, message: 'NEXO_ADMIN_PASSWORD no configurada en entorno.' };
+  }
+  const ok = safeEqualStrings(typed, configured);
+  const webContentsId = event?.sender?.id;
+  if (!ok) return { ok: false, message: 'Clave incorrecta' };
+  const expiresAt = Date.now() + (10 * 60 * 1000);
+  adminUnlockByWebContentsId.set(Number(webContentsId), expiresAt);
+  return { ok: true, expiresAt };
+});
+
+ipcMain.handle('admin:hasAccess', async (event) => {
+  const webContentsId = event?.sender?.id;
+  const until = Number(adminUnlockByWebContentsId.get(Number(webContentsId)) || 0);
+  return { ok: hasAdminAccessForWebContentsId(webContentsId), expiresAt: until || 0 };
 });
 ipcMain.handle('dialog:openImportFiles', async () => {
   const result = await dialog.showOpenDialog({
