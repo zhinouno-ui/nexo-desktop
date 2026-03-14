@@ -1407,5 +1407,5 @@ app.on('before-quit', () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // mantener proceso vivo para tareas en segundo plano/tray
 });
