@@ -8263,10 +8263,12 @@
 
         window.copyToClipboard = (text, event) => {
             if (event) event.stopPropagation();
-            navigator.clipboard.writeText(text).catch(() => {
-                showNotification('Error al copiar', 'error');
-            });
-            showNotification(`✓ Copiado: ${text}`, 'success');
+            // Prioridad absoluta: disparar la copia y feedback visual lo antes posible
+            const value = String(text || '');
+            try {
+                navigator.clipboard.writeText(value).catch(() => {});
+            } catch (_) {}
+            showNotification(`✓ Copiado: ${value}`, 'success');
         };
 
 
