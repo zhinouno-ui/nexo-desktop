@@ -9581,12 +9581,6 @@
                     localStorage.setItem('splitImportByFile', AppState.splitImportByFile ? '1' : '0');
                 };
             }
-            const shortHash = (value) => {
-                if (!value) return '';
-                const raw = String(value).trim();
-                if (raw.length <= 16) return raw;
-                return `${raw.slice(0, 10)}…${raw.slice(-6)}`;
-            };
 
             const triggerUpdateCheck = async (from = 'principal') => {
                 if (elements.updateStatusText) elements.updateStatusText.textContent = 'Estado: buscando…';
@@ -10517,12 +10511,6 @@
                     localStorage.setItem('splitImportByFile', AppState.splitImportByFile ? '1' : '0');
                 };
             }
-            const shortHash = (value) => {
-                if (!value) return '';
-                const raw = String(value).trim();
-                if (raw.length <= 16) return raw;
-                return `${raw.slice(0, 10)}…${raw.slice(-6)}`;
-            };
 
             const triggerUpdateCheck = async (from = 'principal') => {
                 if (elements.updateStatusText) elements.updateStatusText.textContent = 'Estado: buscando…';
