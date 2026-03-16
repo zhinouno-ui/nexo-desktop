@@ -6548,6 +6548,18 @@
         }
 
 
+        // Exposición controlada para scripts separados (estado y helpers compartidos)
+        window.AppState = AppState;
+        window.NexoElements = elements;
+        window.NexoActions = {
+            render,
+            saveData,
+            applyFilters,
+            setLoadingState,
+            refreshProfilesUI,
+            loadData
+        };
+
         window.addEventListener('error', (event) => {
             reportError('window.error', event?.error || event?.message || 'window error', {
                 filename: event?.filename || '',
