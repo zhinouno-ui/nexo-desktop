@@ -175,161 +175,534 @@
             </div>
         </div>
 
-        <!-- Barra de acciones masivas -->
-        <div class="bulk-actions-bar" id="bulkActionsBar">
-            <span class="bulk-count"><span id="selectedCount">0</span> seleccionados</span>
-            <div class="bulk-actions">
-                <select id="bulkStatusSelect" class="filter-select" style="min-width: 180px;"><option value="" disabled="" selected="">Cambiar estado</option><option value="sin revisar">Sin Revisar</option><option value="contactado">Contactado</option><option value="revisado">Revisado</option><option value="jugando">Jugando</option><option value="sin wsp">Sin WhatsApp</option><option value="no interesado">No Interesado</option></select>
-                <button id="bulkDeleteBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Eliminar</button>
-                <button id="bulkCancelBtn" class="btn"><i class="fas fa-times"></i> Cancelar</button>
-            </div>
-        </div>
+        .cards-grid,
+        .list-view {
+            contain: layout style paint;
+            content-visibility: auto;
+        }
+        .cards-grid.virtual-scroll,
+        .list-view.virtual-scroll {
+            max-height: 68vh;
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+        .virtual-spacer { width: 100%; pointer-events: none; }
+        body.perf-large .contact-card,
+        body.perf-large .list-item {
+            box-shadow: none !important;
+        }
+        body.perf-large .contact-card::after,
+        body.perf-large .list-item::after,
+        body.perf-large .list-item-main::before,
+        body.perf-large .list-status-bg-icon {
+            display: none !important;
+        }
+        body.perf-large .contact-card::before,
+        body.perf-large .list-item::before {
+            opacity: .25 !important;
+        }
 
-        <!-- Vista de tarjetas -->
-        <div id="cardsView" class="cards-grid"></div>
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
 
-        <!-- Vista de lista -->
-        <div id="listView" class="list-view" style="display: none;"></div>
-
-        <div id="shiftsView" class="shifts-view"></div>
-        <div id="quickReview" class="review-quick"></div>
-
-
-        <!-- Paginación -->
-        <div class="pagination" id="pagination"></div>
-    </div>
-
-    <!-- Modal de exportación -->
-    <div class="modal" id="exportModal">
-        <div class="modal-content">
-            <div class="modal-header"><i class="fas fa-download"></i> Exportar Contactos</div>
-            <div class="export-options">
-                <div class="export-option" data-type="filtered">
-                    <i class="fas fa-filter"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Exportar filtrados</div>
-                        <div class="export-option-desc"><span id="exportFilteredCount">0</span> contactos visibles</div>
-                    </div>
-                </div>
-                <div class="export-option selected" data-type="all">
-                    <i class="fas fa-users"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Exportar todos</div>
-                        <div class="export-option-desc"><span id="exportAllCount">0</span> contactos totales</div>
-                    </div>
-                </div>
-            </div>
-            <div class="export-options">
-                <div class="export-option" data-format="vcf">
-                    <i class="fas fa-address-card"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">VCF (Contactos)</div>
-                        <div class="export-option-desc">Importable directamente a WhatsApp</div>
-                    </div>
-                </div>
-                <div class="export-option selected" data-format="sheet">
-                    <i class="fas fa-table"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Formato Planilla</div>
-                        <div class="export-option-desc">Formato personalizado con columnas especiales</div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button id="cancelExport" class="btn"><i class="fas fa-times"></i> Cancelar</button>
-                <button id="confirmExport" class="btn btn-success"><i class="fas fa-download"></i> Exportar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal de duplicados -->
-    <div class="modal" id="duplicatesModal">
-        <div class="modal-content" style="max-width: 800px;">
-            <div class="modal-header"><i class="fas fa-clone"></i> Gestionar Duplicados</div>
-            <div id="duplicatesContent">
-                <p style="color: var(--text-secondary); margin: 20px 0;">Detectando duplicados...</p>
-            </div>
-            <div class="modal-actions">
-                <button id="closeDuplicatesModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
-                <button id="mergeAllDuplicates" class="btn btn-success" style="display: none;"><i class="fas fa-compress-alt"></i> Fusionar Todos</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal de historial -->
-    <div class="modal" id="historyModal">
-        <div class="modal-content history-modal-content" style="max-width: 900px;">
-            <div class="modal-header"><i class="fas fa-history"></i> Historial de Cambios</div>
-            <div class="history-toolbar">
-                <input type="text" id="historySearchInput" class="filter-select" placeholder="Filtrar historial por usuario o acción...">
-                <span id="historyCountLabel" class="history-count-label"></span>
-            </div>
-            <div class="history-list" id="historyList"></div>
-            <div class="modal-actions">
-                <button id="closeHistoryModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
-                <button id="clearHistoryBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Borrar Historial</button>
-            </div>
-        </div>
-    </div>
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
 
 
-    <div class="modal" id="contactHistoryModal">
-        <div class="modal-content history-modal-content" style="max-width: 860px;">
-            <div class="modal-header"><i class="fas fa-id-card"></i> Historial por usuario</div>
-            <div id="contactHistoryMeta" class="contact-history-meta"></div>
-            <div class="history-list" id="contactHistoryList"></div>
-            <div class="modal-actions">
-                <button id="closeContactHistoryModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
-            </div>
-        </div>
-    </div>
+        body.light-mode .header,
+        body.light-mode .search-bar,
+        body.light-mode .progress-bar-container,
+        body.light-mode .contact-card,
+        body.light-mode .list-item,
+        body.light-mode .chart-card,
+        body.light-mode .metrics-card,
+        body.light-mode .modal-content {
+            background: #f8fbff !important;
+            color: var(--text-primary);
+            border-color: rgba(100,116,139,.26) !important;
+            box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        }
+        body.light-mode .chart-card canvas,
+        body.light-mode .loading-preview-bg {
+            background: #eef4fb !important;
+        }
+        body.light-mode .search-input.ghost-value-active {
+            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
+            color:#64748b;
+        }
 
-    <div class="modal" id="shortcutsModal">
-        <div class="modal-content" style="max-width:700px;">
-            <div class="modal-header"><i class="fas fa-keyboard"></i> Atajos de Teclado (Numpad)</div>
-            <p style="color: var(--text-secondary);">Se evita usar números superiores para no interferir con macros de trabajo.</p>
-            <div class="shortcut-list">
-                <div class="shortcut-item"><kbd>Numpad 1</kbd> Estado: Sin revisar</div>
-                <div class="shortcut-item"><kbd>Numpad 2</kbd> Estado: Contactado</div>
-                <div class="shortcut-item"><kbd>Numpad 3</kbd> Estado: Jugando</div>
-                <div class="shortcut-item"><kbd>Numpad 4</kbd> Estado: Sin WSP</div>
-                <div class="shortcut-item"><kbd>Numpad 5</kbd> Estado: No interesado</div>
-                <div class="shortcut-item"><kbd>Numpad 0</kbd> Volver al último contacto</div>
-                <div class="shortcut-item"><kbd>Numpad +</kbd> Cambiar a vista Lista</div>
-                <div class="shortcut-item"><kbd>Esc</kbd> Cerrar modales y menús abiertos</div>
-            </div>
-            <div class="modal-actions">
-                <button id="closeShortcutsModal" class="btn btn-success"><i class="fas fa-check"></i> Entendido</button>
-            </div>
-        </div>
-    </div>
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+        }
+        body.perf-mode .loading-preview-track { animation: none !important; }
+        body.perf-mode .cards-grid { gap: 8px !important; }
 
 
-    <div class="modal" id="userOptionsModal">
-        <div class="modal-content" style="max-width: 480px;">
-            <div class="modal-header"><i class="fas fa-sliders-h"></i> Ajustes</div>
-            <div class="export-options">
-                <div class="export-option" id="openShortcutsOption">
-                    <i class="fas fa-keyboard"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Ver atajos de teclado</div>
-                        <div class="export-option-desc">Abrir la ayuda de Numpad y accesos rápidos</div>
-                    </div>
-                </div>
-                <div class="export-option" id="openWhatsappMessageOption">
-                    <i class="fab fa-whatsapp"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Cambiar mensaje WhatsApp</div>
-                        <div class="export-option-desc">Editar plantilla con token {usuario}</div>
-                    </div>
-                </div>
-                <div class="export-option" id="openGithubReleasesOption">
-                    <i class="fab fa-github"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Descarga manual (seguro)</div>
-                        <div class="export-option-desc">Abrir Releases oficiales en GitHub</div>
-                    </div>
-                </div>
+        .cards-grid,
+        .list-view {
+            contain: layout style;
+            content-visibility: auto;
+        }
+        .cards-grid.virtual-scroll,
+        .list-view.virtual-scroll {
+            max-height: 68vh;
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+        .virtual-spacer { width: 100%; pointer-events: none; }
+        body.perf-large .contact-card,
+        body.perf-large .list-item {
+            box-shadow: none !important;
+        }
+        body.perf-large .contact-card::after,
+        body.perf-large .list-item::after,
+        body.perf-large .list-item-main::before,
+        body.perf-large .list-status-bg-icon {
+            display: none !important;
+        }
+        body.perf-large .contact-card::before,
+        body.perf-large .list-item::before {
+            opacity: .25 !important;
+        }
+
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+
+        body.light-mode .header,
+        body.light-mode .search-bar,
+        body.light-mode .progress-bar-container,
+        body.light-mode .contact-card,
+        body.light-mode .list-item,
+        body.light-mode .chart-card,
+        body.light-mode .metrics-card,
+        body.light-mode .modal-content {
+            background: #f8fbff !important;
+            color: var(--text-primary);
+            border-color: rgba(100,116,139,.26) !important;
+            box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        }
+        body.light-mode .chart-card canvas,
+        body.light-mode .loading-preview-bg {
+            background: #eef4fb !important;
+        }
+        body.light-mode .search-input.ghost-value-active {
+            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
+            color:#64748b;
+        }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+        }
+        body.perf-mode .loading-preview-track { animation: none !important; }
+        body.perf-mode .cards-grid { gap: 8px !important; }
+
+
+        .cards-grid,
+        .list-view {
+            contain: layout style;
+            content-visibility: auto;
+        }
+        .cards-grid.virtual-scroll,
+        .list-view.virtual-scroll {
+            max-height: 68vh;
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+        .virtual-spacer { width: 100%; pointer-events: none; }
+        body.perf-large .contact-card,
+        body.perf-large .list-item {
+            box-shadow: none !important;
+        }
+        body.perf-large .contact-card::after,
+        body.perf-large .list-item::after,
+        body.perf-large .list-item-main::before,
+        body.perf-large .list-status-bg-icon {
+            display: none !important;
+        }
+        body.perf-large .contact-card::before,
+        body.perf-large .list-item::before {
+            opacity: .25 !important;
+        }
+
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+
+        body.light-mode .header,
+        body.light-mode .search-bar,
+        body.light-mode .progress-bar-container,
+        body.light-mode .contact-card,
+        body.light-mode .list-item,
+        body.light-mode .chart-card,
+        body.light-mode .metrics-card,
+        body.light-mode .modal-content {
+            background: #f8fbff !important;
+            color: var(--text-primary);
+            border-color: rgba(100,116,139,.26) !important;
+            box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        }
+        body.light-mode .chart-card canvas,
+        body.light-mode .loading-preview-bg {
+            background: #eef4fb !important;
+        }
+        body.light-mode .search-input.ghost-value-active {
+            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
+            color:#64748b;
+        }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+        }
+        body.perf-mode .loading-preview-track { animation: none !important; }
+        body.perf-mode .cards-grid { gap: 8px !important; }
+
+
+        .cards-grid,
+        .list-view {
+            contain: layout style;
+            content-visibility: auto;
+        }
+        .cards-grid.virtual-scroll,
+        .list-view.virtual-scroll {
+            max-height: 68vh;
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+        .virtual-spacer { width: 100%; pointer-events: none; }
+        body.perf-large .contact-card,
+        body.perf-large .list-item {
+            box-shadow: none !important;
+        }
+        body.perf-large .contact-card::after,
+        body.perf-large .list-item::after,
+        body.perf-large .list-item-main::before,
+        body.perf-large .list-status-bg-icon {
+            display: none !important;
+        }
+        body.perf-large .contact-card::before,
+        body.perf-large .list-item::before {
+            opacity: .25 !important;
+        }
+
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+
+        body.light-mode .header,
+        body.light-mode .search-bar,
+        body.light-mode .progress-bar-container,
+        body.light-mode .contact-card,
+        body.light-mode .list-item,
+        body.light-mode .chart-card,
+        body.light-mode .metrics-card,
+        body.light-mode .modal-content {
+            background: #f8fbff !important;
+            color: var(--text-primary);
+            border-color: rgba(100,116,139,.26) !important;
+            box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        }
+        body.light-mode .chart-card canvas,
+        body.light-mode .loading-preview-bg {
+            background: #eef4fb !important;
+        }
+        body.light-mode .search-input.ghost-value-active {
+            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
+            color:#64748b;
+        }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+        }
+        body.perf-mode .loading-preview-track { animation: none !important; }
+        body.perf-mode .cards-grid { gap: 8px !important; }
+
+
+        .cards-grid,
+        .list-view {
+            contain: layout style;
+            content-visibility: auto;
+        }
+        .cards-grid.virtual-scroll,
+        .list-view.virtual-scroll {
+            max-height: 68vh;
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+        .virtual-spacer { width: 100%; pointer-events: none; }
+        body.perf-large .contact-card,
+        body.perf-large .list-item {
+            box-shadow: none !important;
+        }
+        body.perf-large .contact-card::after,
+        body.perf-large .list-item::after,
+        body.perf-large .list-item-main::before,
+        body.perf-large .list-status-bg-icon {
+            display: none !important;
+        }
+        body.perf-large .contact-card::before,
+        body.perf-large .list-item::before {
+            opacity: .25 !important;
+        }
+
+        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
+        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
+        .metrics-card .v {
+            font-size:1.2rem;
+            font-weight:800;
+            margin-top:4px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
+        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
+        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
+        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
+        .metrics-filters .filter-select,
+        .metrics-filters .origin-input,
+        .metrics-filters input[type="date"] {
+            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
+        }
+        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
+        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
+        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
+        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
+        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
+        .metrics-collapsible .inner { padding:8px 10px; }
+        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
+        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+
+        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
+        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
+        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
+        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
+        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
+
+
+        body.light-mode .header,
+        body.light-mode .search-bar,
+        body.light-mode .progress-bar-container,
+        body.light-mode .contact-card,
+        body.light-mode .list-item,
+        body.light-mode .chart-card,
+        body.light-mode .metrics-card,
+        body.light-mode .modal-content {
+            background: #f8fbff !important;
+            color: var(--text-primary);
+            border-color: rgba(100,116,139,.26) !important;
+            box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        }
+        body.light-mode .chart-card canvas,
+        body.light-mode .loading-preview-bg {
+            background: #eef4fb !important;
+        }
+        body.light-mode .search-input.ghost-value-active {
+            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
+            color:#64748b;
+        }
+
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+        }
+        body.perf-mode .loading-preview-track { animation: none !important; }
+        body.perf-mode .cards-grid { gap: 8px !important; }
 
                 <div class="export-option" id="rollbackPreviousOption">
                     <i class="fas fa-history"></i>
@@ -530,27 +903,42 @@
         </div>
     </div>
 
-    <!-- Modal de agregar contacto único -->
-    <div class="modal" id="addSingleModal">
-        <div class="modal-content" style="max-width: 500px;">
-            <div class="modal-header"><i class="fas fa-user-plus"></i> Agregar Contacto</div>
-            <div style="display: flex; flex-direction: column; gap: 15px; margin: 20px 0;">
-                <input type="text" id="singleName" class="origin-input" placeholder="Nombre del contacto" style="margin-top: 0;">
-                <input type="text" id="singlePhone" class="origin-input" placeholder="Teléfono (opcional)" style="margin-top: 0;">
-                <input type="text" id="singleOrigin" class="origin-input" list="originSuggestions" placeholder="Origen (opcional)" style="margin-top: 0;">
-                <datalist id="originSuggestions"></datalist>
-                <select id="singleStatus" class="filter-select">
-                    <option value="sin revisar">Sin Revisar</option>
-                    <option value="contactado">Contactado</option>
-                    <option value="revisado">Revisado</option>
-                    <option value="jugando">Jugando</option>
-                    <option value="sin wsp">Sin WhatsApp</option>
-                    <option value="no interesado">No Interesado</option>
-                </select>
+        body.perf-mode *,
+        body.perf-mode *::before,
+        body.perf-mode *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+        }
+        body.perf-mode .loading-preview-track { animation: none !important; }
+        body.perf-mode .cards-grid { gap: 8px !important; }
+
+    <div class="modal" id="themesModal">
+        <div class="modal-content" style="max-width:760px;">
+            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;"><span><i class="fas fa-palette"></i> Seleccioná un tema</span><label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text-secondary);"><input id="lightModeToggle" type="checkbox"> Modo claro</label></div>
+            <div id="themeCards" class="metrics-wide-grid"></div>
+            <div style="margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px;">
+                <div style="font-weight:700;margin-bottom:6px;">Tema personalizado</div>
+                <div class="metrics-filters">
+                    <input id="themeNameInput" class="origin-input" style="margin-top:0;" placeholder="Nombre del tema">
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Primary <input id="themePrimary" type="color" value="#3b82f6"></label>
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Accent <input id="themeAccent" type="color" value="#10b981"></label>
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">BG <input id="themeBg" type="color" value="#0f172a"></label>
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Surface <input id="themeSurface" type="color" value="#1e293b"></label>
+                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Text <input id="themeText" type="color" value="#e2e8f0"></label>
+                </div>
+                <div class="modal-actions">
+                    <button id="saveCustomThemeBtn" class="btn btn-success"><i class="fas fa-save"></i> Guardar tema</button>
+                    <button id="exportThemesBtn" class="btn"><i class="fas fa-file-export"></i> Exportar themes.json</button>
+                    <button id="importThemesBtn" class="btn"><i class="fas fa-file-import"></i> Importar themes.json</button>
+                </div>
             </div>
             <div class="modal-actions">
-                <button id="cancelAddSingle" class="btn"><i class="fas fa-times"></i> Cancelar</button>
-                <button id="confirmAddSingle" class="btn btn-success"><i class="fas fa-plus"></i> Agregar</button>
+                <button id="closeThemesModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
             </div>
         </div>
     </div>
