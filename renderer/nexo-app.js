@@ -1833,13 +1833,14 @@
         let lastInteractionAt = Date.now();
         const CONTACT_SAVE_BATCH_SIZE = 300;
         const CONTACT_SAVE_MAX_WAIT_MS = 12000;
-        function queueSaveData(delayMs = 1200) {
+        function queueSaveData(delayMs = 2000) {
             if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
             saveDebounceTimer = setTimeout(() => {
                 saveDebounceTimer = null;
                 if (contactsDirty) flushSaveQueue('debounce');
             }, delayMs);
         }
+        window.queueSaveData = queueSaveData;
 
         async function flushSaveQueue(reason = 'forced') {
             if (saveDebounceTimer) {
@@ -3474,24 +3475,42 @@
             }
         };
 
-        function scheduleFastBackgroundSave(source = 'common') {
-            setTimeout(() => {
-                try { saveData(); } catch (_) {}
-            }, 1200);
-            if (source !== 'shift') {
-                setTimeout(() => {
-                    try { render(); } catch (_) {}
-                }, 500);
-            }
+        function scheduleFastBackgroundSave() {
+            contactsDirty = true;
+            setSaveState('pending', 'Guardado en segundo plano...');
+            queueSaveData(2000);
         }
 
-        window.copyToClipboard = (text, event) => {
+        window.copyToClipboard = async (text, event) => {
             if (event) event.stopPropagation();
-            navigator.clipboard.writeText(text).catch(() => {
+            try {
+                await navigator.clipboard.writeText(text);
+                showNotification(`✓ Copiado: ${text}`, 'success');
+            } catch (_) {
                 showNotification('Error al copiar', 'error');
-            });
-            showNotification(`✓ Copiado: ${text}`, 'success');
+            }
         };
+
+        function updateContactStatusInDOM(contactId, status) {
+            const safeStatus = String(status || 'sin revisar');
+            const statusClass = safeStatus.replace(/\s+/g, '-');
+            const statusOption = getStatusOption(safeStatus);
+            const rows = document.querySelectorAll(`[data-id="${contactId}"]`);
+            rows.forEach((row) => {
+                row.style.setProperty('--status-rgb', statusOption.rgb || '156, 163, 175');
+                row.querySelectorAll('.status-badge').forEach((badge) => {
+                    badge.className = `status-badge status-${statusClass}`;
+                    badge.textContent = statusOption.label;
+                });
+                row.querySelectorAll('.list-status-chip').forEach((chip) => {
+                    chip.innerHTML = `<i class="fas ${statusOption.icon}"></i>${statusOption.label}`;
+                });
+                row.querySelectorAll('.status-btn').forEach((btn) => {
+                    const isCurrent = btn.classList.contains(statusClass);
+                    btn.classList.toggle('active', isCurrent);
+                });
+            });
+        }
 
 
 
@@ -3586,9 +3605,11 @@
                 }
             }
             if (policyNote) announceGeneral('Autopolítica aplicada: 3 recontactos sin respuesta → sin WhatsApp.', 'warn', 3000);
-            setSaveState('pending', 'Guardado en segundo plano...');
+            updateContactStatusInDOM(contact.id, requestedStatus);
+            AppState.searchIndexDirty = true;
+            AppState.statsDirty = true;
             enqueueStatusDelta(contact, oldStatus, requestedStatus, eventAt);
-            scheduleFastBackgroundSave(source);
+            scheduleFastBackgroundSave();
             } catch (statusErr) {
                 console.error('Error al cambiar estado:', statusErr);
                 showNotification(`No se pudo cambiar estado: ${statusErr?.message || statusErr}`, 'error');
