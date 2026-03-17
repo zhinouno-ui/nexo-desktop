@@ -4787,15 +4787,21 @@
                     elements.opsFileInput.value = '';
                 };
             }
-            $('#openShortcutsOption').onclick = () => {
-                elements.userOptionsModal.classList.remove('active');
-                elements.shortcutsModal.classList.add('active');
-            };
-            $('#openWhatsappMessageOption').onclick = () => {
-                elements.userOptionsModal.classList.remove('active');
-                elements.whatsappMessageModal.classList.add('active');
-                elements.whatsappTemplateInput.value = AppState.whatsappTemplate;
-            };
+            const openShortcutsOptionEl = $('#openShortcutsOption');
+            if (openShortcutsOptionEl) {
+                openShortcutsOptionEl.onclick = () => {
+                    elements.userOptionsModal.classList.remove('active');
+                    elements.shortcutsModal.classList.add('active');
+                };
+            }
+            const openWhatsappMessageOptionEl = $('#openWhatsappMessageOption');
+            if (openWhatsappMessageOptionEl) {
+                openWhatsappMessageOptionEl.onclick = () => {
+                    elements.userOptionsModal.classList.remove('active');
+                    elements.whatsappMessageModal.classList.add('active');
+                    elements.whatsappTemplateInput.value = AppState.whatsappTemplate;
+                };
+            }
             if (elements.openGithubReleasesOption) {
                 elements.openGithubReleasesOption.onclick = async () => {
                     const url = 'https://github.com/zhinouno-ui/nexo-desktop/releases/latest';
