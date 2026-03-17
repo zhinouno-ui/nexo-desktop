@@ -7,6 +7,7 @@ const zlib = require('zlib');
 const { promisify } = require('util');
 const { autoUpdater } = require('electron-updater');
 const { Worker } = require('worker_threads');
+const profileStorage = require('./profile-storage');
 
 app.disableHardwareAcceleration();
 
@@ -64,11 +65,11 @@ function getCurrentVersionMetaPath() {
 }
 
 function getProfilesMetaPath() {
-  return path.join(app.getPath('userData'), 'profiles.json');
+  return profileStorage.getProfilesMetaPath(app.getPath('userData'));
 }
 
 function getProfilesDir() {
-  return path.join(app.getPath('userData'), 'profiles');
+  return profileStorage.getProfilesDir(app.getPath('userData'));
 }
 
 function getExportsDir() {
@@ -76,69 +77,23 @@ function getExportsDir() {
 }
 
 function safeSlug(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/gi, '-')
-    .replace(/(^-|-$)/g, '')
-    .toLowerCase() || 'perfil';
+  return profileStorage.safeSlug(value);
 }
 
 async function resolveUniqueProfileFileName(baseName) {
-  await fs.mkdir(getProfilesDir(), { recursive: true });
-  let candidate = `${baseName}.json`;
-  let n = 2;
-  while (fssync.existsSync(path.join(getProfilesDir(), candidate))) {
-    candidate = `${baseName}-${n}.json`;
-    n += 1;
-  }
-  return candidate;
+  return profileStorage.resolveUniqueProfileFileName(app.getPath('userData'), baseName);
 }
 
 async function ensureProfileStorageFile(profile) {
-  if (!profile || !profile.id) return profile;
-  await fs.mkdir(getProfilesDir(), { recursive: true });
-  if (!profile.fileName) {
-    const preferred = `${safeSlug(profile.name)}-${safeSlug(profile.id)}.json`;
-    const preferredPath = path.join(getProfilesDir(), preferred);
-    profile.fileName = fssync.existsSync(preferredPath)
-      ? preferred
-      : await resolveUniqueProfileFileName(`${safeSlug(profile.name)}-${safeSlug(profile.id)}`);
-  }
-  const fullPath = path.join(getProfilesDir(), profile.fileName);
-  if (!fssync.existsSync(fullPath)) {
-    await fs.writeFile(fullPath, JSON.stringify({ id: profile.id, name: profile.name, createdAt: new Date().toISOString() }, null, 2), 'utf8');
-  }
-  return profile;
+  return profileStorage.ensureProfileStorageFile(app.getPath('userData'), profile);
 }
 
 async function readProfilesMeta() {
-  try {
-    const raw = await fs.readFile(getProfilesMetaPath(), 'utf8');
-    const parsed = JSON.parse(raw);
-    const profiles = Array.isArray(parsed?.profiles) ? parsed.profiles : [];
-    const safeProfiles = profiles.length ? profiles : [{ id: 'default', name: 'Base principal' }];
-    for (const profile of safeProfiles) {
-      await ensureProfileStorageFile(profile);
-    }
-    return safeProfiles;
-  } catch {
-    const fallback = [{ id: 'default', name: 'Base principal' }];
-    for (const profile of fallback) {
-      await ensureProfileStorageFile(profile);
-    }
-    return fallback;
-  }
+  return profileStorage.readProfilesMeta(app.getPath('userData'));
 }
 
 async function writeProfilesMeta(profiles) {
-  const safe = Array.isArray(profiles) && profiles.length ? profiles : [{ id: 'default', name: 'Base principal' }];
-  for (const profile of safe) {
-    await ensureProfileStorageFile(profile);
-  }
-  await fs.mkdir(path.dirname(getProfilesMetaPath()), { recursive: true });
-  await fs.writeFile(getProfilesMetaPath(), JSON.stringify({ profiles: safe }, null, 2), 'utf8');
-  return safe;
+  return profileStorage.writeProfilesMeta(app.getPath('userData'), profiles);
 }
 
 async function writeProfileExportFile(prefix, payloadText, { profileName = 'base' } = {}) {
@@ -406,9 +361,22 @@ async function readDb({ force = false } = {}) {
   try {
     const raw = await fs.readFile(dbPath, 'utf8');
     const parsed = JSON.parse(raw);
+    const profiles = await readProfilesMeta();
+    let perProfileState = await profileStorage.loadProfilesState(app.getPath('userData'), profiles);
+
+    const hasEmbeddedContacts = Array.isArray(parsed?.contactsData) && parsed.contactsData.length > 0;
+    const hasSeparatedContacts = Array.isArray(perProfileState.contactsData) && perProfileState.contactsData.length > 0;
+    if (hasEmbeddedContacts && !hasSeparatedContacts) {
+      await profileStorage.persistProfilesState(app.getPath('userData'), profiles, parsed);
+      perProfileState = await profileStorage.loadProfilesState(app.getPath('userData'), profiles);
+    }
+
     dbCache = {
       ...DEFAULT_DB,
       ...(parsed && typeof parsed === 'object' ? parsed : {}),
+      contactsData: perProfileState.contactsData,
+      contactsHistory: perProfileState.contactsHistory,
+      profilePreview: perProfileState.previewByProfile,
       backups: parsed?.backups && typeof parsed.backups === 'object' ? parsed.backups : {},
       extraStorage: parsed?.extraStorage && typeof parsed.extraStorage === 'object' ? parsed.extraStorage : {}
     };
@@ -416,7 +384,14 @@ async function readDb({ force = false } = {}) {
     return JSON.parse(JSON.stringify(dbCache));
   } catch (error) {
     if (error.code === 'ENOENT') {
-      dbCache = { ...DEFAULT_DB };
+      const profiles = await readProfilesMeta();
+      const perProfileState = await profileStorage.loadProfilesState(app.getPath('userData'), profiles);
+      dbCache = {
+        ...DEFAULT_DB,
+        contactsData: perProfileState.contactsData,
+        contactsHistory: perProfileState.contactsHistory,
+        profilePreview: perProfileState.previewByProfile
+      };
       dbCacheLoadedAt = Date.now();
       return JSON.parse(JSON.stringify(dbCache));
     }
@@ -424,6 +399,7 @@ async function readDb({ force = false } = {}) {
     throw error;
   }
 }
+
 
 function setDbCache(data) {
   dbCache = {
@@ -440,11 +416,26 @@ async function writeDb(data) {
   await fs.mkdir(path.dirname(dbPath), { recursive: true });
   const tmpPath = `${dbPath}.tmp`;
   const normalized = { ...DEFAULT_DB, ...data };
-  setDbCache(normalized);
-  const payload = JSON.stringify(normalized, null, 2);
+  const profiles = await readProfilesMeta();
+  await profileStorage.persistProfilesState(app.getPath('userData'), profiles, normalized);
+
+  const previewByProfile = Object.create(null);
+  for (const profile of profiles) {
+    previewByProfile[profile.id] = (normalized.contactsData || []).filter((c) => String(c?.profileId || 'default') === profile.id).length;
+  }
+
+  const rootData = {
+    ...normalized,
+    contactsData: [],
+    contactsHistory: [],
+    profilePreview: previewByProfile
+  };
+  setDbCache({ ...normalized, profilePreview: previewByProfile });
+  const payload = JSON.stringify(rootData, null, 2);
   await fs.writeFile(tmpPath, payload, 'utf8');
   await fs.rename(tmpPath, dbPath);
 }
+
 
 let writeQueue = Promise.resolve();
 
@@ -983,7 +974,11 @@ async function getUpdaterDiagnostics(lastAttempt = lastUpdateAttempt) {
 
 ipcMain.handle('store:getAll', async () => readDb());
 
-ipcMain.handle('profile:list', async () => ({ profiles: await readProfilesMeta() }));
+ipcMain.handle('profile:list', async () => {
+  const profiles = await readProfilesMeta();
+  const state = await readDb();
+  return { profiles, previewByProfile: state?.profilePreview || {} };
+});
 ipcMain.handle('profile:create', async (_event, payload) => {
   const name = String(payload?.name || '').trim().slice(0, 60);
   if (!name) return { ok: false, message: 'Nombre inválido' };
