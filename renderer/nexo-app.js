@@ -56,6 +56,7 @@
             reviewMilestonesShown: {},
             runtimeHash: '',
             profiles: [{ id: 'default', name: 'Base principal' }],
+            profilePreviewById: {},
             activeProfileId: 'default',
             splitImportByFile: false,
             operatorName: 'PC local',
@@ -1832,13 +1833,14 @@
         let lastInteractionAt = Date.now();
         const CONTACT_SAVE_BATCH_SIZE = 300;
         const CONTACT_SAVE_MAX_WAIT_MS = 12000;
-        function queueSaveData(delayMs = 1200) {
+        function queueSaveData(delayMs = 2000) {
             if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
             saveDebounceTimer = setTimeout(() => {
                 saveDebounceTimer = null;
                 if (contactsDirty) flushSaveQueue('debounce');
             }, delayMs);
         }
+        window.queueSaveData = queueSaveData;
 
         async function flushSaveQueue(reason = 'forced') {
             if (saveDebounceTimer) {
@@ -2281,6 +2283,7 @@
                 const profiles = Array.isArray(result?.profiles) ? result.profiles : [];
                 if (profiles.length) {
                     AppState.profiles = profiles;
+                    AppState.profilePreviewById = (result?.previewByProfile && typeof result.previewByProfile === 'object') ? result.previewByProfile : {};
                     ensureActiveProfile();
                 }
             } catch (_) {}
@@ -2313,6 +2316,10 @@
             try {
                 ensureActiveProfile();
                 const profileCounts = Object.create(null);
+                const previewCounts = AppState.profilePreviewById && typeof AppState.profilePreviewById === 'object' ? AppState.profilePreviewById : {};
+                Object.entries(previewCounts).forEach(([pid, total]) => {
+                    profileCounts[pid] = Number(total) || 0;
+                });
                 (AppState.contacts || []).forEach((c) => {
                     const pid = c?.profileId || 'default';
                     profileCounts[pid] = (profileCounts[pid] || 0) + 1;
@@ -3468,24 +3475,42 @@
             }
         };
 
-        function scheduleFastBackgroundSave(source = 'common') {
-            setTimeout(() => {
-                try { saveData(); } catch (_) {}
-            }, 1200);
-            if (source !== 'shift') {
-                setTimeout(() => {
-                    try { render(); } catch (_) {}
-                }, 500);
-            }
+        function scheduleFastBackgroundSave() {
+            contactsDirty = true;
+            setSaveState('pending', 'Guardado en segundo plano...');
+            queueSaveData(2000);
         }
 
-        window.copyToClipboard = (text, event) => {
+        window.copyToClipboard = async (text, event) => {
             if (event) event.stopPropagation();
-            navigator.clipboard.writeText(text).catch(() => {
+            try {
+                await navigator.clipboard.writeText(text);
+                showNotification(`✓ Copiado: ${text}`, 'success');
+            } catch (_) {
                 showNotification('Error al copiar', 'error');
-            });
-            showNotification(`✓ Copiado: ${text}`, 'success');
+            }
         };
+
+        function updateContactStatusInDOM(contactId, status) {
+            const safeStatus = String(status || 'sin revisar');
+            const statusClass = safeStatus.replace(/\s+/g, '-');
+            const statusOption = getStatusOption(safeStatus);
+            const rows = document.querySelectorAll(`[data-id="${contactId}"]`);
+            rows.forEach((row) => {
+                row.style.setProperty('--status-rgb', statusOption.rgb || '156, 163, 175');
+                row.querySelectorAll('.status-badge').forEach((badge) => {
+                    badge.className = `status-badge status-${statusClass}`;
+                    badge.textContent = statusOption.label;
+                });
+                row.querySelectorAll('.list-status-chip').forEach((chip) => {
+                    chip.innerHTML = `<i class="fas ${statusOption.icon}"></i>${statusOption.label}`;
+                });
+                row.querySelectorAll('.status-btn').forEach((btn) => {
+                    const isCurrent = btn.classList.contains(statusClass);
+                    btn.classList.toggle('active', isCurrent);
+                });
+            });
+        }
 
 
 
@@ -3580,9 +3605,11 @@
                 }
             }
             if (policyNote) announceGeneral('Autopolítica aplicada: 3 recontactos sin respuesta → sin WhatsApp.', 'warn', 3000);
-            setSaveState('pending', 'Guardado en segundo plano...');
+            updateContactStatusInDOM(contact.id, requestedStatus);
+            AppState.searchIndexDirty = true;
+            AppState.statsDirty = true;
             enqueueStatusDelta(contact, oldStatus, requestedStatus, eventAt);
-            scheduleFastBackgroundSave(source);
+            scheduleFastBackgroundSave();
             } catch (statusErr) {
                 console.error('Error al cambiar estado:', statusErr);
                 showNotification(`No se pudo cambiar estado: ${statusErr?.message || statusErr}`, 'error');
@@ -4760,15 +4787,21 @@
                     elements.opsFileInput.value = '';
                 };
             }
-            $('#openShortcutsOption').onclick = () => {
-                elements.userOptionsModal.classList.remove('active');
-                elements.shortcutsModal.classList.add('active');
-            };
-            $('#openWhatsappMessageOption').onclick = () => {
-                elements.userOptionsModal.classList.remove('active');
-                elements.whatsappMessageModal.classList.add('active');
-                elements.whatsappTemplateInput.value = AppState.whatsappTemplate;
-            };
+            const openShortcutsOptionEl = $('#openShortcutsOption');
+            if (openShortcutsOptionEl) {
+                openShortcutsOptionEl.onclick = () => {
+                    elements.userOptionsModal.classList.remove('active');
+                    elements.shortcutsModal.classList.add('active');
+                };
+            }
+            const openWhatsappMessageOptionEl = $('#openWhatsappMessageOption');
+            if (openWhatsappMessageOptionEl) {
+                openWhatsappMessageOptionEl.onclick = () => {
+                    elements.userOptionsModal.classList.remove('active');
+                    elements.whatsappMessageModal.classList.add('active');
+                    elements.whatsappTemplateInput.value = AppState.whatsappTemplate;
+                };
+            }
             if (elements.openGithubReleasesOption) {
                 elements.openGithubReleasesOption.onclick = async () => {
                     const url = 'https://github.com/zhinouno-ui/nexo-desktop/releases/latest';
@@ -5701,8 +5734,18 @@
                 };
             }
 
-            if ($('#closeMetricsModal')) $('#closeMetricsModal').onclick = () => $('#metricsModal').classList.remove('active');
-            $('#closeUserOptionsModal').onclick = () => elements.userOptionsModal.classList.remove('active');
+            if ($('#closeMetricsModal')) {
+                $('#closeMetricsModal').onclick = () => {
+                    const metricsModalEl = $('#metricsModal');
+                    if (metricsModalEl) metricsModalEl.classList.remove('active');
+                };
+            }
+            const closeUserOptionsModalEl = $('#closeUserOptionsModal');
+            if (closeUserOptionsModalEl) {
+                closeUserOptionsModalEl.onclick = () => {
+                    if (elements.userOptionsModal) elements.userOptionsModal.classList.remove('active');
+                };
+            }
 
             const clearSearchGhost = () => {
                 AppState.searchGhostActive = false;
@@ -5735,7 +5778,8 @@
                 render();
             };
 
-            $('#undoBtn').onclick = undoToLastContact;
+            const undoBtnEl = $('#undoBtn');
+            if (undoBtnEl) undoBtnEl.onclick = undoToLastContact;
             
             elements.saveTemplateBtn.onclick = () => {
                 AppState.whatsappTemplate = elements.whatsappTemplateInput.value;
@@ -5757,7 +5801,12 @@
                 AppState.whatsappTemplate = elements.whatsappTemplateInput.value;
                 savePreferences();
             };
-            $('#closeWhatsappMessageModal').onclick = () => elements.whatsappMessageModal.classList.remove('active');
+            const closeWhatsappMessageModalEl = $('#closeWhatsappMessageModal');
+            if (closeWhatsappMessageModalEl) {
+                closeWhatsappMessageModalEl.onclick = () => {
+                    if (elements.whatsappMessageModal) elements.whatsappMessageModal.classList.remove('active');
+                };
+            }
             const closeShortcutsBtn = $('#closeShortcutsModal');
             if (closeShortcutsBtn) closeShortcutsBtn.onclick = () => elements.shortcutsModal.classList.remove('active');
 
@@ -6093,7 +6142,8 @@
                 el.addEventListener('dblclick', unifiedDblClickHandler);
             });
 
-            $('#bulkDeleteBtn').onclick = () => {
+            const bulkDeleteBtnEl = $('#bulkDeleteBtn');
+            if (bulkDeleteBtnEl) bulkDeleteBtnEl.onclick = () => {
                 if(AppState.selectedContacts.size > 0 && confirm(`¿Eliminar ${AppState.selectedContacts.size} contactos seleccionados?`)) {
                     const selectedCount = AppState.selectedContacts.size;
                     AppState.contacts = AppState.contacts.filter(c => !AppState.selectedContacts.has(c.id));
@@ -6105,42 +6155,55 @@
                 }
             };
 
-            $('#bulkStatusSelect').onchange = (e) => {
-                const newStatus = e.target.value;
-                if (AppState.selectedContacts.size > 0 && newStatus) {
-                   const selectedCount = AppState.selectedContacts.size;
-                   AppState.selectedContacts.forEach(id => {
-                        const contact = AppState.searchIndex?.byId?.get(id) || AppState.contacts.find(c => c.id === id);
-                        if (contact) {
-                            contact.status = newStatus;
-                            updateCompetitionCredit(contact, newStatus, 'common');
-                            setReviewMetadata(contact, newStatus);
-                            touchContactEdit(contact, 'inline_status');
-                        }
-                   });
-                   addToHistory('Cambio de estado masivo', `${selectedCount} contactos → ${newStatus}`);
-                   AppState.selectedContacts.clear();
-                   saveData();
-                   render();
-                   showNotification(`${selectedCount} contactos actualizados.`, 'success');
-                   e.target.value = "";
-                }
-            };
+            const bulkStatusSelectEl = $('#bulkStatusSelect');
+            if (bulkStatusSelectEl) {
+                bulkStatusSelectEl.onchange = (e) => {
+                    const newStatus = e.target.value;
+                    if (AppState.selectedContacts.size > 0 && newStatus) {
+                       const selectedCount = AppState.selectedContacts.size;
+                       AppState.selectedContacts.forEach(id => {
+                            const contact = AppState.searchIndex?.byId?.get(id) || AppState.contacts.find(c => c.id === id);
+                            if (contact) {
+                                contact.status = newStatus;
+                                updateCompetitionCredit(contact, newStatus, 'common');
+                                setReviewMetadata(contact, newStatus);
+                                touchContactEdit(contact, 'inline_status');
+                            }
+                       });
+                       addToHistory('Cambio de estado masivo', `${selectedCount} contactos → ${newStatus}`);
+                       AppState.selectedContacts.clear();
+                       saveData();
+                       render();
+                       showNotification(`${selectedCount} contactos actualizados.`, 'success');
+                       e.target.value = "";
+                    }
+                };
+            }
 
-            $('#bulkCancelBtn').onclick = () => {
+            const bulkCancelBtnEl = $('#bulkCancelBtn');
+            if (bulkCancelBtnEl) bulkCancelBtnEl.onclick = () => {
                 AppState.selectedContacts.clear();
                 render();
             };
 
-            $('#exportBtn').onclick = () => {
-                $('#exportFilteredCount').textContent = `${AppState.filteredContacts.length} contactos`;
-                $('#exportAllCount').textContent = `${AppState.contacts.length} contactos`;
-                $('#exportModal').classList.add('active');
+            const exportBtnEl = $('#exportBtn');
+            if (exportBtnEl) exportBtnEl.onclick = () => {
+                const exportFilteredCountEl = $('#exportFilteredCount');
+                const exportAllCountEl = $('#exportAllCount');
+                const exportModalEl = $('#exportModal');
+                if (exportFilteredCountEl) exportFilteredCountEl.textContent = `${AppState.filteredContacts.length} contactos`;
+                if (exportAllCountEl) exportAllCountEl.textContent = `${AppState.contacts.length} contactos`;
+                if (exportModalEl) exportModalEl.classList.add('active');
             };
 
-            $('#cancelExport').onclick = () => $('#exportModal').classList.remove('active');
+            const cancelExportEl = $('#cancelExport');
+            if (cancelExportEl) cancelExportEl.onclick = () => {
+                const exportModalEl = $('#exportModal');
+                if (exportModalEl) exportModalEl.classList.remove('active');
+            };
 
-            $('#confirmExport').onclick = () => {
+            const confirmExportEl = $('#confirmExport');
+            if (confirmExportEl) confirmExportEl.onclick = () => {
                 const selectedTypeEl = $('#exportModal .export-option[data-type].selected');
                 const selectedFormatEl = $('#exportModal .export-option[data-format].selected');
                 const type = selectedTypeEl ? selectedTypeEl.dataset.type : 'all';
@@ -6157,7 +6220,8 @@
 
                 localStorage.setItem('lastExportAt', new Date().toISOString());
                 updateExportUrgencyBadge();
-                $('#exportModal').classList.remove('active');
+                const exportModalEl = $('#exportModal');
+                if (exportModalEl) exportModalEl.classList.remove('active');
             };
 
             $$('#exportModal .export-option').forEach(opt => opt.onclick = (e) => {
@@ -6167,36 +6231,55 @@
                 option.classList.add('selected');
             });
 
-            elements.manageDuplicatesBtn.onclick = showDuplicatesModal;
-            $('#closeDuplicatesModal').onclick = () => $('#duplicatesModal').classList.remove('active');
-            $('#mergeAllDuplicates').onclick = () => {
+            if (elements.manageDuplicatesBtn) elements.manageDuplicatesBtn.onclick = showDuplicatesModal;
+            const closeDuplicatesModalEl = $('#closeDuplicatesModal');
+            if (closeDuplicatesModalEl) closeDuplicatesModalEl.onclick = () => {
+                const duplicatesModalEl = $('#duplicatesModal');
+                if (duplicatesModalEl) duplicatesModalEl.classList.remove('active');
+            };
+            const mergeAllDuplicatesEl = $('#mergeAllDuplicates');
+            if (mergeAllDuplicatesEl) mergeAllDuplicatesEl.onclick = () => {
                 if (confirm('¿Fusionar todos los duplicados? Esta acción no se puede deshacer.')) {
                     mergeAllDuplicates();
                 }
             };
 
-            elements.historyBtn.onclick = showHistoryModal;
-            $('#closeHistoryModal').onclick = () => $('#historyModal').classList.remove('active');
+            if (elements.historyBtn) elements.historyBtn.onclick = showHistoryModal;
+            const closeHistoryModalEl = $('#closeHistoryModal');
+            if (closeHistoryModalEl) closeHistoryModalEl.onclick = () => {
+                const historyModalEl = $('#historyModal');
+                if (historyModalEl) historyModalEl.classList.remove('active');
+            };
             if ($('#closeContactHistoryModal')) $('#closeContactHistoryModal').onclick = () => $('#contactHistoryModal').classList.remove('active');
-            $('#clearHistoryBtn').onclick = () => {
+            const clearHistoryBtnEl = $('#clearHistoryBtn');
+            if (clearHistoryBtnEl) clearHistoryBtnEl.onclick = () => {
                 if (confirm('¿Borrar todo el historial?')) {
                     AppState.history = [];
                     saveHistory();
-                    $('#historyModal').classList.remove('active');
+                    const historyModalEl = $('#historyModal');
+                    if (historyModalEl) historyModalEl.classList.remove('active');
                     showNotification('Historial borrado', 'success');
                 }
             };
 
-            $('#cancelAddSingle').onclick = () => {
+            const cancelAddSingleEl = $('#cancelAddSingle');
+            if (cancelAddSingleEl) cancelAddSingleEl.onclick = () => {
                 resetAddSingleModalState();
-                $('#addSingleModal').classList.remove('active');
+                const addSingleModalEl = $('#addSingleModal');
+                if (addSingleModalEl) addSingleModalEl.classList.remove('active');
             };
 
-            $('#confirmAddSingle').onclick = () => {
-                const name = $('#singleName').value.trim();
-                const phone = normalizePhoneNumber($('#singlePhone').value.trim());
-                const origin = $('#singleOrigin').value.trim() || 'Manual';
-                const status = $('#singleStatus').value;
+            const confirmAddSingleEl = $('#confirmAddSingle');
+            if (confirmAddSingleEl) confirmAddSingleEl.onclick = () => {
+                const singleNameEl = $('#singleName');
+                const singlePhoneEl = $('#singlePhone');
+                const singleOriginEl = $('#singleOrigin');
+                const singleStatusEl = $('#singleStatus');
+                if (!singleNameEl || !singlePhoneEl || !singleOriginEl || !singleStatusEl) return;
+                const name = singleNameEl.value.trim();
+                const phone = normalizePhoneNumber(singlePhoneEl.value.trim());
+                const origin = singleOriginEl.value.trim() || 'Manual';
+                const status = singleStatusEl.value;
 
                 if (!name) {
                     showNotification('El nombre es obligatorio', 'error');
@@ -6253,11 +6336,13 @@
                 saveData();
                 render();
                 resetAddSingleModalState();
-                $('#addSingleModal').classList.remove('active');
+                const addSingleModalEl = $('#addSingleModal');
+                if (addSingleModalEl) addSingleModalEl.classList.remove('active');
                 showNotification('✅ Contacto agregado', 'success');
             };
 
-            $('#deleteAllBtn').onclick = async () => {
+            const deleteAllBtnEl = $('#deleteAllBtn');
+            if (deleteAllBtnEl) deleteAllBtnEl.onclick = async () => {
                 if (!confirm('⚠️ ¿BORRAR TODOS LOS CONTACTOS? Esta acción NO se puede deshacer.')) return;
                 if (!confirm('Confirmación final: se vaciará la base de contactos actual para volver a subir desde cero.')) return;
                 try {
@@ -6487,7 +6572,9 @@
                 } catch (e) {
                     reportError('init:getAppVersion', e);
                 }
-                elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
+                if (elements.bulkStatusSelect) {
+                    elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
+                }
                 setupEventListeners();
                 if (window.electronAPI?.onDeepLinkImport) {
                     window.electronAPI.onDeepLinkImport((payload) => {
