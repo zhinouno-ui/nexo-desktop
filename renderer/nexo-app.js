@@ -56,6 +56,7 @@
             reviewMilestonesShown: {},
             runtimeHash: '',
             profiles: [{ id: 'default', name: 'Base principal' }],
+            profilePreviewById: {},
             activeProfileId: 'default',
             splitImportByFile: false,
             operatorName: 'PC local',
@@ -2281,6 +2282,7 @@
                 const profiles = Array.isArray(result?.profiles) ? result.profiles : [];
                 if (profiles.length) {
                     AppState.profiles = profiles;
+                    AppState.profilePreviewById = (result?.previewByProfile && typeof result.previewByProfile === 'object') ? result.previewByProfile : {};
                     ensureActiveProfile();
                 }
             } catch (_) {}
@@ -2313,6 +2315,10 @@
             try {
                 ensureActiveProfile();
                 const profileCounts = Object.create(null);
+                const previewCounts = AppState.profilePreviewById && typeof AppState.profilePreviewById === 'object' ? AppState.profilePreviewById : {};
+                Object.entries(previewCounts).forEach(([pid, total]) => {
+                    profileCounts[pid] = Number(total) || 0;
+                });
                 (AppState.contacts || []).forEach((c) => {
                     const pid = c?.profileId || 'default';
                     profileCounts[pid] = (profileCounts[pid] || 0) + 1;
