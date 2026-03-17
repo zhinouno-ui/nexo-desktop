@@ -56,6 +56,7 @@
             reviewMilestonesShown: {},
             runtimeHash: '',
             profiles: [{ id: 'default', name: 'Base principal' }],
+            profilePreviewById: {},
             activeProfileId: 'default',
             splitImportByFile: false,
             operatorName: 'PC local',
@@ -1832,13 +1833,14 @@
         let lastInteractionAt = Date.now();
         const CONTACT_SAVE_BATCH_SIZE = 300;
         const CONTACT_SAVE_MAX_WAIT_MS = 12000;
-        function queueSaveData(delayMs = 1200) {
+        function queueSaveData(delayMs = 2000) {
             if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
             saveDebounceTimer = setTimeout(() => {
                 saveDebounceTimer = null;
                 if (contactsDirty) flushSaveQueue('debounce');
             }, delayMs);
         }
+        window.queueSaveData = queueSaveData;
 
         async function flushSaveQueue(reason = 'forced') {
             if (saveDebounceTimer) {
@@ -2281,6 +2283,7 @@
                 const profiles = Array.isArray(result?.profiles) ? result.profiles : [];
                 if (profiles.length) {
                     AppState.profiles = profiles;
+                    AppState.profilePreviewById = (result?.previewByProfile && typeof result.previewByProfile === 'object') ? result.previewByProfile : {};
                     ensureActiveProfile();
                 }
             } catch (_) {}
@@ -2313,6 +2316,10 @@
             try {
                 ensureActiveProfile();
                 const profileCounts = Object.create(null);
+                const previewCounts = AppState.profilePreviewById && typeof AppState.profilePreviewById === 'object' ? AppState.profilePreviewById : {};
+                Object.entries(previewCounts).forEach(([pid, total]) => {
+                    profileCounts[pid] = Number(total) || 0;
+                });
                 (AppState.contacts || []).forEach((c) => {
                     const pid = c?.profileId || 'default';
                     profileCounts[pid] = (profileCounts[pid] || 0) + 1;
@@ -3468,24 +3475,42 @@
             }
         };
 
-        function scheduleFastBackgroundSave(source = 'common') {
-            setTimeout(() => {
-                try { saveData(); } catch (_) {}
-            }, 1200);
-            if (source !== 'shift') {
-                setTimeout(() => {
-                    try { render(); } catch (_) {}
-                }, 500);
-            }
+        function scheduleFastBackgroundSave() {
+            contactsDirty = true;
+            setSaveState('pending', 'Guardado en segundo plano...');
+            queueSaveData(2000);
         }
 
-        window.copyToClipboard = (text, event) => {
+        window.copyToClipboard = async (text, event) => {
             if (event) event.stopPropagation();
-            navigator.clipboard.writeText(text).catch(() => {
+            try {
+                await navigator.clipboard.writeText(text);
+                showNotification(`✓ Copiado: ${text}`, 'success');
+            } catch (_) {
                 showNotification('Error al copiar', 'error');
-            });
-            showNotification(`✓ Copiado: ${text}`, 'success');
+            }
         };
+
+        function updateContactStatusInDOM(contactId, status) {
+            const safeStatus = String(status || 'sin revisar');
+            const statusClass = safeStatus.replace(/\s+/g, '-');
+            const statusOption = getStatusOption(safeStatus);
+            const rows = document.querySelectorAll(`[data-id="${contactId}"]`);
+            rows.forEach((row) => {
+                row.style.setProperty('--status-rgb', statusOption.rgb || '156, 163, 175');
+                row.querySelectorAll('.status-badge').forEach((badge) => {
+                    badge.className = `status-badge status-${statusClass}`;
+                    badge.textContent = statusOption.label;
+                });
+                row.querySelectorAll('.list-status-chip').forEach((chip) => {
+                    chip.innerHTML = `<i class="fas ${statusOption.icon}"></i>${statusOption.label}`;
+                });
+                row.querySelectorAll('.status-btn').forEach((btn) => {
+                    const isCurrent = btn.classList.contains(statusClass);
+                    btn.classList.toggle('active', isCurrent);
+                });
+            });
+        }
 
 
 
@@ -3580,9 +3605,11 @@
                 }
             }
             if (policyNote) announceGeneral('Autopolítica aplicada: 3 recontactos sin respuesta → sin WhatsApp.', 'warn', 3000);
-            setSaveState('pending', 'Guardado en segundo plano...');
+            updateContactStatusInDOM(contact.id, requestedStatus);
+            AppState.searchIndexDirty = true;
+            AppState.statsDirty = true;
             enqueueStatusDelta(contact, oldStatus, requestedStatus, eventAt);
-            scheduleFastBackgroundSave(source);
+            scheduleFastBackgroundSave();
             } catch (statusErr) {
                 console.error('Error al cambiar estado:', statusErr);
                 showNotification(`No se pudo cambiar estado: ${statusErr?.message || statusErr}`, 'error');
@@ -6105,27 +6132,30 @@
                 }
             };
 
-            $('#bulkStatusSelect').onchange = (e) => {
-                const newStatus = e.target.value;
-                if (AppState.selectedContacts.size > 0 && newStatus) {
-                   const selectedCount = AppState.selectedContacts.size;
-                   AppState.selectedContacts.forEach(id => {
-                        const contact = AppState.searchIndex?.byId?.get(id) || AppState.contacts.find(c => c.id === id);
-                        if (contact) {
-                            contact.status = newStatus;
-                            updateCompetitionCredit(contact, newStatus, 'common');
-                            setReviewMetadata(contact, newStatus);
-                            touchContactEdit(contact, 'inline_status');
-                        }
-                   });
-                   addToHistory('Cambio de estado masivo', `${selectedCount} contactos → ${newStatus}`);
-                   AppState.selectedContacts.clear();
-                   saveData();
-                   render();
-                   showNotification(`${selectedCount} contactos actualizados.`, 'success');
-                   e.target.value = "";
-                }
-            };
+            const bulkStatusSelectEl = $('#bulkStatusSelect');
+            if (bulkStatusSelectEl) {
+                bulkStatusSelectEl.onchange = (e) => {
+                    const newStatus = e.target.value;
+                    if (AppState.selectedContacts.size > 0 && newStatus) {
+                       const selectedCount = AppState.selectedContacts.size;
+                       AppState.selectedContacts.forEach(id => {
+                            const contact = AppState.searchIndex?.byId?.get(id) || AppState.contacts.find(c => c.id === id);
+                            if (contact) {
+                                contact.status = newStatus;
+                                updateCompetitionCredit(contact, newStatus, 'common');
+                                setReviewMetadata(contact, newStatus);
+                                touchContactEdit(contact, 'inline_status');
+                            }
+                       });
+                       addToHistory('Cambio de estado masivo', `${selectedCount} contactos → ${newStatus}`);
+                       AppState.selectedContacts.clear();
+                       saveData();
+                       render();
+                       showNotification(`${selectedCount} contactos actualizados.`, 'success');
+                       e.target.value = "";
+                    }
+                };
+            }
 
             $('#bulkCancelBtn').onclick = () => {
                 AppState.selectedContacts.clear();
@@ -6487,7 +6517,9 @@
                 } catch (e) {
                     reportError('init:getAppVersion', e);
                 }
-                elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
+                if (elements.bulkStatusSelect) {
+                    elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
+                }
                 setupEventListeners();
                 if (window.electronAPI?.onDeepLinkImport) {
                     window.electronAPI.onDeepLinkImport((payload) => {
