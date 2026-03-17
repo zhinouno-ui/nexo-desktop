@@ -6132,27 +6132,30 @@
                 }
             };
 
-            $('#bulkStatusSelect').onchange = (e) => {
-                const newStatus = e.target.value;
-                if (AppState.selectedContacts.size > 0 && newStatus) {
-                   const selectedCount = AppState.selectedContacts.size;
-                   AppState.selectedContacts.forEach(id => {
-                        const contact = AppState.searchIndex?.byId?.get(id) || AppState.contacts.find(c => c.id === id);
-                        if (contact) {
-                            contact.status = newStatus;
-                            updateCompetitionCredit(contact, newStatus, 'common');
-                            setReviewMetadata(contact, newStatus);
-                            touchContactEdit(contact, 'inline_status');
-                        }
-                   });
-                   addToHistory('Cambio de estado masivo', `${selectedCount} contactos → ${newStatus}`);
-                   AppState.selectedContacts.clear();
-                   saveData();
-                   render();
-                   showNotification(`${selectedCount} contactos actualizados.`, 'success');
-                   e.target.value = "";
-                }
-            };
+            const bulkStatusSelectEl = $('#bulkStatusSelect');
+            if (bulkStatusSelectEl) {
+                bulkStatusSelectEl.onchange = (e) => {
+                    const newStatus = e.target.value;
+                    if (AppState.selectedContacts.size > 0 && newStatus) {
+                       const selectedCount = AppState.selectedContacts.size;
+                       AppState.selectedContacts.forEach(id => {
+                            const contact = AppState.searchIndex?.byId?.get(id) || AppState.contacts.find(c => c.id === id);
+                            if (contact) {
+                                contact.status = newStatus;
+                                updateCompetitionCredit(contact, newStatus, 'common');
+                                setReviewMetadata(contact, newStatus);
+                                touchContactEdit(contact, 'inline_status');
+                            }
+                       });
+                       addToHistory('Cambio de estado masivo', `${selectedCount} contactos → ${newStatus}`);
+                       AppState.selectedContacts.clear();
+                       saveData();
+                       render();
+                       showNotification(`${selectedCount} contactos actualizados.`, 'success');
+                       e.target.value = "";
+                    }
+                };
+            }
 
             $('#bulkCancelBtn').onclick = () => {
                 AppState.selectedContacts.clear();
@@ -6514,7 +6517,9 @@
                 } catch (e) {
                     reportError('init:getAppVersion', e);
                 }
-                elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
+                if (elements.bulkStatusSelect) {
+                    elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
+                }
                 setupEventListeners();
                 if (window.electronAPI?.onDeepLinkImport) {
                     window.electronAPI.onDeepLinkImport((payload) => {
