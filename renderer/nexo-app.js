@@ -1,2716 +1,3 @@
-<!DOCTYPE html>
-<!-- saved from url=(0038)https://toolboard.vercel.app/nexo.html -->
-<html lang="es"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestor de Contactos Masivo</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-<<<<<<< codex/implement-comprehensive-error-logging-features-pgwq6f
-    <style>
-        :root {
-            --bg-primary: #0f172a;
-            --bg-secondary: #1e293b;
-            --bg-card: #334155;
-            --accent-primary: #3b82f6;
-            --accent-secondary: #10b981;
-            --accent-success: #10b981;
-            --accent-warning: #f59e0b;
-            --accent-danger: #ef4444;
-            --accent-neutral: #6b7280;
-            --accent-jugando: #8b5cf6;
-            --text-primary: #f1f5f9;
-            --text-secondary: #cbd5e1;
-            --border-color: #475569;
-            --hover-color: #475569;
-            --selection-bg: rgba(59, 130, 246, 0.2);
-        }
-
-        body.light-mode {
-            --bg-primary: #e9eef5;
-            --bg-secondary: #f7f9fc;
-            --bg-card: #dfe8f3;
-            --text-primary: #1e293b;
-            --text-secondary: #475569;
-            --border-color: #b8c6db;
-            --hover-color: #cfdcee;
-            --selection-bg: rgba(59,130,246,.16);
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', system-ui, sans-serif;
-        }
-
-        body {
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-        .container {
-            max-width: 1600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-
-        /* Pantalla de inicio */
-        .upload-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100vh;
-            background: linear-gradient(135deg, var(--bg-primary) 0%, #1e1b4b 100%);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            transition: opacity 0.5s ease, transform 0.5s ease;
-        }
-
-        .upload-screen.hidden {
-            opacity: 0;
-            transform: scale(0.95);
-            pointer-events: none;
-        }
-
-        .upload-card {
-            background: var(--bg-secondary);
-            padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-            max-width: 500px;
-            width: 90%;
-            text-align: center;
-            border: 2px solid var(--accent-primary);
-        }
-
-        .upload-card h1 {
-            margin-bottom: 30px;
-            font-size: 2.2rem;
-            background: linear-gradient(90deg, var(--accent-primary), #8b5cf6);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
-
-        .upload-card i {
-            font-size: 4rem;
-            color: var(--accent-primary);
-            margin-bottom: 20px;
-        }
-
-        .file-upload-area {
-            border: 3px dashed var(--border-color);
-            border-radius: 15px;
-            padding: 30px;
-            margin: 20px 0;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .file-upload-area:hover {
-            border-color: var(--accent-primary);
-            background: rgba(59, 130, 246, 0.05);
-        }
-
-        .origin-input {
-            width: 100%;
-            padding: 12px 15px;
-            margin-top: 20px;
-            background: var(--bg-card);
-            border: 2px solid var(--border-color);
-            border-radius: 10px;
-            color: var(--text-primary);
-            font-size: 1rem;
-        }
-        
-        .file-list {
-            margin-top: 20px;
-            max-height: 150px;
-            overflow-y: auto;
-            text-align: left;
-        }
-        .file-item {
-            background: var(--bg-card);
-            padding: 10px 15px;
-            margin: 5px 0;
-            border-radius: 8px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.9rem;
-        }
-        .file-item span:last-child {
-            color: var(--text-secondary);
-        }
-
-        .btn-primary {
-            background: linear-gradient(90deg, var(--accent-primary), #6366f1);
-            color: white;
-            border: none;
-            padding: 14px 30px;
-            border-radius: 10px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            width: 100%;
-            margin-top: 20px;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
-        }
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        /* Barra de navegación */
-        .navbar {
-            background: linear-gradient(180deg, rgba(30, 41, 59, 0.96), rgba(30, 41, 59, 0.88));
-            padding: 15px 20px;
-            border-radius: 15px;
-            margin-bottom: 25px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 15px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(148, 163, 184, 0.14);
-        }
-
-        .stats { display: flex; gap: 10px; flex-wrap: wrap; flex: 1; }
-        .stat-box { background: var(--bg-card); padding: 10px 15px; border-radius: 10px; min-width: 120px; text-align: center; cursor: pointer; transition: all 0.3s; border: 2px solid transparent; }
-        .stat-box:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2); }
-        .stat-box.active { border-color: var(--accent-primary); }
-        .stat-value { font-size: 1.3rem; font-weight: 700; }
-        .stat-total .stat-value { color: var(--accent-primary); }
-        .stat-unreviewed .stat-value { color: #9ca3af; }
-        .stat-contactado .stat-value { color: var(--accent-success); }
-        .stat-revisado .stat-value { color: #34d399; }
-        .stat-jugando .stat-value { color: var(--accent-jugando); }
-        .stat-sin-wsp .stat-value { color: var(--accent-warning); }
-        .stat-no-interesado .stat-value { color: var(--accent-danger); }
-        .stat-duplicados .stat-value { color: var(--accent-warning); }
-        .stat-label { font-size: 0.75rem; color: var(--text-secondary); margin-top: 3px; }
-
-        .view-actions {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        .view-actions .btn { padding: 8px 12px; font-size: 0.84rem; border-radius: 10px; }
-
-        .nexo-brand {
-            display:flex;
-            align-items:center;
-            gap:10px;
-            margin-right:12px;
-            padding:8px 12px;
-            border:1px solid color-mix(in srgb, var(--accent-primary) 45%, transparent);
-            border-radius:12px;
-            background:linear-gradient(90deg, color-mix(in srgb, var(--accent-primary) 22%, transparent), color-mix(in srgb, var(--bg-primary) 90%, transparent));
-            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 22%, transparent);
-        }
-        .nexo-brand-logo {
-            width:28px;
-            height:28px;
-            border-radius:8px;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            font-weight:900;
-            color:#0b1220;
-            background:linear-gradient(135deg,var(--accent-primary),var(--accent-secondary));
-        }
-        .nexo-brand-text { font-weight:800; letter-spacing:.4px; }
-        .nexo-brand-sub { font-size:.72rem; color:var(--text-secondary); }
-        .view-actions .btn i { font-size: 0.9rem; }
-
-        .btn {
-            background: var(--bg-card);
-            color: var(--text-primary);
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: all 0.3s;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .btn:hover { background: var(--hover-color); transform: translateY(-2px); }
-        .btn:active { transform: translateY(0) scale(0.98); transition-duration: .1s; }
-        .btn.active { background: var(--accent-primary); color: white; }
-        .btn i { font-size: 1rem; }
-        .btn-danger { background: var(--accent-danger); color: white; }
-        .btn-danger:hover { background: #dc2626; }
-
-
-        .app-loading-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.9);
-            z-index: 2200;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            gap: 10px;
-            overflow: hidden;
-        }
-        .app-loading-overlay.active { display: flex; }
-        .loading-preview-bg {
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            opacity: .4;
-            mask-image: linear-gradient(to top, transparent, black 24%, black 76%, transparent);
-            -webkit-mask-image: linear-gradient(to top, transparent, black 24%, black 76%, transparent);
-        }
-        .loading-preview-track {
-            position: absolute;
-            left: 50%;
-            transform: translateX(-50%);
-            width: min(900px, 92vw);
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            animation: loadingPreviewScroll 26s linear infinite;
-        }
-        .loading-preview-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr 180px;
-            gap: 10px;
-            padding: 8px 10px;
-            border-radius: 8px;
-            background: rgba(30,41,59,.4);
-            border: 1px solid rgba(148,163,184,.2);
-            color: #cbd5e1;
-            font-size: .84rem;
-        }
-        @keyframes loadingPreviewScroll {
-            from { transform: translate(-50%, 100%); }
-            to { transform: translate(-50%, -100%); }
-        }
-        .app-loading-overlay .progress-bar {
-            width: min(520px, 82vw);
-            height: 10px;
-            background: #1e293b;
-            border-radius: 999px;
-            overflow: hidden;
-        }
-        .app-loading-overlay .progress-fill {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, #3b82f6, #10b981);
-            transition: width .2s ease;
-        }
-        .btn-success { background: var(--accent-success); color: white; }
-        .btn-success:hover { background: #059669; }
-        .btn-warning { background: var(--accent-warning); color: white; }
-        .btn-warning:hover { background: #d97706; }
-
-        /* Barra de búsqueda */
-        .search-bar {
-            background: linear-gradient(180deg, rgba(30, 41, 59, 0.96), rgba(30, 41, 59, 0.88));
-            padding: 15px 20px;
-            border-radius: 15px;
-            margin-bottom: 25px;
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            flex-wrap: wrap;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(148, 163, 184, 0.14);
-        }
-        .search-input {
-            flex: 1;
-            min-width: 250px;
-            padding: 10px 15px;
-            padding-left: 40px;
-            background: var(--bg-card);
-            border: 2px solid var(--border-color);
-            border-radius: 10px;
-            color: var(--text-primary);
-            font-size: 0.95rem;
-            position: relative;
-        }
-        .search-input:focus { border-color: var(--accent-primary); outline: none; }
-        .search-input.ghost-value { color: var(--text-secondary); font-style: italic; }
-        .search-input.ghost-value-active { background: linear-gradient(90deg, rgba(15,23,42,.96), rgba(51,65,85,.92)); color:#94a3b8; }
-        .btn-midnight-pulse { animation: pulseMidnight 1s ease-in-out infinite; box-shadow: 0 0 0 2px rgba(239,68,68,.35) inset; }
-        @keyframes pulseMidnight { 0%,100% { transform: scale(1); opacity:1; } 50% { transform: scale(1.03); opacity:.75; } }
-        .search-icon { position: absolute; left: 35px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none; }
-
-        .filter-group {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .filter-select {
-            padding: 10px 15px;
-            background: var(--bg-card);
-            border: 2px solid var(--border-color);
-            border-radius: 10px;
-            color: var(--text-primary);
-            font-size: 0.9rem;
-            cursor: pointer;
-            min-width: 150px;
-        }
-        .filter-select:focus { border-color: var(--accent-primary); outline: none; }
-
-        /* Barra de acciones masivas */
-        .bulk-actions-bar {
-            background: linear-gradient(90deg, var(--accent-primary), #6366f1);
-            padding: 15px 20px;
-            border-radius: 15px;
-            margin-bottom: 25px;
-            display: none;
-            align-items: center;
-            gap: 15px;
-            box-shadow: 0 5px 15px rgba(59, 130, 246, 0.3);
-        }
-        .bulk-actions-bar.active { display: flex; }
-        .bulk-count { font-weight: 700; font-size: 1.1rem; }
-        .bulk-actions { display: flex; gap: 10px; margin-left: auto; flex-wrap: wrap; }
-
-        /* Vista de tarjetas */
-        .cards-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-        }
-
-        .contact-card {
-            --status-rgb: 148,163,184;
-            background: var(--bg-secondary);
-            border-radius: 15px;
-            padding: 20px;
-            cursor: pointer;
-            transition: all 0.3s;
-            border: 2px solid transparent;
-            position: relative;
-            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
-        }
-        .contact-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-            border-color: var(--accent-primary);
-            z-index: 40;
-        }
-        .contact-card.selected { border-color: var(--accent-primary); background: var(--selection-bg); }
-        .contact-card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(120deg, rgba(var(--status-rgb),0.12), transparent 38%);
-            pointer-events: none;
-        }
-        .contact-card::after {
-            content: '';
-            position: absolute;
-            right: -28px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 130px;
-            height: 130px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(var(--status-rgb),0.18) 0%, transparent 70%);
-            pointer-events: none;
-        }
-        .contact-card.duplicate { border-color: var(--accent-warning); }
-        .duplicate-badge {
-            position: absolute;
-            top: 10px;
-            right: 50px;
-            background: var(--accent-warning);
-            color: white;
-            padding: 5px 12px;
-            border-radius: 15px;
-            font-size: 0.7rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
-        }
-
-        .card-checkbox {
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            width: 24px;
-            height: 24px;
-            cursor: pointer;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-
-        .contact-card:hover .card-checkbox,
-        .contact-card.selected .card-checkbox {
-            opacity: 1;
-        }
-
-        .contact-card.selected::before {
-            content: '✓';
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            width: 24px;
-            height: 24px;
-            background: var(--accent-primary);
-            color: white;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 1rem;
-            z-index: 1;
-        }
-
-        .card-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 15px;
-            margin-top: 10px;
-        }
-        .card-icon {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-            background: var(--bg-card);
-        }
-        .card-name {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            word-break: break-word;
-            flex: 1;
-        }
-
-        .card-details {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        .detail-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-            background: rgba(15, 23, 42, 0.24);
-            border: 1px solid rgba(148, 163, 184, 0.16);
-            border-radius: 10px;
-            padding: 8px 10px;
-        }
-        .detail-item i { width: 20px; text-align: center; color: var(--accent-primary); }
-
-        .status-badge {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .status-sin-revisar { background: #374151; color: #9ca3af; }
-        .status-contactado { background: rgba(16, 185, 129, 0.2); color: var(--accent-success); }
-        .status-jugando { background: rgba(139, 92, 246, 0.2); color: var(--accent-jugando); }
-        .status-sin-wsp { background: rgba(245, 158, 11, 0.2); color: var(--accent-warning); }
-        .status-no-interesado { background: rgba(239, 68, 68, 0.2); color: var(--accent-danger); }
-        .status-revisado { background: rgba(52, 211, 153, 0.2); color: #34d399; }
-        .card-status-inline { min-width: 150px; display: inline-block; position: relative; z-index: 30; }
-        .card-status-inline .status-badge { cursor: pointer; }
-        .card-status-trigger { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:10px; cursor:pointer; }
-        .card-status-trigger:hover { background: rgba(148,163,184,.12); }
-
-        .card-status-menu {
-            position: absolute;
-            bottom: calc(100% + 8px);
-            left: 0;
-            min-width: 190px;
-            background: #1e293b;
-            border: 1px solid rgba(148, 163, 184, 0.35);
-            border-radius: 12px;
-            box-shadow: 0 14px 28px rgba(2, 6, 23, 0.55);
-            padding: 6px;
-            z-index: 60;
-        }
-        .card-status-option {
-            width: 100%;
-            background: transparent;
-            color: var(--text-primary);
-            border: none;
-            border-radius: 8px;
-            padding: 8px 10px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            text-align: left;
-            cursor: pointer;
-            font-size: 0.84rem;
-        }
-        .card-status-option:hover {
-            background: rgba(59, 130, 246, 0.16);
-        }
-        .card-status-option.active {
-            background: rgba(59, 130, 246, 0.22);
-            font-weight: 600;
-        }
-        .card-status-inline::after {
-            content: '\f078';
-            font-family: 'Font Awesome 5 Free';
-            font-weight: 900;
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--text-secondary);
-            pointer-events: none;
-        }
-
-        .card-footer {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid var(--border-color);
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            display: flex;
-            justify-content: space-between;
-        }
-
-        /* Vista de lista mejorada */
-        .list-view {
-            background: var(--bg-secondary);
-            border-radius: 15px;
-            overflow: visible;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(148, 163, 184, 0.14);
-        }
-        
-        .list-header {
-            background: var(--bg-card);
-            padding: 15px 20px;
-            display: grid;
-            grid-template-columns: 50px 2fr 1.5fr 1.2fr 1fr 80px 380px;
-            gap: 15px;
-            font-weight: 600;
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            color: var(--text-secondary);
-            align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-        
-        .list-item {
-            position: relative;
-            overflow: visible;
-            padding: 15px 20px;
-            display: grid;
-            grid-template-columns: 50px 2fr 1.5fr 1.2fr 1fr 80px 380px;
-            gap: 15px;
-            align-items: center;
-            border-bottom: 1px solid var(--border-color);
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .list-item-main {
-            position: relative;
-            overflow: visible;
-            border-radius: 12px;
-            padding: 10px 12px;
-            background: rgba(15, 23, 42, 0.18);
-        }
-
-        .list-item-main::before {
-            content: '';
-            position: absolute;
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            right: -18px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: radial-gradient(circle, rgba(var(--status-rgb, 148,163,184), 0.32) 0%, transparent 70%);
-            pointer-events: none;
-        }
-
-        .list-status-bg-icon {
-            position: absolute;
-            right: 8px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 2.1rem;
-            color: var(--status-color, #94a3b8);
-            opacity: 0.18;
-            filter: blur(0.3px);
-            pointer-events: none;
-        }
-
-        .list-name-row {
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            z-index: 1;
-        }
-
-        .list-status-chip {
-            margin-top: 6px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 3px 10px;
-            border-radius: 999px;
-            font-size: 0.72rem;
-            color: var(--status-color, var(--text-secondary));
-            background: rgba(var(--status-rgb, 148,163,184), 0.18);
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-            font-weight: 600;
-        }
-        
-        .list-item:hover { background: var(--hover-color); }
-        .list-item.selected { 
-            background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05));
-            border-left: 4px solid var(--accent-primary);
-        }
-        .list-item.duplicate { 
-            background: rgba(245, 158, 11, 0.08); 
-            border-right: 4px solid var(--accent-warning); 
-        }
-        .list-item.duplicate.selected {
-            background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(245, 158, 11, 0.08));
-            border-left: 4px solid var(--accent-primary);
-            border-right: 4px solid var(--accent-warning);
-        }
-        .list-item:last-child { border-bottom: none; }
-
-        .list-item::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(90deg, rgba(var(--status-rgb,148,163,184),0.13), transparent 35%);
-            opacity: 0.5;
-            pointer-events: none;
-        }
-
-        .list-item::after {
-            content: '';
-            position: absolute;
-            width: 180px;
-            height: 180px;
-            right: -55px;
-            top: 50%;
-            transform: translateY(-50%);
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(var(--status-rgb,148,163,184),0.16) 0%, transparent 70%);
-            pointer-events: none;
-        }
-        
-        .list-item-name {
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-        
-        .list-item-phone {
-            color: var(--text-secondary);
-            font-family: monospace;
-        }
-        
-        .list-item-origin {
-            color: var(--text-secondary);
-        }
-        
-        .list-item-date {
-            color: var(--text-secondary);
-            font-size: 0.85rem;
-        }
-        
-        .list-item-actions {
-            display: flex;
-            gap: 5px;
-            justify-content: flex-end;
-        }
-        
-        .list-item-actions .btn {
-            padding: 6px 12px;
-            font-size: 0.8rem;
-        }
-
-        .whatsapp-cell {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        .whatsapp-btn {
-            width: 40px;
-            height: 40px;
-            padding: 0;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #25D366;
-            color: white;
-        }
-        .whatsapp-btn:hover {
-            background: #128C7E;
-        }
-        .whatsapp-btn i {
-            font-size: 1.2rem;
-        }
-
-        .message-sent-tick {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            color: #60a5fa;
-            font-size: 0.72rem;
-            font-weight: 700;
-            background: rgba(96, 165, 250, 0.14);
-            border: 1px solid rgba(96, 165, 250, 0.35);
-            border-radius: 999px;
-            padding: 3px 7px;
-            white-space: nowrap;
-        }
-
-        .message-sent-tick i {
-            font-size: 0.76rem;
-        }
-
-        .status-buttons {
-            display: flex;
-            gap: 5px;
-            flex-wrap: wrap;
-            justify-content: flex-start;
-        }
-
-        .status-btn {
-            padding: 0;
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-            border: 2px solid transparent;
-            cursor: pointer;
-            transition: all 0.2s;
-            background: var(--bg-card);
-            color: var(--text-secondary);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .status-btn i {
-            font-size: 1rem;
-        }
-
-
-        .status-btn:hover {
-            transform: translateY(-2px);
-        }
-
-        .status-btn.active {
-            border-color: currentColor;
-        }
-
-        .status-btn.sin-revisar { color: #9ca3af; }
-        .status-btn.sin-revisar.active { background: #374151; color: #9ca3af; }
-        
-        .status-btn.contactado { color: var(--accent-success); }
-        .status-btn.revisado { color: #34d399; }
-        .status-btn.revisado.active { background: rgba(52, 211, 153, 0.2); color: #34d399; }
-        .status-btn.contactado.active { background: rgba(16, 185, 129, 0.2); color: var(--accent-success); }
-        
-        .status-btn.jugando { color: var(--accent-jugando); }
-        .status-btn.jugando.active { background: rgba(139, 92, 246, 0.2); color: var(--accent-jugando); }
-        
-        .status-btn.sin-wsp { color: var(--accent-warning); }
-        .status-btn.sin-wsp.active { background: rgba(245, 158, 11, 0.2); color: var(--accent-warning); }
-        
-        .status-btn.no-interesado { color: var(--accent-danger); }
-        .status-btn.no-interesado.active { background: rgba(239, 68, 68, 0.2); color: var(--accent-danger); }
-
-        .urgency-badge {
-            margin-left: 8px;
-            padding: 3px 8px;
-            border-radius: 999px;
-            font-size: 0.68rem;
-            font-weight: 700;
-            letter-spacing: .02em;
-            text-transform: uppercase;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .urgency-l1 { background: rgba(245,158,11,0.16); color: #f59e0b; }
-        .urgency-l2 { background: rgba(251,146,60,0.2); color: #fb923c; }
-        .urgency-l3 { background: rgba(239,68,68,0.2); color: #ef4444; }
-        .urgency-l4 { background: rgba(220,38,38,0.32); color: #fecaca; }
-        #exportBtn.export-urgency-1 { box-shadow: 0 0 0 2px rgba(245,158,11,.35) inset; }
-        #exportBtn.export-urgency-2 { box-shadow: 0 0 0 2px rgba(249,115,22,.45) inset; }
-        #exportBtn.export-urgency-3 { box-shadow: 0 0 0 2px rgba(239,68,68,.52) inset; }
-
-        /* Barra de progreso */
-        .progress-bar-container {
-            background: var(--bg-secondary);
-            padding: 15px 20px;
-            border-radius: 15px;
-            margin-bottom: 25px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(148, 163, 184, 0.14);
-        }
-
-        .progress-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .progress-title {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-        }
-
-        .progress-percentage {
-            color: var(--accent-primary);
-            font-size: 1.5rem;
-            font-weight: 700;
-        }
-
-        .progress-details {
-            color: var(--text-secondary);
-            font-size: 0.8rem;
-            margin-top: 5px;
-            text-align: right;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: var(--bg-card);
-            border-radius: 10px;
-            overflow: hidden;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--accent-primary), var(--accent-success));
-            transition: width 0.3s ease;
-        }
-
-        /* Paginación */
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-            margin-top: 25px;
-            flex-wrap: wrap;
-        }
-        .pagination button {
-            background: var(--bg-card);
-            color: var(--text-primary);
-            border: none;
-            padding: 10px 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: all 0.3s;
-        }
-        .pagination button:hover:not(:disabled) { background: var(--hover-color); transform: translateY(-2px); }
-        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .pagination button.active { background: var(--accent-primary); color: white; }
-        .pagination .page-info { color: var(--text-secondary); font-size: 0.9rem; }
-
-        /* Modal de exportación */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            z-index: 2000;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal.active { display: flex; }
-        .modal-content {
-            background: var(--bg-secondary);
-            padding: 30px;
-            border-radius: 20px;
-            max-width: 500px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-        }
-        .modal-header {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 20px;
-            color: var(--text-primary);
-        }
-        .export-options {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            margin: 20px 0;
-        }
-        .export-option {
-            background: var(--bg-card);
-            padding: 15px 20px;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.3s;
-            border: 2px solid transparent;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        .export-option:hover { border-color: var(--accent-primary); transform: translateY(-2px); }
-        .export-option.selected { border-color: var(--accent-primary); background: var(--selection-bg); }
-        .export-option i { font-size: 1.5rem; color: var(--accent-primary); }
-        .export-option-text { flex: 1; }
-        .export-option-title { font-weight: 600; font-size: 1rem; margin-bottom: 3px; }
-        .export-option-desc { font-size: 0.85rem; color: var(--text-secondary); }
-
-        .modal-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 25px;
-        }
-        .modal-actions .btn { flex: 1; justify-content: center; }
-
-        /* Notificaciones */
-        .notification {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            background: var(--bg-secondary);
-            color: var(--text-primary);
-            padding: 15px 25px;
-            border-radius: 10px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            z-index: 3000;
-            animation: slideIn 0.3s ease;
-            max-width: 400px;
-        }
-        @keyframes slideIn {
-            from { transform: translateX(400px); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        .notification.success { border-left: 4px solid var(--accent-success); }
-        .notification.error { border-left: 4px solid var(--accent-danger); }
-        .notification.info { border-left: 4px solid var(--accent-primary); }
-        .notification i { font-size: 1.5rem; }
-        .notification.success i { color: var(--accent-success); }
-        .notification.error i { color: var(--accent-danger); }
-        .notification.info i { color: var(--accent-primary); }
-
-        .global-announcement {
-            position: fixed;
-            top: 18px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 3200;
-            min-width: 320px;
-            max-width: min(760px, 92vw);
-            background: rgba(15,23,42,.95);
-            border: 1px solid rgba(148,163,184,.35);
-            border-radius: 12px;
-            padding: 10px 14px;
-            display: none;
-            align-items: center;
-            gap: 10px;
-            box-shadow: 0 12px 30px rgba(2, 6, 23, .45);
-            animation: announceIn .25s ease-out;
-        }
-        .global-announcement.show { display: flex; }
-        .global-announcement.info { border-color: rgba(59,130,246,.45); }
-        .global-announcement.success { border-color: rgba(34,197,94,.45); }
-        .global-announcement.warn { border-color: rgba(239,68,68,.45); }
-        .global-announcement .announce-dot {
-            width: 9px; height: 9px; border-radius: 50%; background: #60a5fa;
-            animation: pulseDot 1.6s ease-in-out infinite;
-        }
-        .global-announcement.success .announce-dot { background: #34d399; }
-        .global-announcement.warn .announce-dot { background: #f87171; }
-        .global-announcement .announce-text { font-size: .86rem; color: var(--text-primary); }
-
-        .loading-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 3300;
-            background: rgba(2, 6, 23, 0.72);
-            backdrop-filter: blur(2px);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            opacity: 0;
-            transition: opacity .18s ease;
-            pointer-events: none;
-        }
-        .loading-overlay.show { display: flex; opacity: 1; }
-        .loading-card {
-            width: min(540px, 92vw);
-            border-radius: 14px;
-            background: linear-gradient(180deg, rgba(15,23,42,.96), rgba(15,23,42,.9));
-            border: 1px solid rgba(148,163,184,.3);
-            box-shadow: 0 16px 36px rgba(2,6,23,.48);
-            padding: 18px;
-            animation: loaderIn .2s ease;
-        }
-        .loading-title { font-weight: 700; font-size: 1.06rem; }
-        .loading-sub { color: var(--text-secondary); margin-top: 6px; font-size: .9rem; }
-        .loading-bar { margin-top: 12px; width: 100%; height: 8px; border-radius: 999px; background: rgba(148,163,184,.25); overflow: hidden; }
-        .loading-bar span { display: block; height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #60a5fa, #34d399); transition: width .16s linear; }
-        .loading-meta { margin-top: 8px; font-size: .82rem; color: var(--text-secondary); }
-        @keyframes loaderIn {
-            from { opacity: 0; transform: translateY(8px) scale(.985); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-
-        @keyframes announceIn {
-            from { transform: translateX(-50%) translateY(-10px); opacity: 0; }
-            to { transform: translateX(-50%) translateY(0); opacity: 1; }
-        }
-        @keyframes pulseDot {
-            0%, 100% { transform: scale(1); opacity: .9; }
-            50% { transform: scale(1.35); opacity: .5; }
-        }
-
-        .contact-card, .list-item {
-            animation: fadeInItem .2s ease-out;
-        }
-        @keyframes fadeInItem {
-            from { opacity: .0; transform: translateY(3px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .ops-chip-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
-        .ops-chip {
-            font-size: 0.72rem;
-            padding: 2px 7px;
-            border-radius: 999px;
-            background: rgba(59,130,246,.16);
-            border: 1px solid rgba(96,165,250,.32);
-            color: #bfdbfe;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .ops-chip.hot { background: rgba(16,185,129,.18); border-color: rgba(16,185,129,.4); color: #a7f3d0; }
-        .ops-chip.cold { background: rgba(148,163,184,.16); border-color: rgba(148,163,184,.35); color: #cbd5e1; }
-        .ops-info-wrap { position: relative; display: inline-flex; }
-        .ops-info-btn {
-            width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(148,163,184,.35);
-            background: rgba(15,23,42,.5); color: #cbd5e1; font-size: .72rem; cursor: help;
-        }
-        .ops-tooltip {
-            position: absolute; z-index: 90; top: 24px; right: 0; width: 280px;
-            background: #0f172a; border: 1px solid rgba(148,163,184,.35); border-radius: 10px;
-            padding: 10px; display: none; box-shadow: 0 12px 24px rgba(2,6,23,.5); font-size: .78rem;
-        }
-        .ops-info-wrap:hover .ops-tooltip { display: block; }
-        .ops-tooltip .line { display: flex; justify-content: space-between; gap: 8px; margin: 4px 0; color: var(--text-secondary); }
-        .ops-tooltip .line strong { color: var(--text-primary); }
-        .btn.needs-upload { box-shadow: 0 0 0 2px rgba(239,68,68,.5) inset; }
-        .save-state-badge {
-            margin-left: 8px;
-            font-size: 0.78rem;
-            padding: 6px 10px;
-            border-radius: 999px;
-            border: 1px solid rgba(148,163,184,.35);
-            color: var(--text-secondary);
-            background: rgba(15,23,42,.35);
-            white-space: nowrap;
-        }
-        .save-state-badge.ok { color: #86efac; border-color: rgba(34,197,94,.35); }
-        .save-state-badge.warn { color: #fca5a5; border-color: rgba(239,68,68,.35); }
-        .storage-meter {
-            margin-left: 6px;
-            font-size: 0.78rem;
-            padding: 6px 10px;
-            border-radius: 999px;
-            border: 1px solid rgba(148,163,184,.35);
-            color: #cbd5e1;
-            background: rgba(15,23,42,.35);
-            white-space: nowrap;
-            cursor: help;
-        }
-        .storage-meter.ok { color: #86efac; border-color: rgba(34,197,94,.35); }
-        .storage-meter.warn { color: #fde68a; border-color: rgba(245,158,11,.4); }
-        .storage-meter.critical { color: #fca5a5; border-color: rgba(239,68,68,.45); }
-        .save-state-badge.pending { color: #fcd34d; border-color: rgba(245,158,11,.35); }
-
-        /* Historial */
-        .history-list {
-            max-height: none;
-            overflow-y: auto;
-            flex: 1;
-            min-height: 260px;
-        }
-        .history-item {
-            background: var(--bg-card);
-            padding: 12px 15px;
-            margin: 8px 0;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            border-left: 3px solid var(--accent-primary);
-        }
-        .history-time {
-            color: var(--text-secondary);
-            font-size: 0.8rem;
-            margin-bottom: 5px;
-        }
-        .history-action {
-            color: var(--text-primary);
-        }
-        .history-modal-content {
-            max-height: 82vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .history-toolbar {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .history-toolbar #historySearchInput { flex: 1; }
-        .history-count-label {
-            color: var(--text-secondary);
-            font-size: 0.85rem;
-            white-space: nowrap;
-        }
-        .history-item {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .history-item-actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-        .history-item-muted {
-            border-left-color: rgba(148, 163, 184, 0.45);
-            opacity: 0.85;
-        }
-
-        /* Duplicados */
-        .duplicates-list {
-            max-height: 500px;
-            overflow-y: auto;
-            margin: 20px 0;
-        }
-        .duplicate-group {
-            background: var(--bg-card);
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 15px;
-            border-left: 4px solid var(--accent-warning);
-        }
-        .duplicate-group-header {
-            font-weight: 600;
-            margin-bottom: 10px;
-            color: var(--accent-warning);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .duplicate-item {
-            background: var(--bg-secondary);
-            padding: 10px;
-            margin: 5px 0;
-            border-radius: 8px;
-            font-size: 0.9rem;
-        }
-        .duplicate-item-detail {
-            color: var(--text-secondary);
-            font-size: 0.85rem;
-            margin-left: 10px;
-        }
-
-
-        .whatsapp-template {
-            margin-top: 15px;
-            background: var(--bg-card);
-            border-radius: 12px;
-            padding: 12px;
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .whatsapp-template textarea {
-            width: 100%;
-            min-height: 88px;
-            resize: vertical;
-            background: #0f172a;
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
-            border-radius: 8px;
-            padding: 10px;
-        }
-        .template-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-        .template-help { color: var(--text-secondary); font-size: 0.82rem; }
-
-
-        .failsafe-downgrade-btn {
-            position: fixed;
-            right: 14px;
-            top: 10px;
-            z-index: 99999;
-            background: rgba(17,24,39,.92);
-            color: #e5e7eb;
-            border: 1px solid rgba(148,163,184,.35);
-            border-radius: 10px;
-            padding: 7px 11px;
-            font-size: 12px;
-            text-decoration: none;
-            box-shadow: 0 8px 25px rgba(0,0,0,.35);
-        }
-        .failsafe-downgrade-btn:hover { border-color: rgba(59,130,246,.6); color: #fff; }
-
-        .duplicates-config {
-            margin: 12px 0;
-            padding: 10px;
-            border-radius: 8px;
-            background: rgba(30,41,59,0.65);
-            border: 1px solid rgba(148,163,184,0.2);
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            display: flex;
-            gap: 8px;
-            flex-direction: column;
-        }
-        .shortcut-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 8px;
-            margin-top: 10px;
-        }
-        .shortcut-item {
-            background: var(--bg-card);
-            border-radius: 8px;
-            padding: 8px 10px;
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-        }
-        .shortcut-item kbd {
-            background: #0f172a;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 2px 6px;
-            color: var(--text-primary);
-        }
-        @media (max-width: 768px) {
-            .navbar, .search-bar { flex-direction: column; align-items: stretch; }
-            .stats { justify-content: center; }
-            .list-header { display: none; }
-            .list-item {
-                grid-template-columns: 1fr;
-                gap: 8px;
-            }
-            .list-item-main {
-                width: 100%;
-            }
-            .cards-grid { grid-template-columns: 1fr; }
-            .quick-layout { grid-template-columns: 1fr; }
-            .review-actions { grid-template-columns: 1fr; }
-            .quick-topbar { flex-direction: column; align-items: flex-start; }
-        }
-    
-        #mainApp.shifts-mode .search-bar { display: none; }
-        #mainApp.shifts-mode .bulk-actions-bar { display: none !important; }
-        #mainApp.shifts-mode .shifts-view { margin-top: 0; }
-        .shifts-overview-card { grid-column: 1 / -1; background: linear-gradient(180deg, rgba(15,23,42,.9), rgba(15,23,42,.75)); border:1px solid rgba(96,165,250,.28); border-radius:14px; padding:14px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; }
-        .shifts-overview-stats { display:flex; flex-wrap:wrap; gap:14px; color:var(--text-secondary); font-size:.9rem; }
-        .shifts-overview-stats strong { color:var(--text-primary); }
-        .shifts-overview-actions { display:flex; gap:8px; flex-wrap:wrap; }
-        .shifts-view { display:none; gap:14px; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); }
-        .shift-card { background: linear-gradient(180deg, rgba(30,41,59,.95), rgba(30,41,59,.82)); border:1px solid rgba(148,163,184,.2); border-radius:14px; padding:14px; }
-        .shift-card h3 { margin:0 0 8px 0; display:flex; justify-content:space-between; align-items:center; font-size:1.05rem; }
-        .shift-card-sub { color: var(--text-secondary); font-size: .8rem; margin-bottom: 8px; }
-        .shift-progress { height:8px; border-radius:999px; background:rgba(148,163,184,.2); overflow:hidden; margin:8px 0; }
-        .shift-progress > span { display:block; height:100%; background:linear-gradient(90deg,#34d399,#3b82f6); }
-        .shift-stats { display:flex; gap:10px; font-size:.8rem; color:var(--text-secondary); flex-wrap:wrap; }
-        .review-quick { margin-top:16px; background:linear-gradient(180deg, rgba(30,41,59,.98), rgba(15,23,42,.92)); border:1px solid rgba(148,163,184,.22); border-radius:16px; padding:18px; display:none; }
-        .quick-layout { display:grid; grid-template-columns: minmax(260px, 340px) 1fr; gap:14px; }
-        .quick-profile { background:rgba(15,23,42,.45); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:14px; }
-        .profiles-art { position:relative; overflow:hidden; }
-        .profiles-art::before { content:''; position:absolute; inset:-40% -10% auto auto; width:320px; height:320px; border-radius:999px; background:radial-gradient(circle at center, rgba(56,189,248,.18), rgba(56,189,248,0)); transform:translate(30px,-30px); pointer-events:none; }
-        .profiles-art::after { content:''; position:absolute; inset:auto auto -45% -12%; width:280px; height:280px; border-radius:999px; background:radial-gradient(circle at center, rgba(99,102,241,.16), rgba(99,102,241,0)); pointer-events:none; }
-        .quick-profile-head { display:flex; gap:12px; align-items:center; }
-        .quick-avatar { width:52px; height:52px; border-radius:50%; background:linear-gradient(135deg, rgba(59,130,246,.25), rgba(16,185,129,.2)); border:1px solid rgba(96,165,250,.4); display:flex; align-items:center; justify-content:center; font-weight:800; color:#bfdbfe; font-size:1rem; }
-        .quick-name { font-size:1.25rem; font-weight:800; line-height:1.1; }
-        .quick-name.copyable { cursor: pointer; display:inline-flex; align-items:center; gap:6px; }
-        .quick-name.copyable:hover { color:#93c5fd; text-decoration: underline; }
-        .quick-meta { color:var(--text-secondary); font-size:.9rem; margin-top:3px; }
-        .quick-chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
-        .quick-chip { font-size:.74rem; padding:4px 9px; border-radius:999px; border:1px solid rgba(148,163,184,.35); color:#cbd5e1; background:rgba(30,41,59,.5); }
-        .quick-progress { margin-top:10px; color:var(--text-secondary); font-size:.82rem; }
-        .quick-panel { background:rgba(15,23,42,.24); border:1px solid rgba(148,163,184,.2); border-radius:12px; padding:12px; }
-        .quick-topbar { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
-        .review-actions { display:grid; grid-template-columns: repeat(3,minmax(170px,1fr)); gap:10px; }
-        .review-actions .btn { justify-content:flex-start; padding:12px 14px; font-weight:700; }
-        .review-actions .quick-status-btn { border:1px solid rgba(148,163,184,.28); }
-        .review-actions .quick-status-btn.sin-revisar { border-color: rgba(148,163,184,.45); }
-        .review-actions .quick-status-btn.contactado { border-color: rgba(16,185,129,.45); }
-        .review-actions .quick-status-btn.revisado { border-color: rgba(52,211,153,.45); }
-        .review-actions .quick-status-btn.jugando { border-color: rgba(139,92,246,.45); }
-        .review-actions .quick-status-btn.sin-wsp { border-color: rgba(245,158,11,.45); }
-        .review-actions .quick-status-btn.no-interesado { border-color: rgba(239,68,68,.45); }
-        .review-actions .btn.applied { box-shadow: 0 0 0 2px rgba(52,211,153,.45) inset; transform: scale(0.98); }
-        .quick-panel.updating { opacity: .82; transition: opacity .1s linear; }
-        .quick-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; border-top:1px solid rgba(148,163,184,.22); padding-top:10px; }
-        .quick-tools .btn { padding: 10px 12px; font-size: .9rem; }
-        .shift-tag { font-size:.72rem; padding:2px 8px; border-radius:999px; border:1px solid rgba(148,163,184,.35); color:#cbd5e1; }
-
-        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
-        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
-        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
-        .metrics-card .v {
-            font-size:1.2rem;
-            font-weight:800;
-            margin-top:4px;
-            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
-        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
-        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
-        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
-        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
-        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
-        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
-        .metrics-filters .filter-select,
-        .metrics-filters .origin-input,
-        .metrics-filters input[type="date"] {
-            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
-            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
-        }
-        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
-        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
-        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
-        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
-        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
-        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
-        .metrics-collapsible .inner { padding:8px 10px; }
-        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
-        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
-
-        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
-        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
-        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
-        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
-        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
-
-
-        body.light-mode .header,
-        body.light-mode .search-bar,
-        body.light-mode .progress-bar-container,
-        body.light-mode .contact-card,
-        body.light-mode .list-item,
-        body.light-mode .chart-card,
-        body.light-mode .metrics-card,
-        body.light-mode .modal-content {
-            background: #f8fbff !important;
-            color: var(--text-primary);
-            border-color: rgba(100,116,139,.26) !important;
-            box-shadow: 0 6px 18px rgba(15,23,42,.06);
-        }
-        body.light-mode .chart-card canvas,
-        body.light-mode .loading-preview-bg {
-            background: #eef4fb !important;
-        }
-        body.light-mode .search-input.ghost-value-active {
-            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
-            color:#64748b;
-        }
-
-        body.perf-mode *,
-        body.perf-mode *::before,
-        body.perf-mode *::after {
-            animation: none !important;
-            transition: none !important;
-            scroll-behavior: auto !important;
-            box-shadow: none !important;
-            text-shadow: none !important;
-            filter: none !important;
-            backdrop-filter: none !important;
-        }
-        body.perf-mode .loading-preview-track { animation: none !important; }
-        body.perf-mode .cards-grid { gap: 8px !important; }
-
-
-        .cards-grid,
-        .list-view {
-            contain: layout style;
-            content-visibility: auto;
-        }
-        .cards-grid.virtual-scroll,
-        .list-view.virtual-scroll {
-            max-height: 68vh;
-            overflow: auto;
-            overscroll-behavior: contain;
-        }
-        .virtual-spacer { width: 100%; pointer-events: none; }
-        body.perf-large .contact-card,
-        body.perf-large .list-item {
-            box-shadow: none !important;
-        }
-        body.perf-large .contact-card::after,
-        body.perf-large .list-item::after,
-        body.perf-large .list-item-main::before,
-        body.perf-large .list-status-bg-icon {
-            display: none !important;
-        }
-        body.perf-large .contact-card::before,
-        body.perf-large .list-item::before {
-            opacity: .25 !important;
-        }
-
-    </style>
-=======
-    <link rel="stylesheet" href="./nexo.css">
-
->>>>>>> main
-</head>
-<body __processed_06e8811e-2870-46d5-8df7-cb489419a036__="true">
-    <a class="failsafe-downgrade-btn" href="nexo://rollback-previous" target="_blank" rel="noopener noreferrer">⛑️ Volver a versión anterior (cache local)</a>
-    <div class="upload-screen" id="uploadScreen">
-        <div class="upload-card">
-            <i class="fas fa-cloud-upload-alt"></i>
-            <h1>Gestor de Contactos Masivo</h1>
-            <p style="color: var(--text-secondary); margin-bottom: 20px;">Importa tus contactos desde archivos CSV</p>
-            <div class="file-upload-area" id="uploadArea">
-                <i class="fas fa-file-csv" style="font-size: 3rem; color: var(--accent-primary);"></i>
-                <p style="margin-top: 15px; color: var(--text-secondary);">Arrastra archivos CSV, VCF o JSON aquí o haz clic para seleccionar</p>
-                <input type="file" id="fileInput" accept=".csv,.vcf,.json" multiple="" style="display: none;">
-            </div>
-            <div class="file-list" id="fileList"></div>
-            <input type="text" id="originInput" class="origin-input" placeholder="Origen de los contactos (ej: Turno Mañana, Facebook, etc.)">
-            <button id="startBtn" class="btn-primary" disabled>Comenzar</button>
-            <button id="preStartCheckUpdatesBtn" class="btn" style="margin-top:10px;"><i class="fas fa-cloud-download-alt"></i> Buscar actualizaciones antes de iniciar</button>
-        </div>
-    </div>
-
-    <div class="container" id="mainApp" style="display: none;">
-        <div id="globalAnnouncement" class="global-announcement info" aria-live="polite">
-            <span class="announce-dot"></span>
-            <span class="announce-text">Sistema listo</span>
-        </div>
-        <div id="loadingOverlay" class="loading-overlay" aria-live="polite">
-            <div class="loading-card">
-                <div class="loading-title">Cargando contactos…</div>
-                <div class="loading-sub" id="loadingOverlayText">Preparando datos para trabajar sin bloqueos visuales.</div>
-                <div class="loading-bar"><span id="loadingOverlayProgress"></span></div>
-                <div class="loading-meta" id="loadingOverlayMeta">0%</div>
-            </div>
-        </div>
-        <!-- Barra de navegación -->
-        <div class="navbar">
-            <div class="nexo-brand" title="Nexo Desktop">
-                <div class="nexo-brand-logo">N</div>
-                <div>
-                    <div class="nexo-brand-text">Nexo</div>
-                    <div class="nexo-brand-sub">Desktop</div>
-                </div>
-            </div>
-            <div class="stats">
-                <div class="stat-box stat-total" data-filter="">
-                    <div class="stat-value" id="totalCount">0</div>
-                    <div class="stat-label">Total</div>
-                </div>
-                <div class="stat-box stat-unreviewed" data-filter="sin revisar">
-                    <div class="stat-value" id="unreviewedCount">0</div>
-                    <div class="stat-label">Sin Revisar</div>
-                </div>
-                <div class="stat-box stat-contactado" data-filter="contactado">
-                    <div class="stat-value" id="contactadoCount">0</div>
-                    <div class="stat-label">Contactado</div>
-                </div>
-                <div class="stat-box stat-revisado" data-filter="revisado">
-                    <div class="stat-value" id="revisadoCount">0</div>
-                    <div class="stat-label">Revisado</div>
-                </div>
-                <div class="stat-box stat-jugando" data-filter="jugando">
-                    <div class="stat-value" id="jugandoCount">0</div>
-                    <div class="stat-label">Jugando</div>
-                </div>
-                <div class="stat-box stat-sin-wsp" data-filter="sin wsp">
-                    <div class="stat-value" id="sinWspCount">0</div>
-                    <div class="stat-label">Sin WSP</div>
-                </div>
-                <div class="stat-box stat-no-interesado" data-filter="no interesado">
-                    <div class="stat-value" id="noInteresadoCount">0</div>
-                    <div class="stat-label">No Interesado</div>
-                </div>
-                <div class="stat-box stat-duplicados" id="duplicatesStatBox">
-                    <div class="stat-value" id="duplicatesCount">0</div>
-                    <div class="stat-label">Duplicados</div>
-                </div>
-            </div>
-            <div class="view-actions" style="margin-right:8px;">
-                <select id="profileSelect" class="filter-select" style="min-width:200px;"></select>
-                <button id="manageProfilesBtn" class="btn"><i class="fas fa-layer-group"></i> Perfiles</button>
-            </div>
-            <div class="view-actions">
-                <button id="viewCardsBtn" class="btn active"><i class="fas fa-th"></i> Tarjetas</button>
-                <button id="viewListBtn" class="btn"><i class="fas fa-list"></i> Lista</button>
-                <button id="viewShiftsBtn" class="btn"><i class="fas fa-users-cog"></i> Turnos</button>
-                <button id="exportBtn" class="btn"><i class="fas fa-download"></i> Exportar</button>
-                <button id="historyBtn" class="btn"><i class="fas fa-history"></i> Historial</button>
-                <button id="manageDuplicatesBtn" class="btn btn-warning"><i class="fas fa-clone"></i> Duplicados</button>
-                <button id="checkUpdatesBtn" class="btn"><i class="fas fa-cloud-download-alt"></i> Buscar updates</button>
-                <button id="settingsBtn" class="btn"><i class="fas fa-cog"></i> Ajustes</button>
-                <button id="importOpsBtn" class="btn" title="Importar agent_operations.csv"><i class="fas fa-chart-line"></i> Operaciones</button>
-                <button id="midnightExportBtn" class="btn" title="Exporte diario de control"><i class="fas fa-file-export"></i> Control 00:00</button>
-                <button id="deleteAllBtn" class="btn btn-danger"><i class="fas fa-trash-alt"></i> Borrar Todo</button>
-                <span id="saveStateBadge" class="save-state-badge pending">● Pendiente</span>
-                                <input type="file" id="opsFileInput" accept=".csv" style="display:none;">
-            </div>
-        </div>
-
-        <!-- Barra de progreso de revisión -->
-        <div class="progress-bar-container" id="progressBarContainer">
-            <div class="progress-header">
-                <span class="progress-title">Progreso de revisión</span>
-                <div style="text-align: right;">
-                    <div class="progress-percentage" id="progressPercentage">0%</div>
-                    <div class="progress-details"><span id="reviewedCount">0</span> revisados de <span id="totalContactsCount">0</span> totales</div>
-                </div>
-            </div>
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-            </div>
-        </div>
-
-        <!-- Barra de búsqueda y filtros -->
-        <div class="search-bar" style="position: relative;">
-            <i class="fas fa-search" style="position: absolute; left: 35px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none; z-index: 1;"></i>
-            <input type="text" id="searchInput" class="search-input" placeholder="Buscar... (ej: pepe, 11, estado:jugando, turno:tm, origen:csv)" style="padding-left: 40px;">
-            <div class="filter-group">
-                <select id="statusFilter" class="filter-select">
-                    <option value="">Todos los estados</option>
-                    <option value="sin revisar">Sin Revisar</option>
-                    <option value="contactado">Contactado</option>
-                    <option value="revisado">Revisado</option>
-                    <option value="jugando">Jugando</option>
-                    <option value="sin wsp">Sin WhatsApp</option>
-                    <option value="no interesado">No Interesado</option>
-                </select>
-                <select id="originFilter" class="filter-select"><option value="">Todos los orígenes</option></select>
-                <select id="opsSegmentFilter" class="filter-select">
-                    <option value="all">Todos</option>
-                    <option value="top50">Top 50</option>
-                    <option value="top100">Top 100</option>
-                    <option value="matched">Con movimiento</option>
-                    <option value="nomatch">Sin movimiento</option>
-                </select>
-                <select id="shiftFilter" class="filter-select">
-                    <option value="">Todos los turnos</option>
-                    <option value="tm">Turno TM</option>
-                    <option value="tt">Turno TT</option>
-                    <option value="tn">Turno TN</option>
-                </select>
-                <select id="phoneFilter" class="filter-select">
-                    <option value="all">Teléfono: todos</option>
-                    <option value="with">Con teléfono</option>
-                    <option value="without">Sin teléfono</option>
-                    <option value="missing-user">Sin usuario (solo número)</option>
-                    <option value="suspicious">Teléfono sospechoso</option>
-                </select>
-                <select id="editActivityFilter" class="filter-select">
-                    <option value="all">Ediciones: todas</option>
-                    <option value="today10plus">Editados hoy (si +10)</option>
-                    <option value="any10plus">Días con +10 ediciones</option>
-                </select>
-                <button id="clearFiltersBtn" class="btn" title="Limpiar búsqueda y filtros">
-                    <i class="fas fa-filter-circle-xmark"></i> Limpiar
-                </button>
-                <button id="selectFilteredBtn" class="btn" title="Seleccionar todos los contactos filtrados">
-                    <i class="fas fa-check-double"></i> Seleccionar filtrados
-                </button>
-                <button id="clearSelectionBtn" class="btn" title="Limpiar selección actual">
-                    <i class="fas fa-eraser"></i> Limpiar selección
-                </button>
-                <button id="undoBtn" class="btn" title="Volver al último contacto editado (Ctrl+Z)">
-                    <i class="fas fa-undo"></i> Volver
-                </button>
-                <button id="addMoreBtn" class="btn btn-success"><i class="fas fa-file-upload"></i> Importar CSV</button>
-                <button id="addSingleBtn" class="btn btn-success"><i class="fas fa-user-plus"></i> Crear Usuario</button>
-            </div>
-        </div>
-
-        .cards-grid,
-        .list-view {
-            contain: layout style paint;
-            content-visibility: auto;
-        }
-        .cards-grid.virtual-scroll,
-        .list-view.virtual-scroll {
-            max-height: 68vh;
-            overflow: auto;
-            overscroll-behavior: contain;
-        }
-        .virtual-spacer { width: 100%; pointer-events: none; }
-        body.perf-large .contact-card,
-        body.perf-large .list-item {
-            box-shadow: none !important;
-        }
-        body.perf-large .contact-card::after,
-        body.perf-large .list-item::after,
-        body.perf-large .list-item-main::before,
-        body.perf-large .list-status-bg-icon {
-            display: none !important;
-        }
-        body.perf-large .contact-card::before,
-        body.perf-large .list-item::before {
-            opacity: .25 !important;
-        }
-
-        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
-        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
-        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
-        .metrics-card .v {
-            font-size:1.2rem;
-            font-weight:800;
-            margin-top:4px;
-            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
-        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
-        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
-        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
-        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
-        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
-        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
-        .metrics-filters .filter-select,
-        .metrics-filters .origin-input,
-        .metrics-filters input[type="date"] {
-            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
-            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
-        }
-        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
-        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
-        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
-        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
-        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
-        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
-        .metrics-collapsible .inner { padding:8px 10px; }
-        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
-        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
-
-        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
-        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
-        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
-        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
-        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
-
-
-        body.light-mode .header,
-        body.light-mode .search-bar,
-        body.light-mode .progress-bar-container,
-        body.light-mode .contact-card,
-        body.light-mode .list-item,
-        body.light-mode .chart-card,
-        body.light-mode .metrics-card,
-        body.light-mode .modal-content {
-            background: #f8fbff !important;
-            color: var(--text-primary);
-            border-color: rgba(100,116,139,.26) !important;
-            box-shadow: 0 6px 18px rgba(15,23,42,.06);
-        }
-        body.light-mode .chart-card canvas,
-        body.light-mode .loading-preview-bg {
-            background: #eef4fb !important;
-        }
-        body.light-mode .search-input.ghost-value-active {
-            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
-            color:#64748b;
-        }
-
-        body.perf-mode *,
-        body.perf-mode *::before,
-        body.perf-mode *::after {
-            animation: none !important;
-            transition: none !important;
-            scroll-behavior: auto !important;
-            box-shadow: none !important;
-            text-shadow: none !important;
-            filter: none !important;
-            backdrop-filter: none !important;
-        }
-        body.perf-mode .loading-preview-track { animation: none !important; }
-        body.perf-mode .cards-grid { gap: 8px !important; }
-
-
-        .cards-grid,
-        .list-view {
-            contain: layout style;
-            content-visibility: auto;
-        }
-        .cards-grid.virtual-scroll,
-        .list-view.virtual-scroll {
-            max-height: 68vh;
-            overflow: auto;
-            overscroll-behavior: contain;
-        }
-        .virtual-spacer { width: 100%; pointer-events: none; }
-        body.perf-large .contact-card,
-        body.perf-large .list-item {
-            box-shadow: none !important;
-        }
-        body.perf-large .contact-card::after,
-        body.perf-large .list-item::after,
-        body.perf-large .list-item-main::before,
-        body.perf-large .list-status-bg-icon {
-            display: none !important;
-        }
-        body.perf-large .contact-card::before,
-        body.perf-large .list-item::before {
-            opacity: .25 !important;
-        }
-
-        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
-        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
-        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
-        .metrics-card .v {
-            font-size:1.2rem;
-            font-weight:800;
-            margin-top:4px;
-            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
-        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
-        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
-        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
-        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
-        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
-        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
-        .metrics-filters .filter-select,
-        .metrics-filters .origin-input,
-        .metrics-filters input[type="date"] {
-            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
-            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
-        }
-        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
-        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
-        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
-        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
-        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
-        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
-        .metrics-collapsible .inner { padding:8px 10px; }
-        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
-        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
-
-        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
-        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
-        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
-        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
-        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
-
-
-        body.light-mode .header,
-        body.light-mode .search-bar,
-        body.light-mode .progress-bar-container,
-        body.light-mode .contact-card,
-        body.light-mode .list-item,
-        body.light-mode .chart-card,
-        body.light-mode .metrics-card,
-        body.light-mode .modal-content {
-            background: #f8fbff !important;
-            color: var(--text-primary);
-            border-color: rgba(100,116,139,.26) !important;
-            box-shadow: 0 6px 18px rgba(15,23,42,.06);
-        }
-        body.light-mode .chart-card canvas,
-        body.light-mode .loading-preview-bg {
-            background: #eef4fb !important;
-        }
-        body.light-mode .search-input.ghost-value-active {
-            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
-            color:#64748b;
-        }
-
-        body.perf-mode *,
-        body.perf-mode *::before,
-        body.perf-mode *::after {
-            animation: none !important;
-            transition: none !important;
-            scroll-behavior: auto !important;
-            box-shadow: none !important;
-            text-shadow: none !important;
-            filter: none !important;
-            backdrop-filter: none !important;
-        }
-        body.perf-mode .loading-preview-track { animation: none !important; }
-        body.perf-mode .cards-grid { gap: 8px !important; }
-
-
-        .cards-grid,
-        .list-view {
-            contain: layout style;
-            content-visibility: auto;
-        }
-        .cards-grid.virtual-scroll,
-        .list-view.virtual-scroll {
-            max-height: 68vh;
-            overflow: auto;
-            overscroll-behavior: contain;
-        }
-        .virtual-spacer { width: 100%; pointer-events: none; }
-        body.perf-large .contact-card,
-        body.perf-large .list-item {
-            box-shadow: none !important;
-        }
-        body.perf-large .contact-card::after,
-        body.perf-large .list-item::after,
-        body.perf-large .list-item-main::before,
-        body.perf-large .list-status-bg-icon {
-            display: none !important;
-        }
-        body.perf-large .contact-card::before,
-        body.perf-large .list-item::before {
-            opacity: .25 !important;
-        }
-
-        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
-        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
-        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
-        .metrics-card .v {
-            font-size:1.2rem;
-            font-weight:800;
-            margin-top:4px;
-            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
-        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
-        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
-        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
-        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
-        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
-        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
-        .metrics-filters .filter-select,
-        .metrics-filters .origin-input,
-        .metrics-filters input[type="date"] {
-            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
-            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
-        }
-        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
-        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
-        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
-        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
-        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
-        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
-        .metrics-collapsible .inner { padding:8px 10px; }
-        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
-        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
-
-        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
-        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
-        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
-        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
-        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
-
-
-        body.light-mode .header,
-        body.light-mode .search-bar,
-        body.light-mode .progress-bar-container,
-        body.light-mode .contact-card,
-        body.light-mode .list-item,
-        body.light-mode .chart-card,
-        body.light-mode .metrics-card,
-        body.light-mode .modal-content {
-            background: #f8fbff !important;
-            color: var(--text-primary);
-            border-color: rgba(100,116,139,.26) !important;
-            box-shadow: 0 6px 18px rgba(15,23,42,.06);
-        }
-        body.light-mode .chart-card canvas,
-        body.light-mode .loading-preview-bg {
-            background: #eef4fb !important;
-        }
-        body.light-mode .search-input.ghost-value-active {
-            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
-            color:#64748b;
-        }
-
-        body.perf-mode *,
-        body.perf-mode *::before,
-        body.perf-mode *::after {
-            animation: none !important;
-            transition: none !important;
-            scroll-behavior: auto !important;
-            box-shadow: none !important;
-            text-shadow: none !important;
-            filter: none !important;
-            backdrop-filter: none !important;
-        }
-        body.perf-mode .loading-preview-track { animation: none !important; }
-        body.perf-mode .cards-grid { gap: 8px !important; }
-
-
-        .cards-grid,
-        .list-view {
-            contain: layout style;
-            content-visibility: auto;
-        }
-        .cards-grid.virtual-scroll,
-        .list-view.virtual-scroll {
-            max-height: 68vh;
-            overflow: auto;
-            overscroll-behavior: contain;
-        }
-        .virtual-spacer { width: 100%; pointer-events: none; }
-        body.perf-large .contact-card,
-        body.perf-large .list-item {
-            box-shadow: none !important;
-        }
-        body.perf-large .contact-card::after,
-        body.perf-large .list-item::after,
-        body.perf-large .list-item-main::before,
-        body.perf-large .list-status-bg-icon {
-            display: none !important;
-        }
-        body.perf-large .contact-card::before,
-        body.perf-large .list-item::before {
-            opacity: .25 !important;
-        }
-
-        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
-        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
-        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
-        .metrics-card .v {
-            font-size:1.2rem;
-            font-weight:800;
-            margin-top:4px;
-            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
-        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
-        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
-        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
-        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
-        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
-        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
-        .metrics-filters .filter-select,
-        .metrics-filters .origin-input,
-        .metrics-filters input[type="date"] {
-            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
-            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
-        }
-        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
-        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
-        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
-        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
-        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
-        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
-        .metrics-collapsible .inner { padding:8px 10px; }
-        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
-        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
-
-        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
-        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
-        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
-        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
-        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
-
-
-        body.light-mode .header,
-        body.light-mode .search-bar,
-        body.light-mode .progress-bar-container,
-        body.light-mode .contact-card,
-        body.light-mode .list-item,
-        body.light-mode .chart-card,
-        body.light-mode .metrics-card,
-        body.light-mode .modal-content {
-            background: #f8fbff !important;
-            color: var(--text-primary);
-            border-color: rgba(100,116,139,.26) !important;
-            box-shadow: 0 6px 18px rgba(15,23,42,.06);
-        }
-        body.light-mode .chart-card canvas,
-        body.light-mode .loading-preview-bg {
-            background: #eef4fb !important;
-        }
-        body.light-mode .search-input.ghost-value-active {
-            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
-            color:#64748b;
-        }
-
-        body.perf-mode *,
-        body.perf-mode *::before,
-        body.perf-mode *::after {
-            animation: none !important;
-            transition: none !important;
-            scroll-behavior: auto !important;
-            box-shadow: none !important;
-            text-shadow: none !important;
-            filter: none !important;
-            backdrop-filter: none !important;
-        }
-        body.perf-mode .loading-preview-track { animation: none !important; }
-        body.perf-mode .cards-grid { gap: 8px !important; }
-
-
-        .cards-grid,
-        .list-view {
-            contain: layout style;
-            content-visibility: auto;
-        }
-        .cards-grid.virtual-scroll,
-        .list-view.virtual-scroll {
-            max-height: 68vh;
-            overflow: auto;
-            overscroll-behavior: contain;
-        }
-        .virtual-spacer { width: 100%; pointer-events: none; }
-        body.perf-large .contact-card,
-        body.perf-large .list-item {
-            box-shadow: none !important;
-        }
-        body.perf-large .contact-card::after,
-        body.perf-large .list-item::after,
-        body.perf-large .list-item-main::before,
-        body.perf-large .list-status-bg-icon {
-            display: none !important;
-        }
-        body.perf-large .contact-card::before,
-        body.perf-large .list-item::before {
-            opacity: .25 !important;
-        }
-
-        .metrics-dashboard-grid { display:grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap:10px; margin:12px 0; }
-        .metrics-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
-        .metrics-card .k { color:var(--text-secondary); font-size:.8rem; }
-        .metrics-card .v {
-            font-size:1.2rem;
-            font-weight:800;
-            margin-top:4px;
-            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
-        .metrics-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
-        .metrics-transitions { margin-top:10px; max-height:220px; overflow:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:8px; }
-        .metrics-transitions table { width:100%; border-collapse:collapse; font-size:.82rem; }
-        .metrics-transitions th, .metrics-transitions td { padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.12); text-align:left; }
-        .metrics-wide-grid { display:grid; grid-template-columns: repeat(3,minmax(180px,1fr)); gap:10px; margin-top:10px; }
-        .metrics-filters { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:8px; margin-top:8px; }
-        .metrics-filters .filter-select,
-        .metrics-filters .origin-input,
-        .metrics-filters input[type="date"] {
-            border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-color));
-            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 20%, transparent);
-        }
-        .metrics-charts { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:10px; margin-top:10px; }
-        .chart-card { background: rgba(30,41,59,.7); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:10px; }
-        .chart-title { font-size:.86rem; color:var(--text-secondary); margin-bottom:6px; }
-        .chart-card canvas { width:100%; height:180px; background:rgba(15,23,42,.35); border-radius:8px; }
-        .metrics-collapsible { margin-top:8px; border:1px solid rgba(148,163,184,.2); border-radius:10px; overflow:hidden; }
-        .metrics-collapsible summary { cursor:pointer; padding:8px 10px; background:rgba(51,65,85,.35); font-weight:700; }
-        .metrics-collapsible .inner { padding:8px 10px; }
-        .metrics-password-panel { margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px; background:rgba(15,23,42,.5); }
-        .metrics-password-grid { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
-
-        .import-diag-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-        .import-diag-card { background:rgba(30,41,59,.72); border:1px solid rgba(148,163,184,.25); border-radius:10px; padding:10px; }
-        .import-diag-card h4 { margin:0 0 8px 0; font-size:.95rem; }
-        .import-diag-table { width:100%; border-collapse: collapse; font-size:.82rem; }
-        .import-diag-table th, .import-diag-table td { border-bottom:1px solid rgba(148,163,184,.2); padding:6px; text-align:left; }
-        .import-diag-list { font-size:.85rem; color:var(--text-secondary); line-height:1.5; }
-
-
-        body.light-mode .header,
-        body.light-mode .search-bar,
-        body.light-mode .progress-bar-container,
-        body.light-mode .contact-card,
-        body.light-mode .list-item,
-        body.light-mode .chart-card,
-        body.light-mode .metrics-card,
-        body.light-mode .modal-content {
-            background: #f8fbff !important;
-            color: var(--text-primary);
-            border-color: rgba(100,116,139,.26) !important;
-            box-shadow: 0 6px 18px rgba(15,23,42,.06);
-        }
-        body.light-mode .chart-card canvas,
-        body.light-mode .loading-preview-bg {
-            background: #eef4fb !important;
-        }
-        body.light-mode .search-input.ghost-value-active {
-            background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(233,241,251,.95));
-            color:#64748b;
-        }
-
-        body.perf-mode *,
-        body.perf-mode *::before,
-        body.perf-mode *::after {
-            animation: none !important;
-            transition: none !important;
-            scroll-behavior: auto !important;
-            box-shadow: none !important;
-            text-shadow: none !important;
-            filter: none !important;
-            backdrop-filter: none !important;
-        }
-        body.perf-mode .loading-preview-track { animation: none !important; }
-        body.perf-mode .cards-grid { gap: 8px !important; }
-
-                <div class="export-option" id="rollbackPreviousOption">
-                    <i class="fas fa-history"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Volver a versión anterior</div>
-                        <div class="export-option-desc">Rollback desde instalador cacheado local</div>
-                    </div>
-                </div>
-                <div class="export-option" id="openStable110Option">
-                    <i class="fas fa-shield-alt"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Descargar 1.1.10 stable</div>
-                        <div class="export-option-desc">Downgrade manual seguro</div>
-                    </div>
-                </div>
-                <div class="export-option" id="openErrorLogOption">
-                    <i class="fas fa-file-alt"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Abrir log de errores</div>
-                        <div class="export-option-desc">Ver registro detallado de fallos y trazas</div>
-                    </div>
-                </div>
-                <div class="export-option" id="showQuickMetricsOption">
-                    <i class="fas fa-chart-bar"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Métricas rápidas</div>
-                        <div class="export-option-desc">Resumen de progreso y actividad</div>
-                    </div>
-                </div>
-                <div class="export-option" id="openThemesOption">
-                    <i class="fas fa-palette"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Temas y colores</div>
-                        <div class="export-option-desc">Seleccionar, crear, exportar e importar temas</div>
-                    </div>
-                </div>
-                <div class="export-option" id="checkUpdatesOption">
-                    <i class="fas fa-cloud-download-alt"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Buscar actualizaciones</div>
-                        <div class="export-option-desc" id="updateStatusText">Estado: sin comprobar</div>
-                        <div style="margin-top:6px; width:100%; height:8px; background:rgba(148,163,184,.22); border-radius:999px; overflow:hidden;">
-                            <div id="updateProgressFill" style="height:100%; width:0%; background:linear-gradient(90deg,#3b82f6,#10b981);"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="export-option" id="restartUpdateOption" style="display:none;">
-                    <i class="fas fa-redo"></i>
-                    <div class="export-option-text">
-                        <div class="export-option-title">Reiniciar y actualizar</div>
-                        <div class="export-option-desc">Instalar actualización descargada</div>
-                    </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;padding:8px 4px;">
-                    <input id="perfDebugToggle" type="checkbox">
-                    <label for="perfDebugToggle" style="color:var(--text-secondary);">Modo debug performance</label>
-                </div>
-                <div id="perfDebugPanel" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px 4px 2px;font-size:.78rem;color:var(--text-secondary);">
-                    <div>DOM items: <strong id="perfDomItems">0</strong></div>
-                    <div>Filtro: <strong id="perfFilterMs">0ms</strong></div>
-                    <div>Render: <strong id="perfRenderMs">0ms</strong></div>
-                    <div>Long tasks: <strong id="perfLongTasks">0</strong></div>
-                    <div style="grid-column:1 / -1;">Top long tasks: <strong id="perfLongTasksTop">-</strong></div>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button id="closeUserOptionsModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal" id="profilesModal">
-        <div class="modal-content profiles-art" style="max-width:640px;">
-            <div class="modal-header"><i class="fas fa-layer-group"></i> Perfiles / Bases</div>
-            <p style="color:var(--text-secondary); margin-bottom:8px;">Hasta 8 bases distintas. Cada perfil mantiene su propia vista de contactos.</p>
-            <div style="display:flex; gap:8px; margin:10px 0;">
-                <input id="newProfileName" class="origin-input" style="margin-top:0" placeholder="Nombre del perfil (ej: Base Casino Norte)">
-                <button id="addProfileBtn" class="btn btn-success"><i class="fas fa-plus"></i> Crear</button>
-            </div>
-            <div id="profilesList" class="history-list" style="max-height:260px;"></div>
-            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
-                <input type="checkbox" id="splitImportByFileToggle">
-                <label for="splitImportByFileToggle" style="color:var(--text-secondary);">Crear/usar perfil por archivo al importar varios CSV</label>
-            </div>
-            <div class="modal-actions">
-                <button id="closeProfilesModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
-            </div>
-        </div>
-    </div>
-
-
-    <div class="modal" id="metricsModal">
-        <div class="modal-content" style="max-width: 760px;">
-            <div class="modal-header"><i class="fas fa-chart-line"></i> Centro de métricas</div>
-            <div id="metricsDateLabel" style="color:var(--text-secondary); margin-bottom:8px;">Resumen diario</div>
-            <div id="metricsOpsSummary" style="color:var(--text-secondary); margin-bottom:8px; font-size:.9rem;">Movimientos ops hoy: - · turno actual: -</div>
-            <div class="metrics-filters">
-                <select id="metricsShiftFilter" class="filter-select">
-                    <option value="all">Turno: todos</option>
-                    <option value="tm">Turno 1 (06-14)</option>
-                    <option value="tt">Turno 2 (14-22)</option>
-                    <option value="tn">Turno 3 (22-06)</option>
-                </select>
-                <div style="display:flex;gap:6px;align-items:center;grid-column:span 2;flex-wrap:wrap;">
-                    <button id="metricsShiftMorningBtn" class="btn" style="padding:6px 10px;">TM (06-14)</button>
-                    <button id="metricsShiftAfternoonBtn" class="btn" style="padding:6px 10px;">TT (14-22)</button>
-                    <button id="metricsShiftNightBtn" class="btn" style="padding:6px 10px;">TN (22-06)</button>
-                    <button id="metricsShiftResetBtn" class="btn" style="padding:6px 10px;">Quitar lapso</button>
-                </div>
-                <input id="metricsFromDate" type="date" class="origin-input" style="margin-top:0;">
-                <input id="metricsToDate" type="date" class="origin-input" style="margin-top:0;">
-                <select id="metricsStatusFilter" class="filter-select">
-                    <option value="all">Estado: todos</option>
-                </select>
-                <select id="metricsSelectionTypeFilter" class="filter-select">
-                    <option value="all">Selección: todas</option>
-                    <option value="manual">Manual</option>
-                    <option value="ops">Operaciones</option>
-                    <option value="bulk">Masiva</option>
-                    <option value="import">Importación</option>
-                </select>
-                <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);padding-left:4px;">
-                    <input id="metricsOnlyChanges" type="checkbox"> Solo cambios
-                </label>
-            </div>
-            <div class="metrics-dashboard-grid">
-                <div class="metrics-card"><div class="k">Actividad de hoy</div><div id="metricEditedToday" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Impulso de ayer</div><div id="metricEditedYesterday" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Turno líder</div><div id="metricTopShift" class="v">-</div></div>
-                <div class="metrics-card"><div class="k">Movimientos (24h)</div><div id="metricTransitions24h" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Turno líder (24h)</div><div id="metricTopShift24h" class="v">-</div></div>
-                <div class="metrics-card"><div class="k">Ritmo por hora</div><div id="metricButtonsPerHour" class="v">0</div></div>
-            </div>
-            <div class="metrics-charts">
-                <div class="chart-card">
-                    <div class="chart-title">Estados (donut)</div>
-                    <canvas id="statusDonutChart" width="320" height="180"></canvas>
-                </div>
-                <div class="chart-card">
-                    <div class="chart-title">Tipo de selección (donut)</div>
-                    <canvas id="selectionDonutChart" width="320" height="180"></canvas>
-                </div>
-                <div class="chart-card" style="grid-column: span 2;">
-                    <div class="chart-title">Transiciones de estado (barras)</div>
-                    <canvas id="transitionBarChart" width="660" height="180"></canvas>
-                </div>
-            </div>
-            <div class="metrics-actions">
-                <button id="metricsFilterLastBatchBtn" class="btn"><i class="fas fa-filter"></i> Filtrar última subida</button>
-                <button id="metricsDeleteLastBatchBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Borrar última subida</button>
-                <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
-                <button id="importControlBtn" class="btn" title="Importa control diario/mensual"><i class="fas fa-shield-alt"></i> Importar Control <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo liviano para seguimiento diario/mensual de métricas y turnos."></i></button>
-                <div class="metrics-control-center" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                    <span style="color:var(--text-secondary);font-size:.82rem;">Centro de Control</span>
-                    <button id="exportDailyNexoBtn" class="btn"><i class="fas fa-file-export"></i> exportDaily()</button>
-                    <button id="exportBackupNexoBtn" class="btn"><i class="fas fa-archive"></i> exportBackup()</button>
-                </div>
-                <button id="uploadReportBtn" class="btn"><i class="fas fa-upload"></i> Subir reporte seleccionado</button>
-                <button id="resetBaselineBtn" class="btn"><i class="fas fa-eraser"></i> Reset baseline</button>
-            </div>
-            <div id="metricTransitionsBreakdown" class="metrics-transitions"></div>
-            <div id="metricTransitionSummary" class="metrics-transitions" style="margin-top:8px;"></div>
-            <details id="metricRareTransitions" class="metrics-collapsible" style="display:none;">
-                <summary>Ver combinaciones raras</summary>
-                <div id="metricRareTransitionsBody" class="inner"></div>
-            </details>
-            <div id="metricShiftBreakdown" class="metrics-wide-grid"></div>
-            <div id="metricShiftRanking" class="metrics-transitions" style="margin-top:8px;"></div>
-            <div id="controlReportsSummary" class="metrics-transitions" style="margin-top:8px;"></div>
-            <div id="controlPasswordPanel" class="metrics-password-panel" style="display:none;">
-                <div style="font-weight:700;margin-bottom:6px;">Seguridad archivo de control</div>
-                <div style="color:var(--text-secondary);font-size:.85rem;margin-bottom:8px;">Después del primer ingreso podés cambiar la clave de importación.</div>
-                <div class="metrics-password-grid">
-                    <input id="controlPasswordNew" type="password" class="origin-input" style="margin-top:0;" placeholder="Nueva clave de control">
-                    <button id="controlPasswordSaveBtn" class="btn btn-success"><i class="fas fa-key"></i> Guardar clave</button>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button id="closeMetricsModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
-            </div>
-        </div>
-    </div>
-
-
-    <div class="modal" id="whatsappMessageModal">
-        <div class="modal-content" style="max-width: 640px;">
-            <div class="modal-header"><i class="fab fa-whatsapp"></i> Mensaje de WhatsApp</div>
-            <textarea id="whatsappTemplateInput" class="origin-input" style="min-height: 140px; margin-top: 0;" placeholder="Hola {usuario}, ..."></textarea>
-            <div class="template-actions" style="margin-top: 12px;">
-                <button id="insertUserTokenBtn" class="btn"><i class="fas fa-user"></i> Insertar usuario</button>
-                <button id="resetTemplateBtn" class="btn"><i class="fas fa-undo"></i> Restablecer</button>
-            </div>
-            <p class="template-help" style="margin-top: 8px;">Usá <code>{usuario}</code> para completar el nombre automáticamente.</p>
-            <div class="modal-actions">
-                <button id="closeWhatsappMessageModal" class="btn"><i class="fas fa-times"></i> Cancelar</button>
-                <button id="saveTemplateBtn" class="btn btn-success"><i class="fas fa-save"></i> Guardar mensaje</button>
-            </div>
-        </div>
-    </div>
-
-        body.perf-mode *,
-        body.perf-mode *::before,
-        body.perf-mode *::after {
-            animation: none !important;
-            transition: none !important;
-            scroll-behavior: auto !important;
-            box-shadow: none !important;
-            text-shadow: none !important;
-            filter: none !important;
-            backdrop-filter: none !important;
-        }
-        body.perf-mode .loading-preview-track { animation: none !important; }
-        body.perf-mode .cards-grid { gap: 8px !important; }
-
-    <div class="modal" id="themesModal">
-        <div class="modal-content" style="max-width:760px;">
-            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;"><span><i class="fas fa-palette"></i> Seleccioná un tema</span><label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text-secondary);"><input id="lightModeToggle" type="checkbox"> Modo claro</label></div>
-            <div id="themeCards" class="metrics-wide-grid"></div>
-            <div style="margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px;">
-                <div style="font-weight:700;margin-bottom:6px;">Tema personalizado</div>
-                <div class="metrics-filters">
-                    <input id="themeNameInput" class="origin-input" style="margin-top:0;" placeholder="Nombre del tema">
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Primary <input id="themePrimary" type="color" value="#3b82f6"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Accent <input id="themeAccent" type="color" value="#10b981"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">BG <input id="themeBg" type="color" value="#0f172a"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Surface <input id="themeSurface" type="color" value="#1e293b"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Text <input id="themeText" type="color" value="#e2e8f0"></label>
-                </div>
-                <div class="modal-actions">
-                    <button id="saveCustomThemeBtn" class="btn btn-success"><i class="fas fa-save"></i> Guardar tema</button>
-                    <button id="exportThemesBtn" class="btn"><i class="fas fa-file-export"></i> Exportar themes.json</button>
-                    <button id="importThemesBtn" class="btn"><i class="fas fa-file-import"></i> Importar themes.json</button>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button id="closeThemesModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal" id="themesModal">
-        <div class="modal-content" style="max-width:760px;">
-            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;"><span><i class="fas fa-palette"></i> Seleccioná un tema</span><label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text-secondary);"><input id="lightModeToggle" type="checkbox"> Modo claro</label></div>
-            <div id="themeCards" class="metrics-wide-grid"></div>
-            <div style="margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px;">
-                <div style="font-weight:700;margin-bottom:6px;">Tema personalizado</div>
-                <div class="metrics-filters">
-                    <input id="themeNameInput" class="origin-input" style="margin-top:0;" placeholder="Nombre del tema">
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Primary <input id="themePrimary" type="color" value="#3b82f6"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Accent <input id="themeAccent" type="color" value="#10b981"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">BG <input id="themeBg" type="color" value="#0f172a"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Surface <input id="themeSurface" type="color" value="#1e293b"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Text <input id="themeText" type="color" value="#e2e8f0"></label>
-                </div>
-                <div class="modal-actions">
-                    <button id="saveCustomThemeBtn" class="btn btn-success"><i class="fas fa-save"></i> Guardar tema</button>
-                    <button id="exportThemesBtn" class="btn"><i class="fas fa-file-export"></i> Exportar themes.json</button>
-                    <button id="importThemesBtn" class="btn"><i class="fas fa-file-import"></i> Importar themes.json</button>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button id="closeThemesModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal" id="themesModal">
-        <div class="modal-content" style="max-width:760px;">
-            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;"><span><i class="fas fa-palette"></i> Seleccioná un tema</span><label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text-secondary);"><input id="lightModeToggle" type="checkbox"> Modo claro</label></div>
-            <div id="themeCards" class="metrics-wide-grid"></div>
-            <div style="margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px;">
-                <div style="font-weight:700;margin-bottom:6px;">Tema personalizado</div>
-                <div class="metrics-filters">
-                    <input id="themeNameInput" class="origin-input" style="margin-top:0;" placeholder="Nombre del tema">
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Primary <input id="themePrimary" type="color" value="#3b82f6"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Accent <input id="themeAccent" type="color" value="#10b981"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">BG <input id="themeBg" type="color" value="#0f172a"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Surface <input id="themeSurface" type="color" value="#1e293b"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Text <input id="themeText" type="color" value="#e2e8f0"></label>
-                </div>
-                <div class="modal-actions">
-                    <button id="saveCustomThemeBtn" class="btn btn-success"><i class="fas fa-save"></i> Guardar tema</button>
-                    <button id="exportThemesBtn" class="btn"><i class="fas fa-file-export"></i> Exportar themes.json</button>
-                    <button id="importThemesBtn" class="btn"><i class="fas fa-file-import"></i> Importar themes.json</button>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button id="closeThemesModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal" id="themesModal">
-        <div class="modal-content" style="max-width:760px;">
-            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;"><span><i class="fas fa-palette"></i> Seleccioná un tema</span><label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text-secondary);"><input id="lightModeToggle" type="checkbox"> Modo claro</label></div>
-            <div id="themeCards" class="metrics-wide-grid"></div>
-            <div style="margin-top:10px; border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px;">
-                <div style="font-weight:700;margin-bottom:6px;">Tema personalizado</div>
-                <div class="metrics-filters">
-                    <input id="themeNameInput" class="origin-input" style="margin-top:0;" placeholder="Nombre del tema">
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Primary <input id="themePrimary" type="color" value="#3b82f6"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Accent <input id="themeAccent" type="color" value="#10b981"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">BG <input id="themeBg" type="color" value="#0f172a"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Surface <input id="themeSurface" type="color" value="#1e293b"></label>
-                    <label style="color:var(--text-secondary);display:flex;align-items:center;gap:8px;">Text <input id="themeText" type="color" value="#e2e8f0"></label>
-                </div>
-                <div class="modal-actions">
-                    <button id="saveCustomThemeBtn" class="btn btn-success"><i class="fas fa-save"></i> Guardar tema</button>
-                    <button id="exportThemesBtn" class="btn"><i class="fas fa-file-export"></i> Exportar themes.json</button>
-                    <button id="importThemesBtn" class="btn"><i class="fas fa-file-import"></i> Importar themes.json</button>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button id="closeThemesModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="appLoadingOverlay" class="app-loading-overlay">
-        <div class="loading-preview-bg"><div id="loadingPreviewTrack" class="loading-preview-track"></div></div>
-        <div style="font-size:1.1rem;font-weight:600;">Cargando…</div>
-        <div id="appLoadingText" style="color:var(--text-secondary);">Inicializando</div>
-        <div class="progress-bar"><div id="appLoadingProgress" class="progress-fill"></div></div>
-        <button id="cancelImportBtn" class="btn" style="display:none;"><i class="fas fa-ban"></i> Cancelar importación</button>
-    </div>
-
-<<<<<<< codex/implement-comprehensive-error-logging-features-pgwq6f
-
-    <div class="modal" id="importDiagnosticsModal">
-        <div class="modal-content" style="max-width:900px;">
-            <div class="modal-header"><i class="fas fa-stethoscope"></i> Diagnóstico de importación</div>
-            <div id="importDiagSummary" style="color:var(--text-secondary);margin-bottom:10px;"></div>
-            <div class="import-diag-grid">
-                <div class="import-diag-card">
-                    <h4>Preview (primeras 20 filas)</h4>
-                    <div id="importDiagTableWrap" style="max-height:260px;overflow:auto;"></div>
-                </div>
-                <div class="import-diag-card">
-                    <h4>Mapeo de columnas</h4>
-                    <div style="display:grid;gap:8px;">
-                        <label>Nombre <select id="importMapName" class="filter-select"></select></label>
-                        <label>Teléfono <select id="importMapPhone" class="filter-select"></select></label>
-                        <label>Etiqueta/Origen <select id="importMapTag" class="filter-select"></select></label>
-                    </div>
-                    <h4 style="margin-top:12px;">Validación</h4>
-                    <div id="importDiagIssues" class="import-diag-list"></div>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button id="importDiagCancel" class="btn"><i class="fas fa-times"></i> Cancelar archivo</button>
-                <button id="importDiagContinue" class="btn btn-success"><i class="fas fa-check"></i> Continuar importación</button>
-            </div>
-        </div>
-    </div>
-
-    <script type="module" src="./modules/perfiles-controller.js"></script>
-    <script type="module" src="./modules/admin-auth.js"></script>
-
-    <script>
-    (() => {
-        const hasBridge = !!(window.nexoStore && typeof window.nexoStore.getAll === 'function');
-        if (!hasBridge) {
-            window.__nexoStoreReady = Promise.resolve();
-            return;
-        }
-        if (typeof window.nexoStore.getState !== 'function') {
-            window.nexoStore.getState = () => window.nexoStore.getAll();
-        }
-
-        const emitStoreError = (message) => {
-            window.dispatchEvent(new CustomEvent('nexo-store-error', { detail: message }));
-            console.error(message);
-        };
-
-        const state = { map: {}, saveTimer: null, pendingFlush: false, lastFlushAt: 0 };
-        const KNOWN_KEYS = new Set(['contactsData', 'contactsHistory', 'whatsappTemplate', 'duplicateMergeMode', 'lastExportAt', 'backups', 'extraStorage']);
-
-        const mapFromDb = (db) => {
-            const nextMap = {};
-            nextMap.contactsData = JSON.stringify(Array.isArray(db.contactsData) ? db.contactsData : []);
-            nextMap.contactsHistory = JSON.stringify(Array.isArray(db.contactsHistory) ? db.contactsHistory : []);
-            nextMap.whatsappTemplate = typeof db.whatsappTemplate === 'string' ? db.whatsappTemplate : 'Hola {usuario}, ¿cómo estás? Te escribo por la propuesta que vimos.';
-            nextMap.duplicateMergeMode = typeof db.duplicateMergeMode === 'string' ? db.duplicateMergeMode : 'phone-auto';
-            if (db.lastExportAt) nextMap.lastExportAt = String(db.lastExportAt);
-            if (db.backups && typeof db.backups === 'object') {
-                Object.entries(db.backups).forEach(([key, value]) => {
-                    nextMap[`bk_${key}`] = JSON.stringify(value);
-                });
-            }
-            if (db.extraStorage && typeof db.extraStorage === 'object') {
-                Object.entries(db.extraStorage).forEach(([key, value]) => {
-                    if (typeof value === 'string') nextMap[key] = value;
-                });
-            }
-            return nextMap;
-        };
-
-        const parseJson = (raw, fallback) => {
-            if (!raw) return fallback;
-            try { return JSON.parse(raw); } catch (_) { return fallback; }
-        };
-
-        const dbFromMap = (map) => {
-            const backups = {};
-            const extraStorage = {};
-            Object.entries(map).forEach(([key, value]) => {
-                if (key.startsWith('bk_')) {
-                    backups[key.slice(3)] = parseJson(value, []);
-                } else if (!KNOWN_KEYS.has(key)) {
-                    extraStorage[key] = String(value);
-                }
-            });
-            return {
-                contactsData: parseJson(map.contactsData, []),
-                contactsHistory: parseJson(map.contactsHistory, []),
-                whatsappTemplate: map.whatsappTemplate || 'Hola {usuario}, ¿cómo estás? Te escribo por la propuesta que vimos.',
-                duplicateMergeMode: map.duplicateMergeMode || 'phone-auto',
-                lastExportAt: map.lastExportAt || null,
-                backups,
-                extraStorage
-            };
-        };
-
-        const flushToDisk = async () => {
-            try {
-                await window.nexoStore.setAll(dbFromMap(state.map));
-            } catch (error) {
-                emitStoreError(`No se pudo guardar en disco: ${error.message || error}`);
-            }
-        };
-
-        const FLUSH_DEBOUNCE_MS = 1800;
-        const FLUSH_MAX_WAIT_MS = 3000;
-        const scheduleFlush = () => {
-            clearTimeout(state.saveTimer);
-            const elapsed = Date.now() - (state.lastFlushAt || 0);
-            const delay = elapsed > FLUSH_MAX_WAIT_MS ? 50 : FLUSH_DEBOUNCE_MS;
-            state.saveTimer = setTimeout(() => {
-                if (state.pendingFlush) return;
-                state.pendingFlush = true;
-                const run = async () => {
-                    try { await flushToDisk(); } finally {
-                        state.pendingFlush = false;
-                        state.lastFlushAt = Date.now();
-                    }
-                };
-                if (typeof requestIdleCallback === 'function') requestIdleCallback(() => { run(); }, { timeout: 1200 });
-                else setTimeout(() => { run(); }, 0);
-            }, delay);
-        };
-
-        const storageShim = {
-            getItem(key) {
-                const value = state.map[String(key)];
-                return value === undefined ? null : value;
-            },
-            setItem(key, value) {
-                state.map[String(key)] = String(value);
-                scheduleFlush();
-            },
-            removeItem(key) {
-                delete state.map[String(key)];
-                scheduleFlush();
-            },
-            clear() {
-                state.map = {};
-                scheduleFlush();
-            },
-            key(index) {
-                return Object.keys(state.map)[index] ?? null;
-            },
-            get length() {
-                return Object.keys(state.map).length;
-            }
-        };
-
-        const installShim = () => {
-            try {
-                Object.defineProperty(window, 'localStorage', { value: storageShim, configurable: true });
-            } catch (_) {
-                const proto = Object.getPrototypeOf(window.localStorage);
-                proto.getItem = storageShim.getItem;
-                proto.setItem = storageShim.setItem;
-                proto.removeItem = storageShim.removeItem;
-                proto.clear = storageShim.clear;
-                proto.key = storageShim.key;
-                Object.defineProperty(proto, 'length', { get: () => Object.keys(state.map).length });
-            }
-        };
-
-        window.__nexoStoreReady = (async () => {
-            try {
-                const db = await window.nexoStore.getAll();
-                state.map = mapFromDb(db || {});
-                installShim();
-            } catch (error) {
-                emitStoreError(`No se pudo cargar la base local: ${error.message || error}`);
-                installShim();
-            }
-        })();
-    })();
-    </script>
-
-
-    <script>
     (() => {
         const $ = (sel) => document.querySelector(sel);
         const $$ = (sel) => document.querySelectorAll(sel);
@@ -2769,6 +56,7 @@
             reviewMilestonesShown: {},
             runtimeHash: '',
             profiles: [{ id: 'default', name: 'Base principal' }],
+            profilePreviewById: {},
             activeProfileId: 'default',
             splitImportByFile: false,
             operatorName: 'PC local',
@@ -4545,13 +1833,14 @@
         let lastInteractionAt = Date.now();
         const CONTACT_SAVE_BATCH_SIZE = 300;
         const CONTACT_SAVE_MAX_WAIT_MS = 12000;
-        function queueSaveData(delayMs = 1200) {
+        function queueSaveData(delayMs = 2000) {
             if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
             saveDebounceTimer = setTimeout(() => {
                 saveDebounceTimer = null;
                 if (contactsDirty) flushSaveQueue('debounce');
             }, delayMs);
         }
+        window.queueSaveData = queueSaveData;
 
         async function flushSaveQueue(reason = 'forced') {
             if (saveDebounceTimer) {
@@ -4994,6 +2283,7 @@
                 const profiles = Array.isArray(result?.profiles) ? result.profiles : [];
                 if (profiles.length) {
                     AppState.profiles = profiles;
+                    AppState.profilePreviewById = (result?.previewByProfile && typeof result.previewByProfile === 'object') ? result.previewByProfile : {};
                     ensureActiveProfile();
                 }
             } catch (_) {}
@@ -5026,6 +2316,10 @@
             try {
                 ensureActiveProfile();
                 const profileCounts = Object.create(null);
+                const previewCounts = AppState.profilePreviewById && typeof AppState.profilePreviewById === 'object' ? AppState.profilePreviewById : {};
+                Object.entries(previewCounts).forEach(([pid, total]) => {
+                    profileCounts[pid] = Number(total) || 0;
+                });
                 (AppState.contacts || []).forEach((c) => {
                     const pid = c?.profileId || 'default';
                     profileCounts[pid] = (profileCounts[pid] || 0) + 1;
@@ -5754,29 +3048,8 @@
                             <button class="btn" onclick="editContactField(${contact.id}, 'name')"><i class="fas fa-pen"></i> Editar</button>
                             ${contact.phone ? `<button class="btn btn-success" onclick="openWhatsApp('${escapedPhone}', event)"><i class="fab fa-whatsapp"></i> WhatsApp</button>` : ''}
                         </div>
-=======
-
-    <div class="modal" id="importDiagnosticsModal">
-        <div class="modal-content" style="max-width:900px;">
-            <div class="modal-header"><i class="fas fa-stethoscope"></i> Diagnóstico de importación</div>
-            <div id="importDiagSummary" style="color:var(--text-secondary);margin-bottom:10px;"></div>
-            <div class="import-diag-grid">
-                <div class="import-diag-card">
-                    <h4>Preview (primeras 20 filas)</h4>
-                    <div id="importDiagTableWrap" style="max-height:260px;overflow:auto;"></div>
-                </div>
-                <div class="import-diag-card">
-                    <h4>Mapeo de columnas</h4>
-                    <div style="display:grid;gap:8px;">
-                        <label>Nombre <select id="importMapName" class="filter-select"></select></label>
-                        <label>Teléfono <select id="importMapPhone" class="filter-select"></select></label>
-                        <label>Etiqueta/Origen <select id="importMapTag" class="filter-select"></select></label>
->>>>>>> main
                     </div>
-                    <h4 style="margin-top:12px;">Validación</h4>
-                    <div id="importDiagIssues" class="import-diag-list"></div>
                 </div>
-<<<<<<< codex/implement-comprehensive-error-logging-features-pgwq6f
             `;
         }
 
@@ -6202,24 +3475,42 @@
             }
         };
 
-        function scheduleFastBackgroundSave(source = 'common') {
-            setTimeout(() => {
-                try { saveData(); } catch (_) {}
-            }, 1200);
-            if (source !== 'shift') {
-                setTimeout(() => {
-                    try { render(); } catch (_) {}
-                }, 500);
-            }
+        function scheduleFastBackgroundSave() {
+            contactsDirty = true;
+            setSaveState('pending', 'Guardado en segundo plano...');
+            queueSaveData(2000);
         }
 
-        window.copyToClipboard = (text, event) => {
+        window.copyToClipboard = async (text, event) => {
             if (event) event.stopPropagation();
-            navigator.clipboard.writeText(text).catch(() => {
+            try {
+                await navigator.clipboard.writeText(text);
+                showNotification(`✓ Copiado: ${text}`, 'success');
+            } catch (_) {
                 showNotification('Error al copiar', 'error');
-            });
-            showNotification(`✓ Copiado: ${text}`, 'success');
+            }
         };
+
+        function updateContactStatusInDOM(contactId, status) {
+            const safeStatus = String(status || 'sin revisar');
+            const statusClass = safeStatus.replace(/\s+/g, '-');
+            const statusOption = getStatusOption(safeStatus);
+            const rows = document.querySelectorAll(`[data-id="${contactId}"]`);
+            rows.forEach((row) => {
+                row.style.setProperty('--status-rgb', statusOption.rgb || '156, 163, 175');
+                row.querySelectorAll('.status-badge').forEach((badge) => {
+                    badge.className = `status-badge status-${statusClass}`;
+                    badge.textContent = statusOption.label;
+                });
+                row.querySelectorAll('.list-status-chip').forEach((chip) => {
+                    chip.innerHTML = `<i class="fas ${statusOption.icon}"></i>${statusOption.label}`;
+                });
+                row.querySelectorAll('.status-btn').forEach((btn) => {
+                    const isCurrent = btn.classList.contains(statusClass);
+                    btn.classList.toggle('active', isCurrent);
+                });
+            });
+        }
 
 
 
@@ -6314,9 +3605,11 @@
                 }
             }
             if (policyNote) announceGeneral('Autopolítica aplicada: 3 recontactos sin respuesta → sin WhatsApp.', 'warn', 3000);
-            setSaveState('pending', 'Guardado en segundo plano...');
+            updateContactStatusInDOM(contact.id, requestedStatus);
+            AppState.searchIndexDirty = true;
+            AppState.statsDirty = true;
             enqueueStatusDelta(contact, oldStatus, requestedStatus, eventAt);
-            scheduleFastBackgroundSave(source);
+            scheduleFastBackgroundSave();
             } catch (statusErr) {
                 console.error('Error al cambiar estado:', statusErr);
                 showNotification(`No se pudo cambiar estado: ${statusErr?.message || statusErr}`, 'error');
@@ -7494,15 +4787,21 @@
                     elements.opsFileInput.value = '';
                 };
             }
-            $('#openShortcutsOption').onclick = () => {
-                elements.userOptionsModal.classList.remove('active');
-                elements.shortcutsModal.classList.add('active');
-            };
-            $('#openWhatsappMessageOption').onclick = () => {
-                elements.userOptionsModal.classList.remove('active');
-                elements.whatsappMessageModal.classList.add('active');
-                elements.whatsappTemplateInput.value = AppState.whatsappTemplate;
-            };
+            const openShortcutsOptionEl = $('#openShortcutsOption');
+            if (openShortcutsOptionEl) {
+                openShortcutsOptionEl.onclick = () => {
+                    elements.userOptionsModal.classList.remove('active');
+                    elements.shortcutsModal.classList.add('active');
+                };
+            }
+            const openWhatsappMessageOptionEl = $('#openWhatsappMessageOption');
+            if (openWhatsappMessageOptionEl) {
+                openWhatsappMessageOptionEl.onclick = () => {
+                    elements.userOptionsModal.classList.remove('active');
+                    elements.whatsappMessageModal.classList.add('active');
+                    elements.whatsappTemplateInput.value = AppState.whatsappTemplate;
+                };
+            }
             if (elements.openGithubReleasesOption) {
                 elements.openGithubReleasesOption.onclick = async () => {
                     const url = 'https://github.com/zhinouno-ui/nexo-desktop/releases/latest';
@@ -8435,8 +5734,18 @@
                 };
             }
 
-            if ($('#closeMetricsModal')) $('#closeMetricsModal').onclick = () => $('#metricsModal').classList.remove('active');
-            $('#closeUserOptionsModal').onclick = () => elements.userOptionsModal.classList.remove('active');
+            if ($('#closeMetricsModal')) {
+                $('#closeMetricsModal').onclick = () => {
+                    const metricsModalEl = $('#metricsModal');
+                    if (metricsModalEl) metricsModalEl.classList.remove('active');
+                };
+            }
+            const closeUserOptionsModalEl = $('#closeUserOptionsModal');
+            if (closeUserOptionsModalEl) {
+                closeUserOptionsModalEl.onclick = () => {
+                    if (elements.userOptionsModal) elements.userOptionsModal.classList.remove('active');
+                };
+            }
 
             const clearSearchGhost = () => {
                 AppState.searchGhostActive = false;
@@ -8469,7 +5778,8 @@
                 render();
             };
 
-            $('#undoBtn').onclick = undoToLastContact;
+            const undoBtnEl = $('#undoBtn');
+            if (undoBtnEl) undoBtnEl.onclick = undoToLastContact;
             
             elements.saveTemplateBtn.onclick = () => {
                 AppState.whatsappTemplate = elements.whatsappTemplateInput.value;
@@ -8491,7 +5801,12 @@
                 AppState.whatsappTemplate = elements.whatsappTemplateInput.value;
                 savePreferences();
             };
-            $('#closeWhatsappMessageModal').onclick = () => elements.whatsappMessageModal.classList.remove('active');
+            const closeWhatsappMessageModalEl = $('#closeWhatsappMessageModal');
+            if (closeWhatsappMessageModalEl) {
+                closeWhatsappMessageModalEl.onclick = () => {
+                    if (elements.whatsappMessageModal) elements.whatsappMessageModal.classList.remove('active');
+                };
+            }
             const closeShortcutsBtn = $('#closeShortcutsModal');
             if (closeShortcutsBtn) closeShortcutsBtn.onclick = () => elements.shortcutsModal.classList.remove('active');
 
@@ -8827,7 +6142,8 @@
                 el.addEventListener('dblclick', unifiedDblClickHandler);
             });
 
-            $('#bulkDeleteBtn').onclick = () => {
+            const bulkDeleteBtnEl = $('#bulkDeleteBtn');
+            if (bulkDeleteBtnEl) bulkDeleteBtnEl.onclick = () => {
                 if(AppState.selectedContacts.size > 0 && confirm(`¿Eliminar ${AppState.selectedContacts.size} contactos seleccionados?`)) {
                     const selectedCount = AppState.selectedContacts.size;
                     AppState.contacts = AppState.contacts.filter(c => !AppState.selectedContacts.has(c.id));
@@ -8839,42 +6155,55 @@
                 }
             };
 
-            $('#bulkStatusSelect').onchange = (e) => {
-                const newStatus = e.target.value;
-                if (AppState.selectedContacts.size > 0 && newStatus) {
-                   const selectedCount = AppState.selectedContacts.size;
-                   AppState.selectedContacts.forEach(id => {
-                        const contact = AppState.searchIndex?.byId?.get(id) || AppState.contacts.find(c => c.id === id);
-                        if (contact) {
-                            contact.status = newStatus;
-                            updateCompetitionCredit(contact, newStatus, 'common');
-                            setReviewMetadata(contact, newStatus);
-                            touchContactEdit(contact, 'inline_status');
-                        }
-                   });
-                   addToHistory('Cambio de estado masivo', `${selectedCount} contactos → ${newStatus}`);
-                   AppState.selectedContacts.clear();
-                   saveData();
-                   render();
-                   showNotification(`${selectedCount} contactos actualizados.`, 'success');
-                   e.target.value = "";
-                }
-            };
+            const bulkStatusSelectEl = $('#bulkStatusSelect');
+            if (bulkStatusSelectEl) {
+                bulkStatusSelectEl.onchange = (e) => {
+                    const newStatus = e.target.value;
+                    if (AppState.selectedContacts.size > 0 && newStatus) {
+                       const selectedCount = AppState.selectedContacts.size;
+                       AppState.selectedContacts.forEach(id => {
+                            const contact = AppState.searchIndex?.byId?.get(id) || AppState.contacts.find(c => c.id === id);
+                            if (contact) {
+                                contact.status = newStatus;
+                                updateCompetitionCredit(contact, newStatus, 'common');
+                                setReviewMetadata(contact, newStatus);
+                                touchContactEdit(contact, 'inline_status');
+                            }
+                       });
+                       addToHistory('Cambio de estado masivo', `${selectedCount} contactos → ${newStatus}`);
+                       AppState.selectedContacts.clear();
+                       saveData();
+                       render();
+                       showNotification(`${selectedCount} contactos actualizados.`, 'success');
+                       e.target.value = "";
+                    }
+                };
+            }
 
-            $('#bulkCancelBtn').onclick = () => {
+            const bulkCancelBtnEl = $('#bulkCancelBtn');
+            if (bulkCancelBtnEl) bulkCancelBtnEl.onclick = () => {
                 AppState.selectedContacts.clear();
                 render();
             };
 
-            $('#exportBtn').onclick = () => {
-                $('#exportFilteredCount').textContent = `${AppState.filteredContacts.length} contactos`;
-                $('#exportAllCount').textContent = `${AppState.contacts.length} contactos`;
-                $('#exportModal').classList.add('active');
+            const exportBtnEl = $('#exportBtn');
+            if (exportBtnEl) exportBtnEl.onclick = () => {
+                const exportFilteredCountEl = $('#exportFilteredCount');
+                const exportAllCountEl = $('#exportAllCount');
+                const exportModalEl = $('#exportModal');
+                if (exportFilteredCountEl) exportFilteredCountEl.textContent = `${AppState.filteredContacts.length} contactos`;
+                if (exportAllCountEl) exportAllCountEl.textContent = `${AppState.contacts.length} contactos`;
+                if (exportModalEl) exportModalEl.classList.add('active');
             };
 
-            $('#cancelExport').onclick = () => $('#exportModal').classList.remove('active');
+            const cancelExportEl = $('#cancelExport');
+            if (cancelExportEl) cancelExportEl.onclick = () => {
+                const exportModalEl = $('#exportModal');
+                if (exportModalEl) exportModalEl.classList.remove('active');
+            };
 
-            $('#confirmExport').onclick = () => {
+            const confirmExportEl = $('#confirmExport');
+            if (confirmExportEl) confirmExportEl.onclick = () => {
                 const selectedTypeEl = $('#exportModal .export-option[data-type].selected');
                 const selectedFormatEl = $('#exportModal .export-option[data-format].selected');
                 const type = selectedTypeEl ? selectedTypeEl.dataset.type : 'all';
@@ -8891,7 +6220,8 @@
 
                 localStorage.setItem('lastExportAt', new Date().toISOString());
                 updateExportUrgencyBadge();
-                $('#exportModal').classList.remove('active');
+                const exportModalEl = $('#exportModal');
+                if (exportModalEl) exportModalEl.classList.remove('active');
             };
 
             $$('#exportModal .export-option').forEach(opt => opt.onclick = (e) => {
@@ -8901,36 +6231,55 @@
                 option.classList.add('selected');
             });
 
-            elements.manageDuplicatesBtn.onclick = showDuplicatesModal;
-            $('#closeDuplicatesModal').onclick = () => $('#duplicatesModal').classList.remove('active');
-            $('#mergeAllDuplicates').onclick = () => {
+            if (elements.manageDuplicatesBtn) elements.manageDuplicatesBtn.onclick = showDuplicatesModal;
+            const closeDuplicatesModalEl = $('#closeDuplicatesModal');
+            if (closeDuplicatesModalEl) closeDuplicatesModalEl.onclick = () => {
+                const duplicatesModalEl = $('#duplicatesModal');
+                if (duplicatesModalEl) duplicatesModalEl.classList.remove('active');
+            };
+            const mergeAllDuplicatesEl = $('#mergeAllDuplicates');
+            if (mergeAllDuplicatesEl) mergeAllDuplicatesEl.onclick = () => {
                 if (confirm('¿Fusionar todos los duplicados? Esta acción no se puede deshacer.')) {
                     mergeAllDuplicates();
                 }
             };
 
-            elements.historyBtn.onclick = showHistoryModal;
-            $('#closeHistoryModal').onclick = () => $('#historyModal').classList.remove('active');
+            if (elements.historyBtn) elements.historyBtn.onclick = showHistoryModal;
+            const closeHistoryModalEl = $('#closeHistoryModal');
+            if (closeHistoryModalEl) closeHistoryModalEl.onclick = () => {
+                const historyModalEl = $('#historyModal');
+                if (historyModalEl) historyModalEl.classList.remove('active');
+            };
             if ($('#closeContactHistoryModal')) $('#closeContactHistoryModal').onclick = () => $('#contactHistoryModal').classList.remove('active');
-            $('#clearHistoryBtn').onclick = () => {
+            const clearHistoryBtnEl = $('#clearHistoryBtn');
+            if (clearHistoryBtnEl) clearHistoryBtnEl.onclick = () => {
                 if (confirm('¿Borrar todo el historial?')) {
                     AppState.history = [];
                     saveHistory();
-                    $('#historyModal').classList.remove('active');
+                    const historyModalEl = $('#historyModal');
+                    if (historyModalEl) historyModalEl.classList.remove('active');
                     showNotification('Historial borrado', 'success');
                 }
             };
 
-            $('#cancelAddSingle').onclick = () => {
+            const cancelAddSingleEl = $('#cancelAddSingle');
+            if (cancelAddSingleEl) cancelAddSingleEl.onclick = () => {
                 resetAddSingleModalState();
-                $('#addSingleModal').classList.remove('active');
+                const addSingleModalEl = $('#addSingleModal');
+                if (addSingleModalEl) addSingleModalEl.classList.remove('active');
             };
 
-            $('#confirmAddSingle').onclick = () => {
-                const name = $('#singleName').value.trim();
-                const phone = normalizePhoneNumber($('#singlePhone').value.trim());
-                const origin = $('#singleOrigin').value.trim() || 'Manual';
-                const status = $('#singleStatus').value;
+            const confirmAddSingleEl = $('#confirmAddSingle');
+            if (confirmAddSingleEl) confirmAddSingleEl.onclick = () => {
+                const singleNameEl = $('#singleName');
+                const singlePhoneEl = $('#singlePhone');
+                const singleOriginEl = $('#singleOrigin');
+                const singleStatusEl = $('#singleStatus');
+                if (!singleNameEl || !singlePhoneEl || !singleOriginEl || !singleStatusEl) return;
+                const name = singleNameEl.value.trim();
+                const phone = normalizePhoneNumber(singlePhoneEl.value.trim());
+                const origin = singleOriginEl.value.trim() || 'Manual';
+                const status = singleStatusEl.value;
 
                 if (!name) {
                     showNotification('El nombre es obligatorio', 'error');
@@ -8987,11 +6336,13 @@
                 saveData();
                 render();
                 resetAddSingleModalState();
-                $('#addSingleModal').classList.remove('active');
+                const addSingleModalEl = $('#addSingleModal');
+                if (addSingleModalEl) addSingleModalEl.classList.remove('active');
                 showNotification('✅ Contacto agregado', 'success');
             };
 
-            $('#deleteAllBtn').onclick = async () => {
+            const deleteAllBtnEl = $('#deleteAllBtn');
+            if (deleteAllBtnEl) deleteAllBtnEl.onclick = async () => {
                 if (!confirm('⚠️ ¿BORRAR TODOS LOS CONTACTOS? Esta acción NO se puede deshacer.')) return;
                 if (!confirm('Confirmación final: se vaciará la base de contactos actual para volver a subir desde cero.')) return;
                 try {
@@ -9221,7 +6572,9 @@
                 } catch (e) {
                     reportError('init:getAppVersion', e);
                 }
-                elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
+                if (elements.bulkStatusSelect) {
+                    elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
+                }
                 setupEventListeners();
                 if (window.electronAPI?.onDeepLinkImport) {
                     window.electronAPI.onDeepLinkImport((payload) => {
@@ -9281,24 +6634,35 @@
             }
         }
 
-=======
-            </div>
-            <div class="modal-actions">
-                <button id="importDiagCancel" class="btn"><i class="fas fa-times"></i> Cancelar archivo</button>
-                <button id="importDiagContinue" class="btn btn-success"><i class="fas fa-check"></i> Continuar importación</button>
-            </div>
-        </div>
-    </div>
->>>>>>> main
 
-    <script type="module" src="./modules/perfiles-controller.js"></script>
-    <script type="module" src="./modules/admin-auth.js"></script>
+        // Exposición controlada para scripts separados (estado y helpers compartidos)
+        window.AppState = AppState;
+        window.NexoElements = elements;
+        window.NexoActions = {
+            render,
+            saveData,
+            applyFilters,
+            setLoadingState,
+            refreshProfilesUI,
+            loadData
+        };
 
-    <script src="./debug-timeout.js"></script>
-    <script src="./bootstrap-store.js"></script>
+        window.addEventListener('error', (event) => {
+            reportError('window.error', event?.error || event?.message || 'window error', {
+                filename: event?.filename || '',
+                lineno: event?.lineno || 0,
+                colno: event?.colno || 0
+            });
+        });
 
+        window.addEventListener('unhandledrejection', (event) => {
+            reportError('window.unhandledrejection', event?.reason || 'Unhandled rejection');
+        });
 
-    <script src="./nexo-app.js"></script>
+        window.addEventListener('nexo-store-error', (event) => {
+            reportError('store', event?.detail || 'Error de store');
+        });
 
-
-</body></html>
+        init();
+    })();
+    
