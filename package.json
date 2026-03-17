@@ -26,6 +26,7 @@
     "artifactName": "${productName}-${version}.${ext}",
     "files": [
       "main.js",
+      "profile-storage.js",
       "update-manager.js",
       "preload.js",
       "renderer/**/*"
