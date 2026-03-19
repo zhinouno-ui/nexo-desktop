@@ -6320,12 +6320,56 @@
         let lastInteractionAt = Date.now();
         const CONTACT_SAVE_BATCH_SIZE = 300;
         const CONTACT_SAVE_MAX_WAIT_MS = 12000;
-        function queueSaveData(delayMs = 1200) {
-            if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
-            saveDebounceTimer = setTimeout(() => {
+        
+        // SISTEMA DE DEBOUCE MEJORADO - FASE 1
+        let isSaveScheduled = false;
+        let lastSaveRequestAt = 0;
+        const DEBOUNCE_DELAY_MS = 2000; // 2 segundos como solicitaste
+        
+        // Función centralizada de debounce con UI optimista
+        function queueSaveDataOptimistic(delayMs = DEBOUNCE_DELAY_MS) {
+            lastInteractionAt = Date.now();
+            lastSaveRequestAt = Date.now();
+            
+            // UI Optimista: mostrar estado de guardado inmediato
+            setSaveState('pending', 'Cambios guardados en memoria');
+            
+            // Limpiar timer existente
+            if (saveDebounceTimer) {
+                clearTimeout(saveDebounceTimer);
+            }
+            
+            // Programar guardado en segundo plano
+            saveDebounceTimer = setTimeout(async () => {
                 saveDebounceTimer = null;
-                if (contactsDirty) flushSaveQueue('debounce');
+                isSaveScheduled = false;
+                
+                // Solo guardar si no hay actividad reciente
+                const timeSinceLastInteraction = Date.now() - lastInteractionAt;
+                if (timeSinceLastInteraction >= DEBOUNCE_DELAY_MS) {
+                    await flushSaveQueue('debounce-optimistic');
+                } else {
+                    // Si hubo actividad reciente, reprogramar
+                    queueSaveDataOptimistic(DEBOUNCE_DELAY_MS);
+                }
             }, delayMs);
+            
+            isSaveScheduled = true;
+        }
+        
+        // Función forzada para acciones críticas (sin optimismo)
+        async function forceSaveNow(reason = 'forced') {
+            if (saveDebounceTimer) {
+                clearTimeout(saveDebounceTimer);
+                saveDebounceTimer = null;
+            }
+            isSaveScheduled = false;
+            await flushSaveQueue(reason);
+        }
+        
+        // Sobreescribir la función original para mantener compatibilidad
+        function queueSaveData(delayMs = 1200) {
+            queueSaveDataOptimistic(delayMs);
         }
 
         async function flushSaveQueue(reason = 'forced') {
@@ -6333,6 +6377,7 @@
                 clearTimeout(saveDebounceTimer);
                 saveDebounceTimer = null;
             }
+            isSaveScheduled = false;
             await saveDataImmediate(reason);
         }
 
@@ -6350,17 +6395,35 @@
             const startedAt = performance.now();
             const safeContacts = sanitizeContactsForStorage(AppState.contacts);
             AppState.currentPerfStage = 'save';
+            
+            // FASE 2: DATA SHARDING - Preparar datos del perfil actual
+            const currentProfileId = AppState.activeProfileId || 'default';
+            const profileData = {
+                contactsData: safeContacts,
+                contactsHistory: AppState.contactsHistory || [],
+                whatsappTemplate: AppState.whatsappTemplate,
+                duplicateMergeMode: AppState.duplicateMergeMode,
+                lastExportAt: AppState.lastExportAt,
+                backups: AppState.backups || {},
+                extraStorage: AppState.extraStorage || {}
+            };
+            
             try {
-                if (window.nexoStore && typeof window.nexoStore.asyncSaveRequest === 'function') {
+                // FASE 2: DATA SHARDING - Guardar en archivo específico del perfil
+                if (window.electronAPI?.saveProfileData) {
+                    await window.electronAPI.saveProfileData(currentProfileId, profileData);
+                } else if (window.nexoStore && typeof window.nexoStore.asyncSaveRequest === 'function') {
+                    // Fallback a sistema antiguo
                     window.nexoStore.asyncSaveRequest({ contactsData: safeContacts });
                 } else if (window.nexoStore && typeof window.nexoStore.patch === 'function') {
                     await window.nexoStore.patch({ contactsData: safeContacts });
                 } else {
-                    localStorage.setItem('contactsData', JSON.stringify(safeContacts));
+                    localStorage.setItem(`contactsData_${currentProfileId}`, JSON.stringify(safeContacts));
                 }
+                
                 manageAutomaticBackup();
                 maybeDownloadAutomaticBackup(`save:${reason}`);
-                setSaveState('ok', `Guardado ${new Date().toLocaleTimeString('es-ES')}`);
+                setSaveState('ok', `Guardado ${new Date().toLocaleTimeString('es-ES')} [${currentProfileId}]`);
                 if (Date.now() - lastStorageDiagAt > 15000) {
                     lastStorageDiagAt = Date.now();
                     refreshStorageDiagnostics();
@@ -6372,7 +6435,9 @@
                 recordStageCost('save', AppState.perfStats.saveMs);
             } catch (e) {
                 console.warn('No se pudo guardar diferido, fallback localStorage:', e);
-                try { localStorage.setItem('contactsData', JSON.stringify(safeContacts)); } catch (_) {}
+                try { 
+                    localStorage.setItem(`contactsData_${currentProfileId}`, JSON.stringify(safeContacts)); 
+                } catch (_) {}
                 setSaveState('warn', 'Guardado diferido con fallback');
                 return false;
             } finally {
@@ -6388,11 +6453,14 @@
             const deltaOnly = !!options?.deltaOnly;
             if (!deltaOnly) contactsDirty = true;
             pendingContactMutations += 1;
-            setSaveState('pending', 'Guardado diferido');
+            
             if (force) {
-                flushSaveQueue('forced');
+                forceSaveNow('forced');
                 return;
             }
+            
+            // UI Optimista: usar el nuevo sistema de debounce
+            queueSaveDataOptimistic();
         }
 
         function compactExactDuplicatesForLargeDatasets() {
@@ -6426,8 +6494,34 @@
 
         async function loadData() {
             showLoadingOverlay('Cargando contactos…', 'Preparando base local, turnos y validaciones iniciales.');
+            
+            // FASE 2: DATA SHARDING - Determinar perfil activo
+            const activeProfileId = AppState.activeProfileId || localStorage.getItem('activeProfileId') || 'default';
+            AppState.activeProfileId = activeProfileId;
+            
             try {
-                const saved = localStorage.getItem('contactsData');
+                let saved = null;
+                
+                // FASE 2: DATA SHARDING - Intentar cargar desde backend primero
+                if (window.electronAPI?.getProfileData) {
+                    try {
+                        const profileData = await window.electronAPI.getProfileData(activeProfileId);
+                        saved = JSON.stringify(profileData?.contactsData || []);
+                        console.log(`Sistema: Cargando ${profileData?.contactsData?.length || 0} contactos del perfil [${activeProfileId}]`);
+                    } catch (profileErr) {
+                        console.warn('Error al cargar perfil desde backend, usando fallback:', profileErr);
+                    }
+                }
+                
+                // Fallback a localStorage específico del perfil
+                if (!saved) {
+                    saved = localStorage.getItem(`contactsData_${activeProfileId}`);
+                    if (!saved && activeProfileId === 'default') {
+                        // Fallback para compatibilidad con sistema antiguo
+                        saved = localStorage.getItem('contactsData');
+                    }
+                }
+                
                 if (saved) {
                     AppState.contacts = JSON.parse(saved);
                     console.log('Sistema: Datos recibidos para render:', Array.isArray(AppState.contacts) ? AppState.contacts.length : 0);
@@ -6455,7 +6549,7 @@
                     if (backupContacts) {
                         AppState.contacts = backupContacts;
                         try {
-                            localStorage.setItem('contactsData', JSON.stringify(sanitizeContactsForStorage(AppState.contacts)));
+                            localStorage.setItem(`contactsData_${activeProfileId}`, JSON.stringify(sanitizeContactsForStorage(AppState.contacts)));
                         } catch (persistErr) {
                             console.warn('No se pudo reescribir contactsData durante recuperación (storage lleno):', persistErr);
                             setSaveState('warn', 'Recovery sin persistir (storage lleno)');
@@ -6858,20 +6952,77 @@
             }
         }
 
-        window.switchProfile = (profileId) => {
+        window.switchProfile = async (profileId) => {
             setLoadingState(true, 'Cambiando base…', 20, false);
+            
+            // FASE 2: DATA SHARDING - Paso 1: Forzar guardado del perfil actual
+            try {
+                await forceSaveNow('profile-switch');
+            } catch (saveErr) {
+                console.warn('Error al guardar perfil actual:', saveErr);
+            }
+            
+            // FASE 2: DATA SHARDING - Paso 2: Limpiar RAM completamente
+            AppState.contacts = []; // Liberar memoria de contactos del perfil anterior
             AppState.filteredContacts = [];
             AppState.selectedContacts.clear();
             AppState.searchIndex = { allIds: [], byId: new Map(), byStatus: new Map(), byShift: new Map(), byProfile: new Map(), byPhoneType: new Map(), byOrigin: new Map() };
             AppState.searchIndexDirty = true;
             AppState.statsDirty = true;
             AppState.lastEditedContact = null;
+            
+            // Forzar garbage collection si está disponible
+            if (window.gc) window.gc();
+            
+            // Cambiar al nuevo perfil
             AppState.activeProfileId = profileId;
             localStorage.setItem('activeProfileId', AppState.activeProfileId);
             AppState.currentPage = Math.max(1, Number(AppState.profilePageMap?.[profileId] || 1));
+            
+            // FASE 2: DATA SHARDING - Paso 3: Cargar datos del nuevo perfil
+            try {
+                setLoadingState(true, `Cargando perfil ${profileId}…`, 40, false);
+                
+                // Cargar datos específicos del perfil desde backend
+                if (window.electronAPI?.getProfileData) {
+                    const profileData = await window.electronAPI.getProfileData(profileId);
+                    
+                    // Cargar SOLO los contactos de este perfil en RAM
+                    AppState.contacts = Array.isArray(profileData?.contactsData) ? profileData.contactsData : [];
+                    AppState.contactsHistory = Array.isArray(profileData?.contactsHistory) ? profileData.contactsHistory : [];
+                    AppState.whatsappTemplate = profileData?.whatsappTemplate || AppState.whatsappTemplate;
+                    AppState.duplicateMergeMode = profileData?.duplicateMergeMode || AppState.duplicateMergeMode;
+                    AppState.lastExportAt = profileData?.lastExportAt || null;
+                    AppState.backups = profileData?.backups || {};
+                    AppState.extraStorage = profileData?.extraStorage || {};
+                    
+                    // Reconstruir índices de búsqueda solo para este perfil
+                    AppState.searchIndexDirty = true;
+                    
+                    setLoadingState(true, 'Procesando contactos…', 70, false);
+                }
+            } catch (loadErr) {
+                console.error('Error al cargar perfil:', loadErr);
+                showNotification(`Error al cargar perfil: ${loadErr?.message || loadErr}`, 'error');
+                // En caso de error, dejar array vacío para no mezclar datos
+                AppState.contacts = [];
+            }
+            
             refreshProfilesUI();
-            if (typeof requestIdleCallback === 'function') requestIdleCallback(() => { render(true); setLoadingState(false, 'Listo', 100, false); }, { timeout: 180 });
-            else setTimeout(() => { render(true); setLoadingState(false, 'Listo', 100, false); }, 0);
+            
+            // Renderizado diferido para no bloquear UI
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(() => { 
+                    render(true); 
+                    setLoadingState(false, `Perfil ${profileId} cargado`, 100, false);
+                }, { timeout: 180 });
+            } else {
+                setTimeout(() => { 
+                    render(true); 
+                    setLoadingState(false, `Perfil ${profileId} cargado`, 100, false);
+                }, 0);
+            }
+            
             if (elements.profilesModal) elements.profilesModal.classList.remove('active');
         };
 
@@ -7927,10 +8078,14 @@
 
         window.copyToClipboard = (text, event) => {
             if (event) event.stopPropagation();
-            navigator.clipboard.writeText(text).then(() => {
-                showNotification(`✓ Copiado: ${text}`, 'success');
-            }).catch(() => {
-                showNotification('Error al copiar', 'error');
+            
+            // UI Optimista: feedback instantáneo
+            showNotification(`✓ Copiado: ${text}`, 'success');
+            
+            // Operación asíncrona en segundo plano sin bloquear UI
+            navigator.clipboard.writeText(text).catch(() => {
+                // Solo mostrar error si falla, el usuario ya vio el éxito optimista
+                console.warn('Error al copiar al portapapeles:', text);
             });
         };
 
@@ -7963,7 +8118,17 @@
                 profileId: contact.profileId || 'default'
             });
             scheduleStatusDeltaFlush('idle-10s');
-        }
+        };
+
+        window.inferShiftFromIso = function(isoString) {
+            if (!isoString) return '';
+            const dt = new Date(isoString);
+            if (Number.isNaN(dt.getTime())) return '';
+            const h = dt.getHours();
+            if (h >= 6 && h < 14) return 'tm';
+            if (h >= 14 && h < 22) return 'tt';
+            return 'tn';
+        };
 
         window.changeContactStatus = (id, newStatus, event, source = 'common', meta = {}) => {
             try {
@@ -7990,7 +8155,26 @@
                 return;
             }
 
+            // UI Optimista: actualizar estado inmediatamente
             contact.status = requestedStatus;
+            
+            // Actualizar UI inmediatamente (antes del guardado)
+            const statusButton = event?.target?.closest('.status-btn');
+            if (statusButton) {
+                // Remover clase active de todos los botones del contacto
+                const statusContainer = statusButton.parentElement;
+                statusContainer?.querySelectorAll('.status-btn').forEach(btn => btn.classList.remove('active'));
+                // Agregar clase active al botón seleccionado
+                statusButton.classList.add('active');
+            }
+            
+            // Feedback visual instantáneo
+            const statusOption = getStatusOption(requestedStatus);
+            if (statusOption) {
+                showNotification(`Estado cambiado: ${statusOption.label}`, 'success');
+            }
+            
+            // Resto de la lógica en segundo plano
             adjustStatsCountersForStatus(contact.profileId || 'default', oldStatus, requestedStatus);
             updateCompetitionCredit(contact, requestedStatus, source, { shiftOverride: shiftByEvent, atOverride: eventAt });
             try { setReviewMetadata(contact, requestedStatus); } catch (e) { console.error('Error metadata estado:', e); }
@@ -8031,8 +8215,12 @@
             }
             if (policyNote) announceGeneral('Autopolítica aplicada: 3 recontactos sin respuesta → sin WhatsApp.', 'warn', 3000);
             setSaveState('pending', 'Guardando cambios...');
+            
+            // Guardado optimista en segundo plano
             saveData();
-            render();
+            
+            // Renderizado suave sin bloqueo
+            requestAnimationFrame(() => render());
             } catch (statusErr) {
                 console.error('Error al cambiar estado:', statusErr);
                 showNotification(`No se pudo cambiar estado: ${statusErr?.message || statusErr}`, 'error');

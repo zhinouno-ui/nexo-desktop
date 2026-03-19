@@ -48,6 +48,99 @@ function getDbPath() {
   return path.join(app.getPath('userData'), 'nexo-db.json');
 }
 
+// FASE 2: DATA SHARDING - Funciones para bases de datos por perfil
+function getProfileDbPath(profileId = 'default') {
+  const safeId = String(profileId || 'default').replace(/[^a-z0-9_-]/gi, '_');
+  return path.join(app.getPath('userData'), `nexo-db-${safeId}.json`);
+}
+
+async function readProfileDb(profileId = 'default', { force = false } = {}) {
+  const profilePath = getProfileDbPath(profileId);
+  try {
+    const raw = await fs.readFile(profilePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    
+    // FASE 2: MIGRACIÓN LEGACY - Verificar si el perfil está vacío y migrar desde legacy
+    if (!Array.isArray(parsed.contactsData) || parsed.contactsData.length === 0) {
+      console.log(`Perfil [${profileId}] vacío, intentando migración desde legacy...`);
+      
+      try {
+        const legacyDb = await readDb();
+        if (Array.isArray(legacyDb.contactsData) && legacyDb.contactsData.length > 0) {
+          console.log(`Migrando ${legacyDb.contactsData.length} contactos desde legacy al perfil [${profileId}]`);
+          
+          // Crear nueva base para el perfil con datos del legacy
+          const migratedDb = { 
+            ...DEFAULT_DB, 
+            ...legacyDb, // Heredar todo del legacy
+            profileId, 
+            contactsData: legacyDb.contactsData.map(contact => ({
+              ...contact,
+              profileId: profileId // Asegurar que todos los contactos pertenezcan a este perfil
+            }))
+          };
+          
+          // Guardar en archivo shard del perfil
+          await writeProfileDb(profileId, migratedDb);
+          return migratedDb;
+        }
+      } catch (legacyErr) {
+        console.warn('No se pudo leer archivo legacy para migración:', legacyErr);
+      }
+    }
+    
+    return { ...DEFAULT_DB, ...parsed };
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      // Si no existe, intentar migración desde legacy antes de crear base vacía
+      try {
+        const legacyDb = await readDb();
+        if (Array.isArray(legacyDb.contactsData) && legacyDb.contactsData.length > 0) {
+          console.log(`Creando perfil [${profileId}] con ${legacyDb.contactsData.length} contactos desde legacy`);
+          
+          const migratedDb = { 
+            ...DEFAULT_DB, 
+            ...legacyDb,
+            profileId,
+            contactsData: legacyDb.contactsData.map(contact => ({
+              ...contact,
+              profileId: profileId
+            }))
+          };
+          
+          await writeProfileDb(profileId, migratedDb);
+          return migratedDb;
+        }
+      } catch (legacyErr) {
+        console.warn('No se pudo migrar desde legacy, creando base vacía:', legacyErr);
+      }
+      
+      // Si no hay legacy o falló, crear base por defecto para este perfil
+      const newDb = { ...DEFAULT_DB, profileId };
+      await writeProfileDb(profileId, newDb);
+      return newDb;
+    }
+    await appendErrorLog('readProfileDb', error, { profileId });
+    throw error;
+  }
+}
+
+async function writeProfileDb(profileId, data) {
+  const profilePath = getProfileDbPath(profileId);
+  await fs.mkdir(path.dirname(profilePath), { recursive: true });
+  const tmpPath = `${profilePath}.tmp`;
+  const normalized = { ...DEFAULT_DB, ...data, profileId };
+  const jsonString = JSON.stringify(normalized, null, 2);
+  await fs.writeFile(tmpPath, jsonString, 'utf8');
+  await fs.rename(tmpPath, profilePath);
+  
+  // Invalidar cache si es el perfil activo
+  if (dbCache && dbCache.profileId === profileId) {
+    dbCache = null;
+    dbCacheLoadedAt = 0;
+  }
+}
+
 function getErrorLogPath() {
   return path.join(app.getPath('userData'), 'logs', 'main.log');
 }
@@ -963,6 +1056,26 @@ async function getUpdaterDiagnostics(lastAttempt = lastUpdateAttempt) {
 }
 
 ipcMain.handle('store:getAll', async () => readDb());
+
+// FASE 2: DATA SHARDING - Handlers para operaciones por perfil
+ipcMain.handle('store:getProfileData', async (_event, profileId) => {
+  const id = String(profileId || 'default');
+  return await readProfileDb(id);
+});
+
+ipcMain.handle('store:saveProfileData', async (_event, profileId, data) => {
+  const id = String(profileId || 'default');
+  await writeProfileDb(id, data && typeof data === 'object' ? data : {});
+  return await readProfileDb(id);
+});
+
+ipcMain.handle('store:patchProfileData', async (_event, profileId, partial) => {
+  const id = String(profileId || 'default');
+  const current = await readProfileDb(id);
+  const next = { ...current, ...(partial && typeof partial === 'object' ? partial : {}) };
+  await writeProfileDb(id, next);
+  return await readProfileDb(id);
+});
 
 ipcMain.handle('profile:list', async () => ({ profiles: await readProfilesMeta() }));
 ipcMain.handle('profile:create', async (_event, payload) => {
