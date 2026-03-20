@@ -6052,6 +6052,9 @@
         // Exposición controlada para scripts separados (estado y helpers compartidos)
         window.AppState = AppState;
         window.NexoElements = elements;
+        
+        // Exponer función de inicialización globalmente
+        window.initNexoApp = init;
         window.NexoActions = {
             render,
             saveData,
@@ -6099,6 +6102,7 @@
             reportError('store', event?.detail || 'Error de store');
         });
 
+        // Inicializar la aplicación
         init();
     })();
     

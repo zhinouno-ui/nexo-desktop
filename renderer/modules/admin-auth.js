@@ -42,4 +42,8 @@ window.NexoAdminAuth = {
   ensureUploadUnlocked
 };
 
+// Exponer también globalmente para compatibilidad
+window.hasAccess = hasAccess;
+window.ensureUploadUnlocked = ensureUploadUnlocked;
+
 export { hasAccess, ensureUploadUnlocked };
