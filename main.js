@@ -191,7 +191,7 @@ function getProfilesDir() {
 }
 
 function getExportsDir() {
-  return path.join(app.getPath('userData'), 'exports');
+  return path.join(app.getPath('downloads'), 'nexo_files');
 }
 
 function safeSlug(value) {
@@ -1306,9 +1306,11 @@ ipcMain.handle('app:logError', async (_event, payload) => {
   return { ok: true };
 });
 ipcMain.handle('app:exportBackup', async () => {
+  const nexoFilesDir = path.join(app.getPath('downloads'), 'nexo_files');
+  await fs.mkdir(nexoFilesDir, { recursive: true }).catch(() => {});
   const target = await dialog.showSaveDialog({
     title: 'Exportar backup de Nexo',
-    defaultPath: `nexo-db-${new Date().toISOString().slice(0, 10)}.json`,
+    defaultPath: path.join(nexoFilesDir, `nexo-db-${new Date().toISOString().slice(0, 10)}.json`),
     filters: [{ name: 'JSON', extensions: ['json'] }]
   });
   if (target.canceled || !target.filePath) return { canceled: true };
