@@ -29,6 +29,7 @@
     const appState = state();
     const ui = elements();
     const shift = appState.activeShift;
+    if (!ui.quickReview) { console.warn('[SHIFTS] quickReview no encontrado en DOM'); return; }
     if (!shift) { ui.quickReview.style.display = 'none'; return; }
     const mode = appState.shiftMode[shift];
     const contact = mode.queue[mode.cursor];
@@ -70,7 +71,7 @@
             <button class="btn" onclick="closeQuickReview()"><i class="fas fa-times"></i> Cerrar</button>
           </div>
           <div class="review-actions">
-            ${window.STATUS_OPTIONS.map((option) => `<button class="btn quick-status-btn ${option.id.replace(/ /g, '-')}" onclick="reviewSetStatus(${contact.id}, '${option.id}', event)"><i class="fas ${option.icon}"></i> ${option.label}</button>`).join('')}
+            ${(window.STATUS_OPTIONS || []).map((option) => `<button class="btn quick-status-btn ${option.id.replace(/ /g, '-')}" onclick="reviewSetStatus(${contact.id}, '${option.id}', event)"><i class="fas ${option.icon}"></i> ${option.label}</button>`).join('')}
           </div>
           <div class="quick-tools">
             <button class="btn" onclick="reviewPrev()" title="Deshabilitado para mantener consistencia de cola"><i class="fas fa-lock"></i> Sin retroceso</button>
@@ -126,7 +127,7 @@
     const current = mode.queue[mode.cursor];
     if (!current) return;
     if (event && event.currentTarget) event.currentTarget.classList.add('applied');
-    const quickPanel = elements().quickReview.querySelector('.quick-panel');
+    const quickPanel = elements().quickReview?.querySelector('.quick-panel');
     if (quickPanel) quickPanel.classList.add('updating');
     mode.stack.push(current.id);
     window.changeContactStatus(id, status, null, 'shift');
@@ -156,7 +157,8 @@
   function closeQuickReview() {
     state().activeShift = null;
     persistShiftModeMemory();
-    elements().quickReview.style.display = 'none';
+    const _qr = elements().quickReview;
+    if (_qr) _qr.style.display = 'none';
   }
 
   window.persistShiftModeMemory = persistShiftModeMemory;
@@ -169,4 +171,13 @@
   window.reviewSkip = reviewSkip;
   window.closeQuickReview = closeQuickReview;
   window.renderQuickReview = renderQuickReview;
+  
+  // Registrar módulo en el bridge
+  if (window.NexoBridge) {
+    window.NexoBridge.register('shifts');
+  } else {
+    console.warn('[SHIFTS-MEMORY] NexoBridge no disponible');
+  }
+  
+  console.log('[SHIFTS-MEMORY] ✅ Módulo de turnos cargado');
 })();

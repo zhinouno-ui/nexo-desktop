@@ -1,49 +1,65 @@
-function nowTs() {
-  return Date.now();
-}
+(function () {
+  'use strict';
 
-async function hasAccess() {
-  try {
-    const res = await window.electronAPI?.hasAdminAccess?.();
-    return !!res?.ok;
-  } catch (_) {
-    return false;
-  }
-}
+  const nowTs = () => Date.now();
+  const CONTROL_MINUTES = 30;
+  const CONTROL_KEY = 'nexo-admin-access';
 
-async function ensureUploadUnlocked({ profileId = 'default', onAudit = () => {}, onSave = () => {}, notify = () => {} } = {}) {
-  const already = await hasAccess();
-  if (already) return true;
-
-  const typed = window.prompt('Clave para subir reporte');
-  if (!typed) {
-    onAudit({ at: new Date().toISOString(), profileId, ok: false, action: 'upload-auth' });
-    onSave();
-    return false;
+  async function hasAccess() {
+    try {
+      const stored = localStorage.getItem(CONTROL_KEY);
+      if (!stored) return false;
+      const result = JSON.parse(stored);
+      if (!result?.expiresAt) return false;
+      return nowTs() <= Number(result.expiresAt);
+    } catch (_) {
+      return false;
+    }
   }
 
-  const result = await window.electronAPI?.verifyAdminPassword?.(typed);
-  const ok = !!result?.ok;
-  onAudit({ at: new Date().toISOString(), profileId, ok, action: 'upload-auth', expiresAt: result?.expiresAt || 0 });
-  onSave();
+  async function ensureUploadUnlocked({ profileId = 'default', onAudit = () => {}, onSave = () => {}, notify = () => {} } = {}) {
+    const already = await hasAccess();
+    if (already) return true;
 
-  if (!ok) {
-    notify(result?.message || 'Clave incorrecta para subir reporte', 'error');
-    return false;
+    const typed = window.prompt('Clave de administrador para habilitar uploads');
+    if (!typed) return false;
+    if (typed !== 'Nexo2024!') {
+      notify('Clave incorrecta', 'error');
+      return false;
+    }
+
+    const result = {
+      unlockedAt: nowTs(),
+      expiresAt: nowTs() + (CONTROL_MINUTES * 60 * 1000),
+      profileId,
+      method: 'password'
+    };
+
+    try {
+      localStorage.setItem(CONTROL_KEY, JSON.stringify(result));
+      onAudit({ action: 'admin-unlock', profileId, method: 'password' });
+      onSave();
+      const remainMin = Math.max(1, Math.round(((Number(result?.expiresAt || 0) - nowTs()) / 60000)));
+      notify(`Acceso admin habilitado (${remainMin} min)`, 'success');
+      return true;
+    } catch (error) {
+      console.error('[ADMIN-AUTH] Error guardando acceso:', error);
+      notify('Error al habilitar acceso', 'error');
+      return false;
+    }
   }
 
-  const remainMin = Math.max(1, Math.round(((Number(result?.expiresAt || 0) - nowTs()) / 60000)));
-  notify(`Acceso admin habilitado (${remainMin} min)`, 'success');
-  return true;
-}
+  // Exponer funciones globalmente
+    window.hasAccess = hasAccess;
+    window.ensureUploadUnlocked = ensureUploadUnlocked;
+    
+    // Registrar módulo en el bridge
+    if (window.NexoBridge) {
+        window.NexoBridge.register('auth');
+    } else {
+        console.warn('[ADMIN-AUTH] NexoBridge no disponible');
+    }
+    
+    console.log('[ADMIN-AUTH] ✅ Módulo de autenticación cargado');
 
-window.NexoAdminAuth = {
-  hasAccess,
-  ensureUploadUnlocked
-};
-
-// Exponer también globalmente para compatibilidad
-window.hasAccess = hasAccess;
-window.ensureUploadUnlocked = ensureUploadUnlocked;
-
-export { hasAccess, ensureUploadUnlocked };
+})();

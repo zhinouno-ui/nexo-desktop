@@ -257,4 +257,13 @@
   window.exportDelta = exportDelta;
   window.importFullSnapshot = importFullSnapshot;
   window.initSyncManager = initSyncManager;
+  
+  // Registrar módulo en el bridge
+  if (window.NexoBridge) {
+    window.NexoBridge.register('sync');
+  } else {
+    console.warn('[SYNC-MANAGER] NexoBridge no disponible');
+  }
+  
+  console.log('[SYNC-MANAGER] ✅ Módulo de sincronización cargado');
 })();

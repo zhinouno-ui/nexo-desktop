@@ -1,4 +1,4 @@
-    (() => {
+    (async () => {
         const $ = (sel) => document.querySelector(sel);
         const $$ = (sel) => document.querySelectorAll(sel);
 
@@ -264,6 +264,10 @@
             loadingOverlayMeta: $('#loadingOverlayMeta'),
             loadingPreviewTrack: $('#loadingPreviewTrack')
         };
+
+        // Exponer elementos inmediatamente — módulos externos los necesitan desde el arranque
+        window.NexoElements = elements;
+        window.elements = elements;
 
         // Compatibilidad defensiva: evita ReferenceError en handlers legacy cacheados por el navegador.
         let shift = '';
@@ -1905,6 +1909,9 @@
                 flushSaveQueue('forced');
                 return;
             }
+            
+            // Zero-lag: debounce optimizado a 800ms
+            queueSaveData(800);
         }
 
         function compactExactDuplicatesForLargeDatasets() {
@@ -3081,27 +3088,54 @@
 
         window.copyToClipboard = (text, event) => {
             if (event) event.stopPropagation();
-            navigator.clipboard.writeText(text).catch(() => {
-                showNotification('Error al copiar', 'error');
-            });
-            showNotification(`✓ Copiado: ${text}`, 'success');
+            
+            // Zero-lag: ejecución síncrona inmediata
+            try {
+                // Método moderno y rápido
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(() => {
+                        showNotification('Copiado: ' + text, 'success');
+                    }).catch(() => {
+                        // Fallback síncrono
+                        fallbackCopy(text);
+                    });
+                } else {
+                    // Fallback directo para navegadores viejos
+                    fallbackCopy(text);
+                }
+            } catch (error) {
+                fallbackCopy(text);
+            }
         };
+        
+        function fallbackCopy(text) {
+            try {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                showNotification('Copiado: ' + text, 'success');
+            } catch (error) {
+                showNotification('Error al copiar', 'error');
+            }
+        }
 
-
-
-        function scheduleStatusDeltaFlush(reason = 'idle-5s') {
-            if (AppState.deltaQueueTimer) clearTimeout(AppState.deltaQueueTimer);
-            AppState.deltaQueueTimer = setTimeout(async () => {
-                const deltas = (AppState.pendingStatusDeltas || []).splice(0, AppState.pendingStatusDeltas.length);
-                if (!deltas.length) return;
-                if (!(window.nexoStore && typeof window.nexoStore.queueDelta === 'function')) return;
-                await timeit('updateState', async () => {
-                    for (const d of deltas) {
-                        try { await window.nexoStore.queueDelta(d); } catch (_) {}
+        let _statusDeltaFlushTimer = null;
+        function scheduleStatusDeltaFlush(reason = 'manual') {
+            if (_statusDeltaFlushTimer) clearTimeout(_statusDeltaFlushTimer);
+            const delay = reason === 'idle-5s' ? 5000 : 1500;
+            _statusDeltaFlushTimer = setTimeout(() => {
+                _statusDeltaFlushTimer = null;
+                try {
+                    if (AppState.pendingStatusDeltas?.length > 0) {
+                        saveData();
                     }
-                    try { await window.nexoStore.flushDeltas(reason); } catch (_) {}
-                });
-            }, 5000);
+                } catch (_) {}
+            }, delay);
         }
 
         function enqueueStatusDelta(contact, fromStatus, toStatus, at) {
@@ -5782,6 +5816,41 @@
                     showNotification(`No se pudo limpiar la base: ${clearErr?.message || clearErr}`, 'error');
                 }
             };
+
+        // Exponer función de inicialización globalmente
+        window.initNexoApp = init;
+        window.NexoActions = {
+            render,
+            saveData,
+            applyFilters,
+            setLoadingState,
+            loadData,
+            flushSaveQueue,
+            remountDashboardState,
+            reportError,
+            normalizeProfileName,
+            normalizeSearchText,
+            savePreferences,
+            ensureActiveProfile,
+            syncProfilesFromMain,
+            ensureProfileByName,
+            detectDuplicates,
+            renderShiftsView,
+            getStatusOption,
+            getLocalCompetitionShift,
+            showNotification,
+            addToHistory,
+            saveStatusTransitions,
+            saveButtonPressEvents,
+            saveShiftSnapshots,
+            saveHistory,
+            downloadFile,
+            verifyControlPassword,
+            ensureUploadUnlocked,
+            queueReportUpload
+        };
+
+
         }
 
         function updateFileList() {
@@ -6053,56 +6122,30 @@
         window.AppState = AppState;
         window.NexoElements = elements;
         
-        // Exponer función de inicialización globalmente
-        window.initNexoApp = init;
-        window.NexoActions = {
-            render,
-            saveData,
-            applyFilters,
-            setLoadingState,
-            loadData,
-            flushSaveQueue,
-            remountDashboardState,
-            reportError,
-            normalizeProfileName,
-            normalizeSearchText,
-            savePreferences,
-            ensureActiveProfile,
-            syncProfilesFromMain,
-            ensureProfileByName,
-            detectDuplicates,
-            renderShiftsView,
-            getStatusOption,
-            getLocalCompetitionShift,
-            showNotification,
-            addToHistory,
-            saveStatusTransitions,
-            saveButtonPressEvents,
-            saveShiftSnapshots,
-            saveHistory,
-            downloadFile,
-            verifyControlPassword,
-            ensureUploadUnlocked,
-            queueReportUpload
-        };
+        // Inicialización con Bridge Pattern
+        (async () => {
+            try {
+                console.log('[NEXO-APP] 🚀 Iniciando con NexoBridge...');
+                
+                // 1. Poblar elementos del dashboard
+                window.NexoBridge.populateElements();
+                
+                // 2. Esperar a que todos los módulos estén listos
+                await window.NexoBridge.waitFor('auth', 'shifts', 'sync', 'profiles');
+                
+                // 3. Inicializar aplicación
+                console.log('[NEXO-APP] ✅ Todos los módulos listos, iniciando app...');
+                init();
+                
+            } catch (error) {
+                console.error('[NEXO-APP] ❌ Error en inicialización:', error);
+                // Fallback: intentar iniciar de todos modos
+                try {
+                    init();
+                } catch (fallbackError) {
+                    console.error('[NEXO-APP] ❌ Error fatal en fallback:', fallbackError);
+                }
+            }
+        })();
 
-        window.addEventListener('error', (event) => {
-            reportError('window.error', event?.error || event?.message || 'window error', {
-                filename: event?.filename || '',
-                lineno: event?.lineno || 0,
-                colno: event?.colno || 0
-            });
-        });
-
-        window.addEventListener('unhandledrejection', (event) => {
-            reportError('window.unhandledrejection', event?.reason || 'Unhandled rejection');
-        });
-
-        window.addEventListener('nexo-store-error', (event) => {
-            reportError('store', event?.detail || 'Error de store');
-        });
-
-        // Inicializar la aplicación
-        init();
-    })();
-    
+    })(); // cierre IIFE exterior

@@ -65,30 +65,56 @@ async function readProfileDb(profileId = 'default', { force = false } = {}) {
     
     // FASE 2: MIGRACIÓN LEGACY - Verificar si el perfil está vacío y migrar desde legacy
     if (!Array.isArray(parsed.contactsData) || parsed.contactsData.length === 0) {
-      console.log(`Perfil [${profileId}] vacío, intentando migración desde legacy...`);
+      console.log(`[PROFILE] Perfil [${profileId}] vacío, intentando migración desde legacy...`);
       
       try {
         const legacyDb = await readDb();
+        
+        // Extraer contactos de múltiples posibles estructuras legacy
+        let legacyContacts = [];
+        
         if (Array.isArray(legacyDb.contactsData) && legacyDb.contactsData.length > 0) {
-          console.log(`Migrando ${legacyDb.contactsData.length} contactos desde legacy al perfil [${profileId}]`);
+          legacyContacts = legacyDb.contactsData;
+        } else if (Array.isArray(legacyDb.contacts) && legacyDb.contacts.length > 0) {
+          legacyContacts = legacyDb.contacts;
+        } else if (Array.isArray(legacyDb) && legacyDb.length > 0) {
+          legacyContacts = legacyDb;
+        } else {
+          // Buscar arrays dentro del objeto legacy
+          for (const [key, value] of Object.entries(legacyDb || {})) {
+            if (Array.isArray(value) && value.length > 0 && 
+                (key.toLowerCase().includes('contact') || key.toLowerCase().includes('data'))) {
+              legacyContacts = value;
+              console.log(`[PROFILE] Encontrados ${legacyContacts.length} contactos en legacy.${key}`);
+              break;
+            }
+          }
+        }
+        
+        if (legacyContacts.length > 0) {
+          console.log(`[PROFILE] 🔄 Migrando ${legacyContacts.length} contactos desde legacy al perfil [${profileId}]`);
           
           // Crear nueva base para el perfil con datos del legacy
           const migratedDb = { 
             ...DEFAULT_DB, 
             ...legacyDb, // Heredar todo del legacy
             profileId, 
-            contactsData: legacyDb.contactsData.map(contact => ({
+            contactsData: legacyContacts.map(contact => ({
               ...contact,
-              profileId: profileId // Asegurar que todos los contactos pertenezcan a este perfil
+              profileId: profileId, // Asegurar que todos los contactos pertenezcan a este perfil
+              id: contact.id || `contact_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
             }))
           };
           
           // Guardar en archivo shard del perfil
           await writeProfileDb(profileId, migratedDb);
+          console.log(`[PROFILE] ✅ Migración completada para perfil [${profileId}]`);
           return migratedDb;
+        } else {
+          console.warn(`[PROFILE] ⚠️ No se encontraron contactos en legacy para migrar`);
         }
       } catch (legacyErr) {
-        console.warn('No se pudo leer archivo legacy para migración:', legacyErr);
+        console.error('[PROFILE] ❌ Error en migración legacy:', legacyErr);
       }
     }
     

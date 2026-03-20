@@ -95,23 +95,49 @@
     const helpers = actions();
     const profile = (appState.profiles || []).find((item) => item.id === profileId);
     if (!profile) return;
-    const nextName = helpers.normalizeProfileName?.(window.prompt('Nuevo nombre del perfil', profile.name || '') || '').slice(0, 60);
+    // Electron bloquea prompt() — usamos input inline en el DOM
+    const nextName = await new Promise((resolve) => {
+      const ui = elements();
+      const container = ui.profilesList;
+      if (!container) { resolve(''); return; }
+      // Buscar la fila del perfil y reemplazarla con un input
+      const row = container.querySelector(`[data-profile-id="${profileId}"][data-profile-action="rename"]`)?.closest('.history-item');
+      if (!row) { resolve(''); return; }
+      const original = row.innerHTML;
+      row.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;width:100%;padding:4px 0;">
+          <input id="_renameInput" type="text" value="${(profile.name || '').replace(/"/g, '&quot;')}"
+            style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--accent);background:var(--surface);color:var(--text-primary);font-size:.9rem;"
+            maxlength="60" />
+          <button class="btn" id="_renameOk" style="padding:4px 12px;">OK</button>
+          <button class="btn" id="_renameCancel" style="padding:4px 12px;">Cancelar</button>
+        </div>`;
+      const input = document.getElementById('_renameInput');
+      input.focus();
+      input.select();
+      const cleanup = (val) => { row.innerHTML = original; resolve(val); };
+      document.getElementById('_renameOk').onclick = () => cleanup(input.value.trim());
+      document.getElementById('_renameCancel').onclick = () => cleanup('');
+      input.onkeydown = (e) => { if (e.key === 'Enter') cleanup(input.value.trim()); if (e.key === 'Escape') cleanup(''); };
+    });
     if (!nextName) return;
-    const duplicated = (appState.profiles || []).some((item) => item.id !== profileId && helpers.normalizeSearchText?.(item.name) === helpers.normalizeSearchText?.(nextName));
+    const normalized = (helpers.normalizeProfileName?.(nextName) || nextName).slice(0, 60);
+    if (!normalized) return;
+    const duplicated = (appState.profiles || []).some((item) => item.id !== profileId && helpers.normalizeSearchText?.(item.name) === helpers.normalizeSearchText?.(normalized));
     if (duplicated) {
       helpers.showNotification?.('Ya existe un perfil con ese nombre', 'warning');
       return;
     }
     if (window.electronAPI?.renameProfile) {
       try {
-        const response = await window.electronAPI.renameProfile({ id: profileId, name: nextName });
+        const response = await window.electronAPI.renameProfile({ id: profileId, name: normalized });
         if (response?.ok && Array.isArray(response.profiles)) appState.profiles = response.profiles;
-        else profile.name = nextName;
+        else profile.name = normalized;
       } catch (_) {
-        profile.name = nextName;
+        profile.name = normalized;
       }
     } else {
-      profile.name = nextName;
+      profile.name = normalized;
     }
     helpers.savePreferences?.();
     refreshProfilesUI();
@@ -181,9 +207,56 @@
     if (ui.closeProfilesModal) ui.closeProfilesModal.onclick = () => ui.profilesModal && ui.profilesModal.classList.remove('active');
   }
 
+
+  // ── NexoProfilesUI: renderiza las filas del modal de perfiles ──────────────
+  window.NexoProfilesUI = {
+    buildProfileRows(profileList, profileCounts) {
+      const appState = window.AppState;
+      const activeId = appState?.activeProfileId || 'default';
+      if (!profileList || profileList.length === 0) {
+        return '<p style="color:var(--text-secondary);padding:8px;">No hay perfiles creados.</p>';
+      }
+      return profileList.map(profile => {
+        const count = profileCounts[profile.id] || 0;
+        const isActive = profile.id === activeId;
+        return `
+          <div class="history-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.07);">
+            <div style="display:flex;align-items:center;gap:8px;">
+              ${isActive ? '<span style="color:var(--accent);font-size:.7rem;">●</span>' : '<span style="opacity:0;">●</span>'}
+              <span style="font-weight:${isActive ? '600' : '400'};color:${isActive ? 'var(--text-primary)' : 'var(--text-secondary)'};">
+                ${profile.name || profile.id}
+              </span>
+              <span style="font-size:.75rem;color:var(--text-secondary);opacity:.7;">(${count} contactos)</span>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn" style="padding:3px 8px;font-size:.75rem;" data-profile-action="open" data-profile-id="${profile.id}">
+                ${isActive ? 'Activo' : 'Abrir'}
+              </button>
+              <button class="btn" style="padding:3px 8px;font-size:.75rem;" data-profile-action="rename" data-profile-id="${profile.id}">
+                Renombrar
+              </button>
+              ${profile.id !== 'default' ? `
+              <button class="btn" style="padding:3px 8px;font-size:.75rem;color:#ef4444;border-color:#ef4444;" data-profile-action="delete" data-profile-id="${profile.id}">
+                Borrar
+              </button>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+    }
+  };
+
   window.refreshProfilesUI = refreshProfilesUI;
   window.switchProfile = switchProfile;
   window.renameProfile = renameProfile;
   window.deleteProfile = deleteProfile;
   window.initProfilesLogic = initProfilesLogic;
+  
+  // Registrar módulo en el bridge
+  if (window.NexoBridge) {
+    window.NexoBridge.register('profiles');
+  } else {
+    console.warn('[PROFILES-LOGIC] NexoBridge no disponible');
+  }
+  
+  console.log('[PROFILES-LOGIC] ✅ Módulo de perfiles cargado');
 })();
