@@ -522,6 +522,114 @@
                 <button id="insertUserTokenBtn" class="btn"><i class="fas fa-user"></i> Insertar usuario</button>
                 <button id="resetTemplateBtn" class="btn"><i class="fas fa-undo"></i> Restablecer</button>
             </div>
+            <div class="modal-actions">
+                <button id="closeProfilesModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="modal" id="metricsModal">
+        <div class="modal-content" style="max-width: 760px;">
+            <div class="modal-header"><i class="fas fa-chart-line"></i> Centro de métricas</div>
+            <div id="metricsDateLabel" style="color:var(--text-secondary); margin-bottom:8px;">Resumen diario</div>
+            <div id="metricsOpsSummary" style="color:var(--text-secondary); margin-bottom:8px; font-size:.9rem;">Movimientos ops hoy: - · turno actual: -</div>
+            <div class="metrics-filters">
+                <select id="metricsShiftFilter" class="filter-select">
+                    <option value="all">Turno: todos</option>
+                    <option value="tm">Turno 1 (06-14)</option>
+                    <option value="tt">Turno 2 (14-22)</option>
+                    <option value="tn">Turno 3 (22-06)</option>
+                </select>
+                <div style="display:flex;gap:6px;align-items:center;grid-column:span 2;flex-wrap:wrap;">
+                    <button id="metricsShiftMorningBtn" class="btn" style="padding:6px 10px;">TM (06-14)</button>
+                    <button id="metricsShiftAfternoonBtn" class="btn" style="padding:6px 10px;">TT (14-22)</button>
+                    <button id="metricsShiftNightBtn" class="btn" style="padding:6px 10px;">TN (22-06)</button>
+                    <button id="metricsShiftResetBtn" class="btn" style="padding:6px 10px;">Quitar lapso</button>
+                </div>
+                <input id="metricsFromDate" type="date" class="origin-input" style="margin-top:0;">
+                <input id="metricsToDate" type="date" class="origin-input" style="margin-top:0;">
+                <select id="metricsStatusFilter" class="filter-select">
+                    <option value="all">Estado: todos</option>
+                </select>
+                <select id="metricsSelectionTypeFilter" class="filter-select">
+                    <option value="all">Selección: todas</option>
+                    <option value="manual">Manual</option>
+                    <option value="ops">Operaciones</option>
+                    <option value="bulk">Masiva</option>
+                    <option value="import">Importación</option>
+                </select>
+                <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);padding-left:4px;">
+                    <input id="metricsOnlyChanges" type="checkbox"> Solo cambios
+                </label>
+            </div>
+            <div class="metrics-dashboard-grid">
+                <div class="metrics-card"><div class="k">Actividad de hoy</div><div id="metricEditedToday" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Impulso de ayer</div><div id="metricEditedYesterday" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Turno líder</div><div id="metricTopShift" class="v">-</div></div>
+                <div class="metrics-card"><div class="k">Movimientos (24h)</div><div id="metricTransitions24h" class="v">0</div></div>
+                <div class="metrics-card"><div class="k">Turno líder (24h)</div><div id="metricTopShift24h" class="v">-</div></div>
+                <div class="metrics-card"><div class="k">Ritmo por hora</div><div id="metricButtonsPerHour" class="v">0</div></div>
+            </div>
+            <div class="metrics-charts">
+                <div class="chart-card">
+                    <div class="chart-title">Estados (donut)</div>
+                    <canvas id="statusDonutChart" width="320" height="180"></canvas>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">Tipo de selección (donut)</div>
+                    <canvas id="selectionDonutChart" width="320" height="180"></canvas>
+                </div>
+                <div class="chart-card" style="grid-column: span 2;">
+                    <div class="chart-title">Transiciones de estado (barras)</div>
+                    <canvas id="transitionBarChart" width="660" height="180"></canvas>
+                </div>
+            </div>
+            <div class="metrics-actions">
+                <button id="metricsFilterLastBatchBtn" class="btn"><i class="fas fa-filter"></i> Filtrar última subida</button>
+                <button id="metricsDeleteLastBatchBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Borrar última subida</button>
+                <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
+                <button id="importControlBtn" class="btn" title="Importa control diario/mensual"><i class="fas fa-shield-alt"></i> Importar Control <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo liviano para seguimiento diario/mensual de métricas y turnos."></i></button>
+                <div class="metrics-control-center" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <span style="color:var(--text-secondary);font-size:.82rem;">Centro de Control</span>
+                    <button id="exportDailyNexoBtn" class="btn"><i class="fas fa-file-export"></i> exportDaily()</button>
+                    <button id="exportBackupNexoBtn" class="btn"><i class="fas fa-archive"></i> exportBackup()</button>
+                </div>
+                <button id="uploadReportBtn" class="btn"><i class="fas fa-upload"></i> Subir reporte seleccionado</button>
+                <button id="resetBaselineBtn" class="btn"><i class="fas fa-eraser"></i> Reset baseline</button>
+            </div>
+            <div id="metricTransitionsBreakdown" class="metrics-transitions"></div>
+            <div id="metricTransitionSummary" class="metrics-transitions" style="margin-top:8px;"></div>
+            <details id="metricRareTransitions" class="metrics-collapsible" style="display:none;">
+                <summary>Ver combinaciones raras</summary>
+                <div id="metricRareTransitionsBody" class="inner"></div>
+            </details>
+            <div id="metricShiftBreakdown" class="metrics-wide-grid"></div>
+            <div id="metricShiftRanking" class="metrics-transitions" style="margin-top:8px;"></div>
+            <div id="controlReportsSummary" class="metrics-transitions" style="margin-top:8px;"></div>
+            <div id="controlPasswordPanel" class="metrics-password-panel" style="display:none;">
+                <div style="font-weight:700;margin-bottom:6px;">Seguridad archivo de control</div>
+                <div style="color:var(--text-secondary);font-size:.85rem;margin-bottom:8px;">Después del primer ingreso podés cambiar la clave de importación.</div>
+                <div class="metrics-password-grid">
+                    <input id="controlPasswordNew" type="password" class="origin-input" style="margin-top:0;" placeholder="Nueva clave de control">
+                    <button id="controlPasswordSaveBtn" class="btn btn-success"><i class="fas fa-key"></i> Guardar clave</button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="closeMetricsModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="modal" id="whatsappMessageModal">
+        <div class="modal-content" style="max-width: 640px;">
+            <div class="modal-header"><i class="fab fa-whatsapp"></i> Mensaje de WhatsApp</div>
+            <textarea id="whatsappTemplateInput" class="origin-input" style="min-height: 140px; margin-top: 0;" placeholder="Hola {usuario}, ..."></textarea>
+            <div class="template-actions" style="margin-top: 12px;">
+                <button id="insertUserTokenBtn" class="btn"><i class="fas fa-user"></i> Insertar usuario</button>
+                <button id="resetTemplateBtn" class="btn"><i class="fas fa-undo"></i> Restablecer</button>
+            </div>
             <p class="template-help" style="margin-top: 8px;">Usá <code>{usuario}</code> para completar el nombre automáticamente.</p>
             <div class="modal-actions">
                 <button id="closeWhatsappMessageModal" class="btn"><i class="fas fa-times"></i> Cancelar</button>
