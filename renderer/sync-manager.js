@@ -29,37 +29,35 @@
   }
 
   async function exportSnapshot() {
-    const appState = state();
-    if (!window.api?.exportFull) {
-      actions().showNotification?.('API de export backup no disponible', 'warning');
+    try {
+      const helpers = actions();
+      if (!helpers.exportFullSnapshot) {
+        helpers.showNotification?.('Función de export no disponible', 'warning');
+        return null;
+      }
+      helpers.exportFullSnapshot();
+      state().lastFullExportAt = new Date().toISOString();
+      helpers.savePreferences?.();
+      return { ok: true };
+    } catch (err) {
+      actions().showNotification?.(`Error export snapshot: ${err?.message || err}`, 'error');
       return null;
     }
-    const result = await window.api.exportFull({ profileId: appState.activeProfileId || 'default', shiftMode: appState.shiftMode || {} });
-    if (result?.ok) {
-      appState.lastFullExportAt = new Date().toISOString();
-      actions().addToHistory?.('Export snapshot', result.filePath || '');
-      actions().savePreferences?.();
-      actions().showNotification?.(`Snapshot exportado: ${result.filePath || 'ok'}`, 'success');
-      return result;
-    }
-    actions().showNotification?.(`Error export snapshot: ${result?.message || 'desconocido'}`, 'error');
-    return null;
   }
 
   async function exportDelta() {
-    const appState = state();
-    if (!window.api?.exportDaily) {
-      actions().showNotification?.('API de export diario no disponible', 'warning');
+    try {
+      const helpers = actions();
+      if (!helpers.exportDailyDelta) {
+        helpers.showNotification?.('Función de export diario no disponible', 'warning');
+        return null;
+      }
+      const result = helpers.exportDailyDelta();
+      return { ok: true, ...result };
+    } catch (err) {
+      actions().showNotification?.(`Error export delta: ${err?.message || err}`, 'error');
       return null;
     }
-    const result = await window.api.exportDaily({ profileId: appState.activeProfileId || 'default', since: appState.lastFullExportAt || '' });
-    if (result?.ok) {
-      actions().addToHistory?.('Export delta', result.filePath || '');
-      actions().showNotification?.(`Delta exportado: ${result.filePath || 'ok'}`, 'success');
-      return result;
-    }
-    actions().showNotification?.(`Error export delta: ${result?.message || 'desconocido'}`, 'error');
-    return null;
   }
 
   async function importFullSnapshot() {

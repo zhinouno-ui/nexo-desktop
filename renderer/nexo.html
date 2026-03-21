@@ -28,7 +28,8 @@
     </div>
 
     <div class="container" id="mainApp" style="display: none;">
-        <div id="globalAnnouncement" class="global-announcement info" aria-live="polite">
+        <span id="saveStateBadge" class="save-state-badge pending">● Pendiente</span>
+    <div id="globalAnnouncement" class="global-announcement info" aria-live="polite">
             <span class="announce-dot"></span>
             <span class="announce-text">Sistema listo</span>
         </div>
@@ -99,7 +100,6 @@
                 <button id="importOpsBtn" class="btn" title="Importar agent_operations.csv"><i class="fas fa-chart-line"></i> Operaciones</button>
                 <button id="midnightExportBtn" class="btn" title="Exporte diario de control"><i class="fas fa-file-export"></i> Control 00:00</button>
                 <button id="deleteAllBtn" class="btn btn-danger"><i class="fas fa-trash-alt"></i> Borrar Todo</button>
-                <span id="saveStateBadge" class="save-state-badge pending">● Pendiente</span>
                                 <input type="file" id="opsFileInput" accept=".csv" style="display:none;">
             </div>
         </div>

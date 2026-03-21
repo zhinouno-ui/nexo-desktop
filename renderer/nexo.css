@@ -1137,17 +1137,27 @@
         .ops-tooltip .line strong { color: var(--text-primary); }
         .btn.needs-upload { box-shadow: 0 0 0 2px rgba(239,68,68,.5) inset; }
         .save-state-badge {
-            margin-left: 8px;
-            font-size: 0.78rem;
-            padding: 6px 10px;
+            position: fixed;
+            top: 46px;
+            right: 14px;
+            z-index: 99998;
+            font-size: 0.75rem;
+            padding: 5px 12px;
             border-radius: 999px;
             border: 1px solid rgba(148,163,184,.35);
             color: var(--text-secondary);
-            background: rgba(15,23,42,.35);
+            background: rgba(15,23,42,.92);
             white-space: nowrap;
+            box-shadow: 0 4px 14px rgba(0,0,0,.35);
+            backdrop-filter: blur(6px);
+            pointer-events: none;
+            transition: border-color 0.3s ease, color 0.3s ease;
+            max-width: 280px;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-        .save-state-badge.ok { color: #86efac; border-color: rgba(34,197,94,.35); }
-        .save-state-badge.warn { color: #fca5a5; border-color: rgba(239,68,68,.35); }
+        .save-state-badge.ok { color: #86efac; border-color: rgba(34,197,94,.45); }
+        .save-state-badge.warn { color: #fca5a5; border-color: rgba(239,68,68,.45); }
         .storage-meter {
             margin-left: 6px;
             font-size: 0.78rem;
@@ -1162,7 +1172,8 @@
         .storage-meter.ok { color: #86efac; border-color: rgba(34,197,94,.35); }
         .storage-meter.warn { color: #fde68a; border-color: rgba(245,158,11,.4); }
         .storage-meter.critical { color: #fca5a5; border-color: rgba(239,68,68,.45); }
-        .save-state-badge.pending { color: #fcd34d; border-color: rgba(245,158,11,.35); }
+        .save-state-badge.pending { color: #fcd34d; border-color: rgba(245,158,11,.45); }
+        .save-state-badge.info { color: #93c5fd; border-color: rgba(59,130,246,.45); }
 
         /* Historial */
         .history-list {

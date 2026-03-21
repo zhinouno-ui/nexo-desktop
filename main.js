@@ -346,14 +346,66 @@ function scheduleMidnightDailyExport() {
   }, delay);
 }
 
+function runExportWorkerFallback(payload) {
+  // Fallback inline cuando el worker no está disponible (ej: .asar sin workers/)
+  try {
+    const type = payload?.type || 'full';
+    if (type === 'full') {
+      const state = payload?.state || {};
+      const contacts = Array.isArray(state.contacts) ? state.contacts
+        : Array.isArray(state.contactsData) ? state.contactsData : [];
+      const out = {
+        exportType: 'nexo-snapshot-full-v1',
+        exportedAt: payload?.nowIso || new Date().toISOString(),
+        state: {
+          contacts,
+          history: state.history || [],
+          profiles: state.profiles || [],
+          activeProfileId: state.activeProfileId || 'default',
+          statusTransitions: state.statusTransitions || [],
+          preferences: state.preferences || {}
+        }
+      };
+      return { ok: true, jsonText: JSON.stringify(out, null, 2) };
+    }
+    if (type === 'daily-log') {
+      const contacts = Array.isArray(payload?.contacts) ? payload.contacts : [];
+      const transitions = Array.isArray(payload?.transitions) ? payload.transitions : [];
+      const out = {
+        exportType: 'nexo-daily-delta-v1',
+        exportedAt: payload?.nowIso || new Date().toISOString(),
+        contacts,
+        transitions,
+        summary: {
+          contactsCount: contacts.length,
+          transitionsCount: transitions.length
+        }
+      };
+      return { ok: true, jsonText: JSON.stringify(out, null, 2) };
+    }
+    return { ok: false, message: `Tipo de export desconocido: ${type}` };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+}
+
 function runExportWorker(payload) {
   return new Promise((resolve, reject) => {
     const workerPath = path.join(__dirname, 'workers', 'export-worker.js');
+    // Verificar si el worker existe antes de intentar cargarlo
+    if (!fssync.existsSync(workerPath)) {
+      resolve(runExportWorkerFallback(payload));
+      return;
+    }
     const worker = new Worker(workerPath, { workerData: payload });
     worker.once('message', (msg) => resolve(msg));
-    worker.once('error', reject);
+    worker.once('error', (err) => {
+      // Si falla por cualquier razón, usar fallback
+      console.warn('[export-worker] Error, usando fallback:', err?.message);
+      resolve(runExportWorkerFallback(payload));
+    });
     worker.once('exit', (code) => {
-      if (code !== 0) reject(new Error(`export-worker exited with code ${code}`));
+      if (code !== 0) resolve(runExportWorkerFallback(payload));
     });
   });
 }

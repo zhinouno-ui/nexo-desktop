@@ -268,6 +268,7 @@
         // Exponer elementos inmediatamente — módulos externos los necesitan desde el arranque
         window.NexoElements = elements;
         window.elements = elements;
+        window.STATUS_OPTIONS = STATUS_OPTIONS;
 
         // Compatibilidad defensiva: evita ReferenceError en handlers legacy cacheados por el navegador.
         let shift = '';
@@ -762,8 +763,9 @@
                         name: p.aliasLabel || alias,
                         alias: p.aliasLabel || alias,
                         phone: '',
+                        profileId: AppState.activeProfileId || 'default',
                         origin: 'Operaciones panel',
-                        status: 'sin revisar',
+                        status: 'jugando',
                         lastUpdated: new Date().toISOString(),
                         lastEditedAt: new Date().toISOString(),
                         lastEditReason: 'ops_create',
@@ -814,8 +816,9 @@
 
         function saveOpsData() {
             try {
-                localStorage.setItem('opsProfilesData', JSON.stringify(AppState.opsProfiles || {}));
-                localStorage.setItem('opsLastImportedAt', AppState.opsLastImportedAt || '');
+                const pid = AppState.activeProfileId || 'default';
+                localStorage.setItem(`opsProfilesData:${pid}`, JSON.stringify(AppState.opsProfiles || {}));
+                localStorage.setItem(`opsLastImportedAt:${pid}`, AppState.opsLastImportedAt || '');
             } catch (e) {
                 console.error('Error guardando operaciones:', e);
             }
@@ -823,8 +826,9 @@
 
         function loadOpsData() {
             try {
-                AppState.opsProfiles = JSON.parse(localStorage.getItem('opsProfilesData') || '{}');
-                AppState.opsLastImportedAt = localStorage.getItem('opsLastImportedAt') || null;
+                const _pid = AppState.activeProfileId || 'default';
+                AppState.opsProfiles = JSON.parse(localStorage.getItem(`opsProfilesData:${_pid}`) || localStorage.getItem('opsProfilesData') || '{}');
+                AppState.opsLastImportedAt = localStorage.getItem(`opsLastImportedAt:${_pid}`) || localStorage.getItem('opsLastImportedAt') || null;
             } catch (e) {
                 AppState.opsProfiles = {};
                 AppState.opsLastImportedAt = null;
@@ -912,6 +916,11 @@
             const phrase = motivationalPhrases[Math.floor(Math.random() * motivationalPhrases.length)];
             const body = `${phrase} Ya llevás ${count} revisiones en este bloque de 8h.`;
             showNotification(body, 'success');
+            // Mostrar en badge por 6 segundos
+            setSaveState('ok', `🎯 ${count} revisiones · ${phrase.slice(0, 30)}`);
+            setTimeout(() => {
+                setSaveState('ok', `Guardado · ${new Date().toLocaleTimeString('es-ES')}`);
+            }, 6000);
             if (window.electronAPI?.notify) await window.electronAPI.notify({ title: 'Nexo · Felicitaciones', body });
         }
 
@@ -938,9 +947,9 @@
             auxSaveTimer = setTimeout(() => {
                 auxSaveTimer = null;
                 try {
-                    localStorage.setItem('buttonPressEvents', JSON.stringify((AppState.buttonPressEvents || []).slice(0, 20000)));
-                    localStorage.setItem('statusTransitions', JSON.stringify((AppState.statusTransitions || []).slice(0, 5000)));
-                    localStorage.setItem('contactsHistory', JSON.stringify(AppState.history || []));
+                    localStorage.setItem(`buttonPressEvents:${AppState.activeProfileId||'default'}`, JSON.stringify((AppState.buttonPressEvents || []).slice(0, 20000)));
+                    localStorage.setItem(`statusTransitions:${AppState.activeProfileId||'default'}`, JSON.stringify((AppState.statusTransitions || []).slice(0, 5000)));
+                    localStorage.setItem(`contactsHistory:${AppState.activeProfileId||'default'}`, JSON.stringify(AppState.history || []));
                 } catch (e) {
                     reportError('queueAuxStorageSave', e);
                 }
@@ -953,9 +962,9 @@
                 auxSaveTimer = null;
             }
             try {
-                localStorage.setItem('buttonPressEvents', JSON.stringify((AppState.buttonPressEvents || []).slice(0, 20000)));
-                localStorage.setItem('statusTransitions', JSON.stringify((AppState.statusTransitions || []).slice(0, 5000)));
-                localStorage.setItem('contactsHistory', JSON.stringify(AppState.history || []));
+                localStorage.setItem(`buttonPressEvents:${AppState.activeProfileId||'default'}`, JSON.stringify((AppState.buttonPressEvents || []).slice(0, 20000)));
+                localStorage.setItem(`statusTransitions:${AppState.activeProfileId||'default'}`, JSON.stringify((AppState.statusTransitions || []).slice(0, 5000)));
+                localStorage.setItem(`contactsHistory:${AppState.activeProfileId||'default'}`, JSON.stringify(AppState.history || []));
             } catch (e) {
                 reportError('flushAuxStorageSave', e);
             }
@@ -966,7 +975,7 @@
         }
 
         function saveShiftSnapshots() {
-            try { localStorage.setItem('shiftSnapshots', JSON.stringify((AppState.shiftSnapshots || []).slice(0, 3650))); } catch (e) { reportError('saveShiftSnapshots', e); }
+            try { localStorage.setItem(`shiftSnapshots:${AppState.activeProfileId||'default'}`, JSON.stringify((AppState.shiftSnapshots || []).slice(0, 3650))); } catch (e) { reportError('saveShiftSnapshots', e); }
         }
 
         function saveStatusTransitions() {
@@ -979,7 +988,7 @@
 
         function loadHistory() {
             try {
-                const saved = localStorage.getItem('contactsHistory');
+                const saved = localStorage.getItem(`contactsHistory:${AppState.activeProfileId||'default'}`);
                 if (saved) {
                     AppState.history = JSON.parse(saved);
                 }
@@ -1281,6 +1290,7 @@
                 const done = Math.min(total, i + chunk.length);
                 const pct = total ? Math.min(99, 60 + Math.round((done / total) * 39)) : 99;
                 setLoadingState(true, `Guardando… ${done}/${total}`, pct, true);
+                setSaveState('pending', `Guardando ${done}/${total} contactos`);
                 await new Promise((r) => setTimeout(r, 0));
             }
             console.info('[import] store chunked done', { ms: Date.now() - started, total });
@@ -1399,6 +1409,7 @@
             AppState.importCancelRequested = false;
             const importStarted = Date.now();
             setLoadingState(true, 'Leyendo archivo…', 2, true);
+            setSaveState('pending', 'Leyendo CSV…');
 
             try {
             const snapshotStamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -1412,6 +1423,62 @@
                 const text = await file.text();
                 const profileIdForFile = AppState.splitImportByFile && selectedFiles.length > 1 ? ensureProfileByName((file.name || '').replace(/\.[^.]+$/, '')) : (AppState.activeProfileId || 'default');
                 const profileLabel = (AppState.profiles.find(p => p.id === profileIdForFile)?.name || 'Base principal');
+                // ── Detectar si es archivo de operaciones (agent_operations) ──────
+                const firstLines = text.slice(0, 400).toLowerCase();
+                const isOpsFile = (
+                    (firstLines.includes('alias') && firstLines.includes('estado') && firstLines.includes('fecha')) ||
+                    (firstLines.includes('fecha') && firstLines.includes('done') && firstLines.includes('deposito'))
+                );
+                if (isOpsFile) {
+                    const useAsOps = await new Promise((resolveOps) => {
+                        showNotification('Este archivo parece ser un reporte de operaciones. ¿Qué querés hacer?', 'info');
+                        // Modal inline de decisión
+                        const overlay = document.createElement('div');
+                        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99999;display:flex;align-items:center;justify-content:center;';
+                        overlay.innerHTML = `
+                            <div style="background:var(--bg-card);border:1px solid rgba(148,163,184,.3);border-radius:16px;padding:28px 32px;max-width:440px;text-align:center;">
+                                <div style="font-size:1.5rem;margin-bottom:8px;">📊</div>
+                                <div style="font-weight:700;font-size:1rem;margin-bottom:8px;">Archivo de operaciones detectado</div>
+                                <div style="color:var(--text-secondary);font-size:.87rem;margin-bottom:20px;">
+                                    Este archivo tiene formato de reporte de agente (Alias, Estado, Fecha).<br>
+                                    ¿Querés importarlo como <strong>operaciones</strong> (actualiza actividad de jugadores)<br>
+                                    o como <strong>contactos</strong> (importa filas como nuevos usuarios)?
+                                </div>
+                                <div style="display:flex;gap:10px;justify-content:center;">
+                                    <button id="_opsYes" class="btn btn-success" style="padding:8px 20px;">📊 Importar como operaciones</button>
+                                    <button id="_opsNo" class="btn" style="padding:8px 20px;">👤 Importar como contactos</button>
+                                    <button id="_opsCancel" class="btn" style="padding:8px 20px;">✕ Cancelar</button>
+                                </div>
+                            </div>`;
+                        document.body.appendChild(overlay);
+                        overlay.querySelector('#_opsYes').onclick = () => { document.body.removeChild(overlay); resolveOps('ops'); };
+                        overlay.querySelector('#_opsNo').onclick = () => { document.body.removeChild(overlay); resolveOps('contacts'); };
+                        overlay.querySelector('#_opsCancel').onclick = () => { document.body.removeChild(overlay); resolveOps('cancel'); };
+                    });
+                    if (useAsOps === 'cancel') continue;
+                    if (useAsOps === 'ops') {
+                        // Importar directamente como operaciones
+                        setLoadingState(true, 'Procesando operaciones…', 20, true);
+                        setSaveState('pending', 'Procesando operaciones…');
+                        try {
+                            const opsResult = await parseOperationsCsvChunked(text, (pct) => {
+                                setLoadingState(true, `Procesando operaciones ${pct}%`, 20 + Math.round(pct * 0.6), true);
+                            });
+                            mergeOpsProfiles(opsResult.byAlias || {});
+                            const syncResult = syncOpsToContacts({ createNewUsers: true });
+                            detectDuplicates();
+                            saveData();
+                            render();
+                            setSaveState('ok', `Operaciones importadas: ${opsResult.importedRows} filas`);
+                            showNotification(`Operaciones importadas: ${opsResult.importedRows} filas · ${syncResult.createdCount} nuevos · ${syncResult.updatedCount} actualizados`, 'success');
+                        } catch (opsErr) {
+                            showNotification(`Error procesando operaciones: ${opsErr?.message || opsErr}`, 'error');
+                        }
+                        continue;
+                    }
+                    // Si eligió 'contacts', sigue el flujo normal abajo
+                }
+                // ────────────────────────────────────────────────────────────────
                 const previewResult = await showImportDiagnosticsPanel(file.name, text, profileLabel);
                 if (!previewResult?.ok) continue;
                 if (AppState.importCancelRequested) break;
@@ -1436,6 +1503,7 @@
                 }
 
                 setLoadingState(true, `Integrando… ${file.name}`, 60, true);
+                setSaveState('pending', `Integrando ${file.name}`);
                 console.info('[import] merge start', { file: file.name, rows: parsedContacts.length });
                 const nowIso = new Date().toISOString();
                 let fileNewContacts = 0;
@@ -1773,7 +1841,7 @@
                 }
                 if (AppState.history.length > 25) {
                     AppState.history = AppState.history.slice(0, 25);
-                    localStorage.setItem('contactsHistory', JSON.stringify(AppState.history));
+                    localStorage.setItem(`contactsHistory:${AppState.activeProfileId||'default'}`, JSON.stringify(AppState.history));
                 }
                 const opsRaw = localStorage.getItem('opsProfilesData');
                 if (opsRaw && opsRaw.length > 1200000) {
@@ -1867,16 +1935,27 @@
             const safeContacts = sanitizeContactsForStorage(AppState.contacts);
             AppState.currentPerfStage = 'save';
             try {
+                // Guardar por perfil — cada perfil tiene su propia clave
+                const _saveProfileId = AppState.activeProfileId || 'default';
+                const _profileContacts = safeContacts.filter(c => (c.profileId || 'default') === _saveProfileId);
+                try {
+                    localStorage.setItem(`contactsData:${_saveProfileId}`, JSON.stringify(_profileContacts));
+                } catch (_storageErr) {
+                    // Si falla por quota, intentar con menos datos
+                    try {
+                        localStorage.setItem(`contactsData:${_saveProfileId}`, JSON.stringify(_profileContacts.slice(0, 10000)));
+                        setSaveState('warn', 'Base truncada por límite de storage');
+                    } catch (_) {}
+                }
+                // También guardar en nexoStore (archivo en disco) con todos los contactos
                 if (window.nexoStore && typeof window.nexoStore.asyncSaveRequest === 'function') {
                     window.nexoStore.asyncSaveRequest({ contactsData: safeContacts });
                 } else if (window.nexoStore && typeof window.nexoStore.patch === 'function') {
                     await window.nexoStore.patch({ contactsData: safeContacts });
-                } else {
-                    localStorage.setItem('contactsData', JSON.stringify(safeContacts));
                 }
                 manageAutomaticBackup();
                 maybeDownloadAutomaticBackup(`save:${reason}`);
-                setSaveState('ok', `Guardado ${new Date().toLocaleTimeString('es-ES')}`);
+                setSaveState('ok', `Guardado · ${AppState.contacts.length.toLocaleString()} contactos · ${new Date().toLocaleTimeString('es-ES')}`);
                 if (Date.now() - lastStorageDiagAt > 15000) {
                     lastStorageDiagAt = Date.now();
                     refreshStorageDiagnostics();
@@ -1946,9 +2025,28 @@
         async function loadData() {
             showLoadingOverlay('Cargando contactos…', 'Preparando base local, turnos y validaciones iniciales.');
             try {
-                const saved = localStorage.getItem('contactsData');
+                // Cargar todos los perfiles en memoria, cada uno desde su clave
+                const _loadedContacts = [];
+                const _profileIds = (AppState.profiles || []).map(p => p.id || 'default');
+                if (!_profileIds.includes('default')) _profileIds.unshift('default');
+                for (const _pid of _profileIds) {
+                    const _raw = localStorage.getItem(`contactsData:${_pid}`);
+                    if (_raw) {
+                        try {
+                            const _parsed = JSON.parse(_raw);
+                            if (Array.isArray(_parsed)) {
+                                // Asegurar que todos tienen el profileId correcto
+                                _parsed.forEach(c => { if (!c.profileId) c.profileId = _pid; });
+                                _loadedContacts.push(..._parsed);
+                            }
+                        } catch (_) {}
+                    }
+                }
+                // Fallback: clave legacy sin perfil
+                const _legacySaved = _loadedContacts.length === 0 ? localStorage.getItem('contactsData') : null;
+                const saved = _loadedContacts.length > 0 ? JSON.stringify(_loadedContacts) : _legacySaved;
                 if (saved) {
-                    AppState.contacts = JSON.parse(saved);
+                    AppState.contacts = typeof saved === 'string' ? JSON.parse(saved) : saved;
                     const removedByCompaction = compactExactDuplicatesForLargeDatasets();
                     if (removedByCompaction > 0) {
                         addToHistory('Compactación automática', `Se removieron ${removedByCompaction} duplicados exactos al iniciar`);
@@ -2013,7 +2111,7 @@
                     remountDashboardState('loadData');
                     AppState.refreshKey += 1;
                     manageAutomaticBackup();
-                    setSaveState('ok', `Cargado ${new Date().toLocaleTimeString('es-ES')}`);
+                    setSaveState('ok', `${AppState.contacts.length.toLocaleString()} contactos · ${new Date().toLocaleTimeString('es-ES')}`);
                     if (Date.now() - lastStorageDiagAt > 15000) {
                     lastStorageDiagAt = Date.now();
                     refreshStorageDiagnostics();
@@ -2459,6 +2557,9 @@
         }
 
         function applyFilters() {
+            if (AppState.contacts.length > 10000) {
+                setSaveState('info', `Filtrando ${AppState.contacts.length.toLocaleString()} contactos…`);
+            }
             applyFiltersIndexed();
         }
 
@@ -3203,7 +3304,7 @@
                     ensureReviewMilestonesState();
                     ensureMotivationWindow();
                     AppState.reviewPositiveCounter += 1;
-                    const milestones = [200, 400, 600, 800, 1000, 1500, 2000];
+                    const milestones = [50, 100, 150, 200, 300, 400, 500, 600, 800, 1000, 1500, 2000];
                     const nearest = milestones.find(v => v === AppState.reviewPositiveCounter);
                     if (nearest && !AppState.reviewMilestonesShown[nearest]) {
                         AppState.reviewMilestonesShown[nearest] = true;
@@ -3283,11 +3384,11 @@
                 AppState.splitImportByFile = localStorage.getItem('splitImportByFile') === '1';
                 const operatorName = localStorage.getItem('operatorName');
                 if (operatorName) AppState.operatorName = operatorName;
-                const statusTransitionsRaw = localStorage.getItem('statusTransitions');
+                const statusTransitionsRaw = localStorage.getItem(`statusTransitions:${AppState.activeProfileId||'default'}`);
                 if (statusTransitionsRaw) { try { AppState.statusTransitions = JSON.parse(statusTransitionsRaw); } catch (_) { AppState.statusTransitions = []; } }
-                const buttonPressEventsRaw = localStorage.getItem('buttonPressEvents');
+                const buttonPressEventsRaw = localStorage.getItem(`buttonPressEvents:${AppState.activeProfileId||'default'}`);
                 if (buttonPressEventsRaw) { try { AppState.buttonPressEvents = JSON.parse(buttonPressEventsRaw); } catch (_) { AppState.buttonPressEvents = []; } }
-                const shiftSnapshotsRaw = localStorage.getItem('shiftSnapshots');
+                const shiftSnapshotsRaw = localStorage.getItem(`shiftSnapshots:${AppState.activeProfileId||'default'}`);
                 if (shiftSnapshotsRaw) { try { AppState.shiftSnapshots = JSON.parse(shiftSnapshotsRaw); } catch (_) { AppState.shiftSnapshots = []; } }
                 AppState.lastMidnightExportDate = localStorage.getItem('lastMidnightExportDate') || '';
                 AppState.midnightExportPending = localStorage.getItem('midnightExportPending') === '1';
@@ -3296,7 +3397,7 @@
                 AppState.controlLastImportedAt = localStorage.getItem('controlLastImportedAt') || '';
                 const controlReportsRaw = localStorage.getItem('controlReports');
                 if (controlReportsRaw) { try { AppState.controlReports = JSON.parse(controlReportsRaw); } catch (_) { AppState.controlReports = []; } }
-                const metricEventsRaw = localStorage.getItem('metricEvents');
+                const metricEventsRaw = localStorage.getItem(`metricEvents:${AppState.activeProfileId||'default'}`);
                 if (metricEventsRaw) { try { AppState.metricEvents = JSON.parse(metricEventsRaw); } catch (_) { AppState.metricEvents = []; } }
                 const baselineRaw = localStorage.getItem('monthlyBaselineByProfile');
                 if (baselineRaw) { try { AppState.monthlyBaselineByProfile = JSON.parse(baselineRaw); } catch (_) { AppState.monthlyBaselineByProfile = {}; } }
@@ -3338,7 +3439,7 @@
                 if (AppState.controlPasswordHash) localStorage.setItem('controlPasswordHash', AppState.controlPasswordHash);
                 if (AppState.controlLastImportedAt) localStorage.setItem('controlLastImportedAt', AppState.controlLastImportedAt);
                 localStorage.setItem('controlReports', JSON.stringify((AppState.controlReports || []).slice(0, 180)));
-                localStorage.setItem('metricEvents', JSON.stringify((AppState.metricEvents || []).slice(0, 30000)));
+                localStorage.setItem(`metricEvents:${AppState.activeProfileId||'default'}`, JSON.stringify((AppState.metricEvents || []).slice(0, 3000)));
                 localStorage.setItem('monthlyBaselineByProfile', JSON.stringify(AppState.monthlyBaselineByProfile || {}));
                 localStorage.setItem('uploadUnlockedUntil', String(AppState.uploadUnlockedUntil || 0));
                 localStorage.setItem('uploadAuditLog', JSON.stringify((AppState.uploadAuditLog || []).slice(0, 5000)));
@@ -5847,7 +5948,9 @@
             downloadFile,
             verifyControlPassword,
             ensureUploadUnlocked,
-            queueReportUpload
+            queueReportUpload,
+            exportFullSnapshot,
+            exportDailyDelta
         };
 
 

@@ -78,6 +78,72 @@
       appState.activeProfileId = profileId;
       localStorage.setItem('activeProfileId', appState.activeProfileId);
       appState.currentPage = Math.max(1, Number(appState.profilePageMap?.[profileId] || 1));
+
+      // ── Recargar datos aislados por perfil ──────────────────────────────
+      const pid = profileId || 'default';
+
+      // Historial
+      try {
+        const h = localStorage.getItem(`contactsHistory:${pid}`);
+        appState.history = h ? JSON.parse(h) : [];
+      } catch (_) { appState.history = []; }
+
+      // Transiciones de estado
+      try {
+        const t = localStorage.getItem(`statusTransitions:${pid}`);
+        appState.statusTransitions = t ? JSON.parse(t) : [];
+      } catch (_) { appState.statusTransitions = []; }
+
+      // Eventos de botón
+      try {
+        const b = localStorage.getItem(`buttonPressEvents:${pid}`);
+        appState.buttonPressEvents = b ? JSON.parse(b) : [];
+      } catch (_) { appState.buttonPressEvents = []; }
+
+      // Snapshots de turno
+      try {
+        const s = localStorage.getItem(`shiftSnapshots:${pid}`);
+        appState.shiftSnapshots = s ? JSON.parse(s) : [];
+      } catch (_) { appState.shiftSnapshots = []; }
+
+      // Métricas
+      try {
+        const m = localStorage.getItem(`metricEvents:${pid}`);
+        appState.metricEvents = m ? JSON.parse(m) : [];
+      } catch (_) { appState.metricEvents = []; }
+
+      // Modo turnos (nombres de operadores)
+      try {
+        const sm = localStorage.getItem(`shiftMode:${pid}`);
+        if (sm) {
+          const parsed = JSON.parse(sm);
+          appState.shiftMode = { ...appState.shiftMode, ...parsed };
+        } else {
+          appState.shiftMode = {
+            tm: { name: 'TM', queue: [], cursor: 0, stack: [] },
+            tt: { name: 'TT', queue: [], cursor: 0, stack: [] },
+            tn: { name: 'TN', queue: [], cursor: 0, stack: [] }
+          };
+        }
+      } catch (_) {}
+
+      // Contactos del nuevo perfil — cargar desde clave profile-scoped
+      // y combinar con contactos de otros perfiles que ya están en memoria
+      try {
+        const _newRaw = localStorage.getItem(`contactsData:${pid}`);
+        const _newContacts = _newRaw ? JSON.parse(_newRaw) : [];
+        // Asegurar profileId correcto
+        _newContacts.forEach(c => { if (!c.profileId) c.profileId = pid; });
+        // Reemplazar contactos de este perfil en AppState, preservar otros perfiles
+        const _otherContacts = appState.contacts.filter(c => (c.profileId || 'default') !== pid);
+        appState.contacts = [..._otherContacts, ..._newContacts];
+        appState.searchIndexDirty = true;
+        appState.statsDirty = true;
+      } catch (_e) {
+        console.warn('[switchProfile] No se pudieron cargar contactos del perfil:', pid, _e);
+      }
+      // ───────────────────────────────────────────────────────────────────
+
       refreshProfilesUI();
       const finish = () => {
         helpers.remountDashboardState?.('profile-switch');

@@ -20,8 +20,9 @@
   }
 
   function buildShiftQueue(shift) {
+    const pid = state().activeProfileId || 'default';
     return state().contacts
-      .filter((contact) => contact.assignedShift === shift && contact.status === 'sin revisar')
+      .filter((contact) => (contact.profileId || 'default') === pid && contact.assignedShift === shift && contact.status === 'sin revisar')
       .sort((a, b) => (new Date(a.lastUpdated || 0).getTime()) - (new Date(b.lastUpdated || 0).getTime()));
   }
 
@@ -94,7 +95,8 @@
   function rebalanceShift(shift) {
     const seq = ['tm', 'tt', 'tn'];
     if (shift === 'all') {
-      const unreviewed = state().contacts.filter((contact) => contact.status === 'sin revisar');
+      const pid = state().activeProfileId || 'default';
+      const unreviewed = state().contacts.filter((contact) => (contact.profileId || 'default') === pid && contact.status === 'sin revisar');
       let index = 0;
       unreviewed.forEach((contact) => { contact.assignedShift = seq[index % 3]; index += 1; });
       actions().renderShiftsView?.();
@@ -103,7 +105,8 @@
       actions().showNotification?.('Turnos rebalanceados (global)', 'success');
       return;
     }
-    const shiftContacts = state().contacts.filter((contact) => contact.assignedShift === shift && contact.status === 'sin revisar');
+    const pid2 = state().activeProfileId || 'default';
+    const shiftContacts = state().contacts.filter((contact) => (contact.profileId || 'default') === pid2 && contact.assignedShift === shift && contact.status === 'sin revisar');
     shiftContacts.forEach((contact) => { contact.shiftReviewed = false; });
     actions().renderShiftsView?.();
     persistShiftModeMemory();
