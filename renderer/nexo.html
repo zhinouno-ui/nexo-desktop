@@ -83,6 +83,10 @@
                     <div class="stat-value" id="duplicatesCount">0</div>
                     <div class="stat-label">Duplicados</div>
                 </div>
+                <div class="stat-box stat-speed" id="speedStatBox" title="Velocidad de procesamiento en el turno actual">
+                    <div class="stat-value" id="speedCount">0</div>
+                    <div class="stat-label">usuarios/h</div>
+                </div>
             </div>
             <div class="view-actions" style="margin-right:8px;">
                 <select id="profileSelect" class="filter-select" style="min-width:200px;"></select>
@@ -410,10 +414,7 @@
                 <button id="addProfileBtn" class="btn btn-success"><i class="fas fa-plus"></i> Crear</button>
             </div>
             <div id="profilesList" class="history-list" style="max-height:260px;"></div>
-            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
-                <input type="checkbox" id="splitImportByFileToggle">
-                <label for="splitImportByFileToggle" style="color:var(--text-secondary);">Crear/usar perfil por archivo al importar varios CSV</label>
-            </div>
+            <!-- checkbox splitImportByFile removido — import siempre va al perfil activo -->
             <div class="modal-actions">
                 <button id="closeProfilesModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
             </div>
@@ -421,96 +422,213 @@
     </div>
 
 
-    <div class="modal" id="metricsModal">
-        <div class="modal-content" style="max-width: 760px;">
-            <div class="modal-header"><i class="fas fa-chart-line"></i> Centro de métricas</div>
-            <div id="metricsDateLabel" style="color:var(--text-secondary); margin-bottom:8px;">Resumen diario</div>
-            <div id="metricsOpsSummary" style="color:var(--text-secondary); margin-bottom:8px; font-size:.9rem;">Movimientos ops hoy: - · turno actual: -</div>
-            <div class="metrics-filters">
-                <select id="metricsShiftFilter" class="filter-select">
-                    <option value="all">Turno: todos</option>
-                    <option value="tm">Turno 1 (06-14)</option>
-                    <option value="tt">Turno 2 (14-22)</option>
-                    <option value="tn">Turno 3 (22-06)</option>
-                </select>
-                <div style="display:flex;gap:6px;align-items:center;grid-column:span 2;flex-wrap:wrap;">
-                    <button id="metricsShiftMorningBtn" class="btn" style="padding:6px 10px;">TM (06-14)</button>
-                    <button id="metricsShiftAfternoonBtn" class="btn" style="padding:6px 10px;">TT (14-22)</button>
-                    <button id="metricsShiftNightBtn" class="btn" style="padding:6px 10px;">TN (22-06)</button>
-                    <button id="metricsShiftResetBtn" class="btn" style="padding:6px 10px;">Quitar lapso</button>
+        <div class="modal" id="metricsModal">
+        <div class="modal-content metrics-modal-redesign">
+
+            <!-- HEADER -->
+            <div class="metrics-header-bar">
+                <div>
+                    <div class="metrics-title"><i class="fas fa-chart-line"></i> Centro de Mando</div>
+                    <div id="metricsDateLabel" class="metrics-subtitle">Métricas del perfil activo</div>
                 </div>
-                <input id="metricsFromDate" type="date" class="origin-input" style="margin-top:0;">
-                <input id="metricsToDate" type="date" class="origin-input" style="margin-top:0;">
-                <select id="metricsStatusFilter" class="filter-select">
-                    <option value="all">Estado: todos</option>
-                </select>
-                <select id="metricsSelectionTypeFilter" class="filter-select">
-                    <option value="all">Selección: todas</option>
-                    <option value="manual">Manual</option>
-                    <option value="ops">Operaciones</option>
-                    <option value="bulk">Masiva</option>
-                    <option value="import">Importación</option>
-                </select>
-                <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);padding-left:4px;">
-                    <input id="metricsOnlyChanges" type="checkbox"> Solo cambios
-                </label>
+                <div class="metrics-profile-badge" id="metricsProfileBadge">Cargando...</div>
             </div>
-            <div class="metrics-dashboard-grid">
-                <div class="metrics-card"><div class="k">Actividad de hoy</div><div id="metricEditedToday" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Impulso de ayer</div><div id="metricEditedYesterday" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Turno líder</div><div id="metricTopShift" class="v">-</div></div>
-                <div class="metrics-card"><div class="k">Movimientos (24h)</div><div id="metricTransitions24h" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Turno líder (24h)</div><div id="metricTopShift24h" class="v">-</div></div>
-                <div class="metrics-card"><div class="k">Ritmo por hora</div><div id="metricButtonsPerHour" class="v">0</div></div>
+
+            <!-- TABS: Operador / Superior -->
+            <div class="metrics-tabs">
+                <button class="metrics-tab active" id="metricsTabOperator" onclick="switchMetricsTab('operator')">
+                    <i class="fas fa-user"></i> Mi turno
+                </button>
+                <button class="metrics-tab" id="metricsTabSupervisor" onclick="switchMetricsTab('supervisor')">
+                    <i class="fas fa-binoculars"></i> Vista superior
+                </button>
+                <button class="metrics-tab" id="metricsTabCompare" onclick="switchMetricsTab('compare')">
+                    <i class="fas fa-columns"></i> Comparar perfiles
+                </button>
+                <button class="metrics-tab" id="metricsTabExport" onclick="switchMetricsTab('export')">
+                    <i class="fas fa-file-export"></i> Exportar
+                </button>
             </div>
-            <div class="metrics-charts">
-                <div class="chart-card">
-                    <div class="chart-title">Estados (donut)</div>
-                    <canvas id="statusDonutChart" width="320" height="180"></canvas>
+
+            <!-- TAB: OPERADOR -->
+            <div id="metricsTabContentOperator" class="metrics-tab-content active">
+                <!-- Filtro rápido de turno -->
+                <div class="metrics-shift-pills">
+                    <button class="metrics-pill" id="metricsShiftMorningBtn" onclick="setMetricsShift('tm')">TM · 06-14</button>
+                    <button class="metrics-pill" id="metricsShiftAfternoonBtn" onclick="setMetricsShift('tt')">TT · 14-22</button>
+                    <button class="metrics-pill" id="metricsShiftNightBtn" onclick="setMetricsShift('tn')">TN · 22-06</button>
+                    <button class="metrics-pill metrics-pill-neutral" id="metricsShiftResetBtn" onclick="setMetricsShift('all')">Todos</button>
                 </div>
-                <div class="chart-card">
-                    <div class="chart-title">Tipo de selección (donut)</div>
-                    <canvas id="selectionDonutChart" width="320" height="180"></canvas>
+                <!-- KPIs principales -->
+                <div class="metrics-kpi-grid">
+                    <div class="metrics-kpi">
+                        <div class="metrics-kpi-icon"><i class="fas fa-bolt"></i></div>
+                        <div class="metrics-kpi-val" id="metricEditedToday">0</div>
+                        <div class="metrics-kpi-label">Acciones hoy</div>
+                    </div>
+                    <div class="metrics-kpi">
+                        <div class="metrics-kpi-icon"><i class="fas fa-exchange-alt"></i></div>
+                        <div class="metrics-kpi-val" id="metricTransitions24h">0</div>
+                        <div class="metrics-kpi-label">Movimientos 24h</div>
+                    </div>
+                    <div class="metrics-kpi">
+                        <div class="metrics-kpi-icon"><i class="fas fa-trophy"></i></div>
+                        <div class="metrics-kpi-val" id="metricTopShift">-</div>
+                        <div class="metrics-kpi-label">Turno líder</div>
+                    </div>
+                    <div class="metrics-kpi">
+                        <div class="metrics-kpi-icon"><i class="fas fa-tachometer-alt"></i></div>
+                        <div class="metrics-kpi-val" id="metricButtonsPerHour">0</div>
+                        <div class="metrics-kpi-label">Ritmo / hora</div>
+                    </div>
                 </div>
-                <div class="chart-card" style="grid-column: span 2;">
-                    <div class="chart-title">Transiciones de estado (barras)</div>
-                    <canvas id="transitionBarChart" width="660" height="180"></canvas>
+                <!-- Filtros avanzados colapsables -->
+                <details class="metrics-filters-advanced">
+                    <summary><i class="fas fa-sliders-h"></i> Filtros avanzados</summary>
+                    <div class="metrics-filters-grid">
+                        <select id="metricsShiftFilter" class="filter-select">
+                            <option value="all">Turno: todos</option>
+                            <option value="tm">TM (06-14)</option>
+                            <option value="tt">TT (14-22)</option>
+                            <option value="tn">TN (22-06)</option>
+                        </select>
+                        <input id="metricsFromDate" type="date" class="origin-input" style="margin-top:0;">
+                        <input id="metricsToDate" type="date" class="origin-input" style="margin-top:0;">
+                        <select id="metricsStatusFilter" class="filter-select">
+                            <option value="all">Estado: todos</option>
+                        </select>
+                        <select id="metricsSelectionTypeFilter" class="filter-select">
+                            <option value="all">Selección: todas</option>
+                            <option value="manual">Manual</option>
+                            <option value="ops">Operaciones</option>
+                            <option value="import">Importación</option>
+                        </select>
+                        <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);">
+                            <input id="metricsOnlyChanges" type="checkbox"> Solo cambios
+                        </label>
+                    </div>
+                </details>
+                <!-- Gráficos -->
+                <div class="metrics-charts-grid">
+                    <div class="metrics-chart-box">
+                        <div class="metrics-chart-title">Estados</div>
+                        <canvas id="statusDonutChart" width="280" height="160"></canvas>
+                    </div>
+                    <div class="metrics-chart-box">
+                        <div class="metrics-chart-title">Tipo de selección</div>
+                        <canvas id="selectionDonutChart" width="280" height="160"></canvas>
+                    </div>
+                    <div class="metrics-chart-box metrics-chart-wide">
+                        <div class="metrics-chart-title">Transiciones de estado</div>
+                        <canvas id="transitionBarChart" width="600" height="160"></canvas>
+                    </div>
+                </div>
+                <!-- Resumen de transiciones -->
+                <div id="metricTransitionsBreakdown" class="metrics-transitions-box"></div>
+                <div id="metricTransitionSummary" class="metrics-transitions-summary"></div>
+                <details id="metricRareTransitions" style="display:none;" class="metrics-rare">
+                    <summary>Ver combinaciones raras</summary>
+                    <div id="metricRareTransitionsBody"></div>
+                </details>
+                <!-- Ranking de turnos -->
+                <div id="metricShiftBreakdown" class="metrics-shift-grid"></div>
+                <div id="metricShiftRanking" class="metrics-shift-ranking"></div>
+                <div id="metricsOpsSummary" class="metrics-ops-bar"></div>
+            </div>
+
+            <!-- TAB: SUPERIOR (historial de actividad) -->
+            <div id="metricsTabContentSupervisor" class="metrics-tab-content">
+                <div class="metrics-supervisor-intro" style="margin-bottom:12px;">
+                    <i class="fas fa-chart-line"></i>
+                    Historial de actividad del perfil activo. Revisá acciones por día y turno.
+                </div>
+                <!-- Filtros rápidos -->
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+                    <button id="filterToday" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('today')">
+                        <i class="fas fa-calendar-day"></i> Hoy
+                    </button>
+                    <button id="filterYesterday" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('yesterday')">
+                        <i class="fas fa-calendar-minus"></i> Ayer
+                    </button>
+                    <button id="filterDayBefore" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('dayBefore')">
+                        <i class="fas fa-calendar-alt"></i> Anteayer
+                    </button>
+                    <button id="filterWeek" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('week')">
+                        <i class="fas fa-calendar-week"></i> Semana
+                    </button>
+                    <button id="filterMonth" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('month')">
+                        <i class="fas fa-calendar"></i> Mes
+                    </button>
+                    <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+                        <input id="customFromDate" type="date" class="origin-input" style="margin-top:0;max-width:130px;font-size:.8rem;" onchange="window.setMetricsHistoryFilter('custom')">
+                        <input id="customToDate" type="date" class="origin-input" style="margin-top:0;max-width:130px;font-size:.8rem;" onchange="window.setMetricsHistoryFilter('custom')">
+                    </div>
+                </div>
+                <!-- Resumen dinámico -->
+                <div id="metricsHistorySummary" style="display:none;background:rgba(30,41,59,.7);border:1px solid rgba(148,163,184,.2);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:.85rem;"></div>
+                <!-- Listado de actividad por día -->
+                <div id="metricsHistoryContainer" style="display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;">
+                    <div style="color:var(--text-secondary);font-size:.85rem;">Seleccioná un filtro para ver el historial de actividad.</div>
                 </div>
             </div>
-            <div class="metrics-actions">
-                <button id="metricsFilterLastBatchBtn" class="btn"><i class="fas fa-filter"></i> Filtrar última subida</button>
-                <button id="metricsDeleteLastBatchBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Borrar última subida</button>
-                <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
-                <button id="importControlBtn" class="btn" title="Importa control diario/mensual"><i class="fas fa-shield-alt"></i> Importar Control <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo liviano para seguimiento diario/mensual de métricas y turnos."></i></button>
-                <div class="metrics-control-center" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                    <span style="color:var(--text-secondary);font-size:.82rem;">Centro de Control</span>
-                    <button id="exportDailyNexoBtn" class="btn"><i class="fas fa-file-export"></i> exportDaily()</button>
-                    <button id="exportBackupNexoBtn" class="btn"><i class="fas fa-archive"></i> exportBackup()</button>
+
+            <!-- TAB: COMPARAR PERFILES -->
+            <div id="metricsTabContentCompare" class="metrics-tab-content">
+                <div class="metrics-supervisor-intro">
+                    <i class="fas fa-info-circle"></i>
+                    Comparativa entre perfiles disponibles en esta instalación.
                 </div>
-                <button id="uploadReportBtn" class="btn"><i class="fas fa-upload"></i> Subir reporte seleccionado</button>
-                <button id="resetBaselineBtn" class="btn"><i class="fas fa-eraser"></i> Reset baseline</button>
-            </div>
-            <div id="metricTransitionsBreakdown" class="metrics-transitions"></div>
-            <div id="metricTransitionSummary" class="metrics-transitions" style="margin-top:8px;"></div>
-            <details id="metricRareTransitions" class="metrics-collapsible" style="display:none;">
-                <summary>Ver combinaciones raras</summary>
-                <div id="metricRareTransitionsBody" class="inner"></div>
-            </details>
-            <div id="metricShiftBreakdown" class="metrics-wide-grid"></div>
-            <div id="metricShiftRanking" class="metrics-transitions" style="margin-top:8px;"></div>
-            <div id="controlReportsSummary" class="metrics-transitions" style="margin-top:8px;"></div>
-            <div id="controlPasswordPanel" class="metrics-password-panel" style="display:none;">
-                <div style="font-weight:700;margin-bottom:6px;">Seguridad archivo de control</div>
-                <div style="color:var(--text-secondary);font-size:.85rem;margin-bottom:8px;">Después del primer ingreso podés cambiar la clave de importación.</div>
-                <div class="metrics-password-grid">
-                    <input id="controlPasswordNew" type="password" class="origin-input" style="margin-top:0;" placeholder="Nueva clave de control">
-                    <button id="controlPasswordSaveBtn" class="btn btn-success"><i class="fas fa-key"></i> Guardar clave</button>
+                <div id="metricsProfileCompare" class="metrics-compare-grid">
+                    <div style="color:var(--text-secondary);font-size:.9rem;">Cargando datos de perfiles...</div>
                 </div>
             </div>
-            <div class="modal-actions">
+
+            <!-- TAB: EXPORTAR -->
+            <div id="metricsTabContentExport" class="metrics-tab-content">
+                <div class="metrics-export-grid">
+                    <div class="metrics-export-card" onclick="document.getElementById('exportDailyNexoBtn').click()">
+                        <i class="fas fa-file-export"></i>
+                        <div class="metrics-export-title">Reporte del día</div>
+                        <div class="metrics-export-desc">Movimientos de las últimas 24hs. Liviano para Discord.</div>
+                    </div>
+                    <div class="metrics-export-card" onclick="document.getElementById('exportBackupNexoBtn').click()">
+                        <i class="fas fa-archive"></i>
+                        <div class="metrics-export-title">Backup completo</div>
+                        <div class="metrics-export-desc">Snapshot total para que el superior reconstruya la base.</div>
+                    </div>
+                    <div class="metrics-export-card" onclick="document.getElementById('metricsDeleteLastBatchBtn').click()">
+                        <i class="fas fa-trash" style="color:#ef4444"></i>
+                        <div class="metrics-export-title">Borrar última subida</div>
+                        <div class="metrics-export-desc">Elimina los contactos del último CSV importado.</div>
+                    </div>
+                    <div class="metrics-export-card" onclick="document.getElementById('importFullSnapshotBtn').click()">
+                        <i class="fas fa-file-import"></i>
+                        <div class="metrics-export-title">Importar TODO</div>
+                        <div class="metrics-export-desc">Importar snapshot completo de otra PC.</div>
+                    </div>
+                </div>
+                <!-- Botones ocultos que mantienen la funcionalidad original -->
+                <div style="display:none;">
+                    <button id="exportDailyNexoBtn"></button>
+                    <button id="exportBackupNexoBtn"></button>
+                    <button id="metricsFilterLastBatchBtn"></button>
+                    <button id="metricsDeleteLastBatchBtn"></button>
+                    <button id="importFullSnapshotBtn"></button>
+                    <button id="importControlBtn"></button>
+                    <button id="uploadReportBtn"></button>
+                    <button id="resetBaselineBtn"></button>
+                    <input id="controlPasswordNew" type="password">
+                    <button id="controlPasswordSaveBtn"></button>
+                    <div id="controlPasswordPanel"></div>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top:16px;">
                 <button id="closeMetricsModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
             </div>
         </div>
+    </div>
+
     </div>
 
 
@@ -529,97 +647,7 @@
     </div>
 
 
-    <div class="modal" id="metricsModal">
-        <div class="modal-content" style="max-width: 760px;">
-            <div class="modal-header"><i class="fas fa-chart-line"></i> Centro de métricas</div>
-            <div id="metricsDateLabel" style="color:var(--text-secondary); margin-bottom:8px;">Resumen diario</div>
-            <div id="metricsOpsSummary" style="color:var(--text-secondary); margin-bottom:8px; font-size:.9rem;">Movimientos ops hoy: - · turno actual: -</div>
-            <div class="metrics-filters">
-                <select id="metricsShiftFilter" class="filter-select">
-                    <option value="all">Turno: todos</option>
-                    <option value="tm">Turno 1 (06-14)</option>
-                    <option value="tt">Turno 2 (14-22)</option>
-                    <option value="tn">Turno 3 (22-06)</option>
-                </select>
-                <div style="display:flex;gap:6px;align-items:center;grid-column:span 2;flex-wrap:wrap;">
-                    <button id="metricsShiftMorningBtn" class="btn" style="padding:6px 10px;">TM (06-14)</button>
-                    <button id="metricsShiftAfternoonBtn" class="btn" style="padding:6px 10px;">TT (14-22)</button>
-                    <button id="metricsShiftNightBtn" class="btn" style="padding:6px 10px;">TN (22-06)</button>
-                    <button id="metricsShiftResetBtn" class="btn" style="padding:6px 10px;">Quitar lapso</button>
-                </div>
-                <input id="metricsFromDate" type="date" class="origin-input" style="margin-top:0;">
-                <input id="metricsToDate" type="date" class="origin-input" style="margin-top:0;">
-                <select id="metricsStatusFilter" class="filter-select">
-                    <option value="all">Estado: todos</option>
-                </select>
-                <select id="metricsSelectionTypeFilter" class="filter-select">
-                    <option value="all">Selección: todas</option>
-                    <option value="manual">Manual</option>
-                    <option value="ops">Operaciones</option>
-                    <option value="bulk">Masiva</option>
-                    <option value="import">Importación</option>
-                </select>
-                <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);padding-left:4px;">
-                    <input id="metricsOnlyChanges" type="checkbox"> Solo cambios
-                </label>
-            </div>
-            <div class="metrics-dashboard-grid">
-                <div class="metrics-card"><div class="k">Actividad de hoy</div><div id="metricEditedToday" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Impulso de ayer</div><div id="metricEditedYesterday" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Turno líder</div><div id="metricTopShift" class="v">-</div></div>
-                <div class="metrics-card"><div class="k">Movimientos (24h)</div><div id="metricTransitions24h" class="v">0</div></div>
-                <div class="metrics-card"><div class="k">Turno líder (24h)</div><div id="metricTopShift24h" class="v">-</div></div>
-                <div class="metrics-card"><div class="k">Ritmo por hora</div><div id="metricButtonsPerHour" class="v">0</div></div>
-            </div>
-            <div class="metrics-charts">
-                <div class="chart-card">
-                    <div class="chart-title">Estados (donut)</div>
-                    <canvas id="statusDonutChart" width="320" height="180"></canvas>
-                </div>
-                <div class="chart-card">
-                    <div class="chart-title">Tipo de selección (donut)</div>
-                    <canvas id="selectionDonutChart" width="320" height="180"></canvas>
-                </div>
-                <div class="chart-card" style="grid-column: span 2;">
-                    <div class="chart-title">Transiciones de estado (barras)</div>
-                    <canvas id="transitionBarChart" width="660" height="180"></canvas>
-                </div>
-            </div>
-            <div class="metrics-actions">
-                <button id="metricsFilterLastBatchBtn" class="btn"><i class="fas fa-filter"></i> Filtrar última subida</button>
-                <button id="metricsDeleteLastBatchBtn" class="btn btn-danger"><i class="fas fa-trash"></i> Borrar última subida</button>
-                <button id="importFullSnapshotBtn" class="btn"><i class="fas fa-file-import"></i> Importar TODO</button>
-                <button id="importControlBtn" class="btn" title="Importa control diario/mensual"><i class="fas fa-shield-alt"></i> Importar Control <i class="fas fa-info-circle" style="margin-left:6px;opacity:.8" title="Archivo liviano para seguimiento diario/mensual de métricas y turnos."></i></button>
-                <div class="metrics-control-center" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                    <span style="color:var(--text-secondary);font-size:.82rem;">Centro de Control</span>
-                    <button id="exportDailyNexoBtn" class="btn"><i class="fas fa-file-export"></i> exportDaily()</button>
-                    <button id="exportBackupNexoBtn" class="btn"><i class="fas fa-archive"></i> exportBackup()</button>
-                </div>
-                <button id="uploadReportBtn" class="btn"><i class="fas fa-upload"></i> Subir reporte seleccionado</button>
-                <button id="resetBaselineBtn" class="btn"><i class="fas fa-eraser"></i> Reset baseline</button>
-            </div>
-            <div id="metricTransitionsBreakdown" class="metrics-transitions"></div>
-            <div id="metricTransitionSummary" class="metrics-transitions" style="margin-top:8px;"></div>
-            <details id="metricRareTransitions" class="metrics-collapsible" style="display:none;">
-                <summary>Ver combinaciones raras</summary>
-                <div id="metricRareTransitionsBody" class="inner"></div>
-            </details>
-            <div id="metricShiftBreakdown" class="metrics-wide-grid"></div>
-            <div id="metricShiftRanking" class="metrics-transitions" style="margin-top:8px;"></div>
-            <div id="controlReportsSummary" class="metrics-transitions" style="margin-top:8px;"></div>
-            <div id="controlPasswordPanel" class="metrics-password-panel" style="display:none;">
-                <div style="font-weight:700;margin-bottom:6px;">Seguridad archivo de control</div>
-                <div style="color:var(--text-secondary);font-size:.85rem;margin-bottom:8px;">Después del primer ingreso podés cambiar la clave de importación.</div>
-                <div class="metrics-password-grid">
-                    <input id="controlPasswordNew" type="password" class="origin-input" style="margin-top:0;" placeholder="Nueva clave de control">
-                    <button id="controlPasswordSaveBtn" class="btn btn-success"><i class="fas fa-key"></i> Guardar clave</button>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button id="closeMetricsModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
-            </div>
-        </div>
-    </div>
+    
 
 
     <div class="modal" id="whatsappMessageModal">

@@ -733,52 +733,72 @@
             }
         }
 
-        function syncOpsToContacts({ createNewUsers = true } = {}) {
+        async function syncOpsToContacts({ createNewUsers = true, onProgress = null } = {}) {
             const profiles = AppState.opsProfiles || {};
             const matchedAliases = new Set();
             let updatedCount = 0;
             let createdCount = 0;
+            const CHUNK = 500;
 
-            AppState.contacts.forEach(contact => {
-                const prevStatus = contact.status;
-                const prevAlias = contact.alias || '';
-                const keys = [normalizeAlias(contact.alias || ''), normalizeAlias(extractPrimaryAlias(contact.name || '')), normalizeAlias(contact.name || '')].filter(Boolean);
-                const foundKey = keys.find(k => profiles[k]);
-                contact.ops = foundKey ? profiles[foundKey] : null;
-                if (foundKey) {
-                    contact.alias = contact.alias || extractPrimaryAlias(contact.name || '') || profiles[foundKey].aliasLabel;
-                    matchedAliases.add(foundKey);
-                    applyOpsHeuristicsToContact(contact);
+            // Build index for O(1) lookups
+            const contactsForProfile = AppState.contacts.filter(c => (c.profileId || 'default') === (AppState.activeProfileId || 'default'));
+            const total = contactsForProfile.length;
+
+            for (let i = 0; i < total; i += CHUNK) {
+                const end = Math.min(total, i + CHUNK);
+                for (let j = i; j < end; j++) {
+                    const contact = contactsForProfile[j];
+                    const prevStatus = contact.status;
+                    const prevAlias = contact.alias || '';
+                    const keys = [normalizeAlias(contact.alias || ''), normalizeAlias(extractPrimaryAlias(contact.name || '')), normalizeAlias(contact.name || '')].filter(Boolean);
+                    const foundKey = keys.find(k => profiles[k]);
+                    contact.ops = foundKey ? profiles[foundKey] : null;
+                    if (foundKey) {
+                        contact.alias = contact.alias || extractPrimaryAlias(contact.name || '') || profiles[foundKey].aliasLabel;
+                        matchedAliases.add(foundKey);
+                        applyOpsHeuristicsToContact(contact);
+                    }
+                    if (contact.status !== prevStatus || (contact.alias || '') !== prevAlias) updatedCount++;
                 }
-                if (contact.status !== prevStatus || (contact.alias || '') !== prevAlias) updatedCount++;
-            });
+                if (onProgress) onProgress({ processed: end, total });
+                // Yield to UI thread every chunk
+                await new Promise(r => setTimeout(r, 0));
+            }
 
             if (createNewUsers) {
-                Object.keys(profiles).forEach(alias => {
-                    if (matchedAliases.has(alias)) return;
-                    const p = profiles[alias];
-                    const newId = Date.now() + Math.random();
-                    AppState.contacts.push({
-                        id: newId,
-                        name: p.aliasLabel || alias,
-                        alias: p.aliasLabel || alias,
-                        phone: '',
-                        profileId: AppState.activeProfileId || 'default',
-                        origin: 'Operaciones panel',
-                        status: 'jugando',
-                        lastUpdated: new Date().toISOString(),
-                        lastEditedAt: new Date().toISOString(),
-                        lastEditReason: 'ops_create',
-                        recontactAttempts: 0,
-                        isDuplicate: false,
-                        isNewFromOps: true,
-                        ops: p
-                    });
-                    recordMetricEvent('user_created', { profileId: AppState.activeProfileId || 'default', contactId: newId, status: 'sin revisar', selectionType: 'ops' });
-                    applyOpsHeuristicsToContact(AppState.contacts[AppState.contacts.length - 1]);
-                    addToHistory('Nuevo usuario desde operaciones', p.aliasLabel || alias);
-                    createdCount++;
-                });
+                const newAliases = Object.keys(profiles).filter(alias => !matchedAliases.has(alias));
+                const newTotal = newAliases.length;
+                for (let i = 0; i < newTotal; i += CHUNK) {
+                    const end = Math.min(newTotal, i + CHUNK);
+                    for (let j = i; j < end; j++) {
+                        const alias = newAliases[j];
+                        const p = profiles[alias];
+                        const newId = Date.now() + Math.random();
+                        const newContact = {
+                            id: newId,
+                            name: p.aliasLabel || alias,
+                            alias: p.aliasLabel || alias,
+                            phone: '',
+                            profileId: AppState.activeProfileId || 'default',
+                            origin: 'Operaciones panel',
+                            status: 'jugando',
+                            lastUpdated: new Date().toISOString(),
+                            lastEditedAt: new Date().toISOString(),
+                            lastEditReason: 'ops_create',
+                            recontactAttempts: 0,
+                            isDuplicate: false,
+                            isNewFromOps: true,
+                            ops: p
+                        };
+                        AppState.contacts.push(newContact);
+                        recordMetricEvent('user_created', { profileId: AppState.activeProfileId || 'default', contactId: newId, status: 'jugando', selectionType: 'ops' });
+                        applyOpsHeuristicsToContact(AppState.contacts[AppState.contacts.length - 1]);
+                        addToHistory('Nuevo usuario desde operaciones', p.aliasLabel || alias);
+                        createdCount++;
+                    }
+                    if (onProgress) onProgress({ processed: total + i + (end - i), total: total + newTotal });
+                    await new Promise(r => setTimeout(r, 0));
+                }
             }
             return { updatedCount, createdCount };
         }
@@ -1421,7 +1441,7 @@
                 const file = selectedFiles[fileIndex];
                 batchFiles.push(file.name);
                 const text = await file.text();
-                const profileIdForFile = AppState.splitImportByFile && selectedFiles.length > 1 ? ensureProfileByName((file.name || '').replace(/\.[^.]+$/, '')) : (AppState.activeProfileId || 'default');
+                const profileIdForFile = AppState.activeProfileId || 'default';
                 const profileLabel = (AppState.profiles.find(p => p.id === profileIdForFile)?.name || 'Base principal');
                 // ── Detectar si es archivo de operaciones (agent_operations) ──────
                 const firstLines = text.slice(0, 400).toLowerCase();
@@ -1431,23 +1451,26 @@
                 );
                 if (isOpsFile) {
                     const useAsOps = await new Promise((resolveOps) => {
-                        showNotification('Este archivo parece ser un reporte de operaciones. ¿Qué querés hacer?', 'info');
-                        // Modal inline de decisión
                         const overlay = document.createElement('div');
                         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99999;display:flex;align-items:center;justify-content:center;';
                         overlay.innerHTML = `
-                            <div style="background:var(--bg-card);border:1px solid rgba(148,163,184,.3);border-radius:16px;padding:28px 32px;max-width:440px;text-align:center;">
-                                <div style="font-size:1.5rem;margin-bottom:8px;">📊</div>
-                                <div style="font-weight:700;font-size:1rem;margin-bottom:8px;">Archivo de operaciones detectado</div>
-                                <div style="color:var(--text-secondary);font-size:.87rem;margin-bottom:20px;">
-                                    Este archivo tiene formato de reporte de agente (Alias, Estado, Fecha).<br>
-                                    ¿Querés importarlo como <strong>operaciones</strong> (actualiza actividad de jugadores)<br>
-                                    o como <strong>contactos</strong> (importa filas como nuevos usuarios)?
+                            <div style="background:var(--bg-card);border:1px solid rgba(148,163,184,.3);border-radius:16px;padding:28px 32px;max-width:420px;text-align:center;">
+                                <div style="font-size:1.3rem;margin-bottom:12px;"><i class="fas fa-exclamation-triangle" style="color:#f59e0b;"></i></div>
+                                <div style="font-weight:700;font-size:1rem;margin-bottom:12px;">Este archivo parece un reporte de operaciones</div>
+                                <div style="color:var(--text-secondary);font-size:.85rem;margin-bottom:20px;line-height:1.5;">
+                                    Detectamos columnas como Alias, Estado y Fecha.<br>
+                                    Elegí cómo procesarlo:
                                 </div>
-                                <div style="display:flex;gap:10px;justify-content:center;">
-                                    <button id="_opsYes" class="btn btn-success" style="padding:8px 20px;">📊 Importar como operaciones</button>
-                                    <button id="_opsNo" class="btn" style="padding:8px 20px;">👤 Importar como contactos</button>
-                                    <button id="_opsCancel" class="btn" style="padding:8px 20px;">✕ Cancelar</button>
+                                <div style="display:flex;flex-direction:column;gap:8px;">
+                                    <button id="_opsYes" class="btn btn-success" style="padding:10px 20px;width:100%;font-size:.88rem;">
+                                        <i class="fas fa-chart-bar"></i> Actualizar actividad de jugadores
+                                    </button>
+                                    <button id="_opsNo" class="btn" style="padding:10px 20px;width:100%;font-size:.88rem;">
+                                        <i class="fas fa-user-plus"></i> Importar como contactos nuevos
+                                    </button>
+                                    <button id="_opsCancel" class="btn" style="padding:8px 20px;width:100%;font-size:.82rem;opacity:.7;">
+                                        Cancelar
+                                    </button>
                                 </div>
                             </div>`;
                         document.body.appendChild(overlay);
@@ -1462,16 +1485,25 @@
                         setSaveState('pending', 'Procesando operaciones…');
                         try {
                             const opsResult = await parseOperationsCsvChunked(text, (pct) => {
-                                setLoadingState(true, `Procesando operaciones ${pct}%`, 20 + Math.round(pct * 0.6), true);
+                                setLoadingState(true, `Procesando operaciones ${pct}%`, 20 + Math.round(pct * 0.4), true);
                             });
+                            setLoadingState(true, 'Fusionando perfiles…', 62, true);
                             mergeOpsProfiles(opsResult.byAlias || {});
-                            const syncResult = syncOpsToContacts({ createNewUsers: true });
+                            setLoadingState(true, 'Sincronizando contactos…', 66, true);
+                            const syncResult = await syncOpsToContacts({ createNewUsers: true, onProgress: ({ processed, total }) => {
+                                const pct = 66 + (total > 0 ? Math.min(24, Math.round((processed / total) * 24)) : 0);
+                                setLoadingState(true, `Sincronizando ${processed}/${total}`, pct, true);
+                            }});
+                            setLoadingState(true, 'Detectando duplicados…', 92, true);
                             detectDuplicates();
+                            setLoadingState(true, 'Guardando…', 97, true);
                             saveData();
                             render();
+                            setLoadingState(false, '', 100, false);
                             setSaveState('ok', `Operaciones importadas: ${opsResult.importedRows} filas`);
                             showNotification(`Operaciones importadas: ${opsResult.importedRows} filas · ${syncResult.createdCount} nuevos · ${syncResult.updatedCount} actualizados`, 'success');
                         } catch (opsErr) {
+                            setLoadingState(false, '', 100, false);
                             showNotification(`Error procesando operaciones: ${opsErr?.message || opsErr}`, 'error');
                         }
                         continue;
@@ -1646,22 +1678,31 @@
                     announceGeneral('Procesando archivo de operaciones…', 'info');
                     setSaveState('pending', 'Procesando operaciones 0%');
                     const { byAlias, importedRows } = await parseOperationsCsvChunked(String(e.target.result || ''), ({ processed = 0, total = 0 }) => {
-                        const pct = total > 0 ? Math.min(99, Math.round((processed / total) * 100)) : 0;
+                        const pct = total > 0 ? Math.min(49, Math.round((processed / total) * 50)) : 0;
                         setSaveState('pending', `Procesando operaciones ${pct}%`);
                         setLoadingState(true, `Procesando operaciones ${processed}/${total}`, pct, false);
                     });
-                    setLoadingState(true, "Aplicando operaciones…", 100, false);
+                    setLoadingState(true, 'Fusionando perfiles…', 50, false);
                     mergeOpsProfiles(byAlias);
-                    syncOpsToContacts({ createNewUsers: true });
+                    setLoadingState(true, 'Sincronizando contactos…', 55, false);
+                    const syncResult = await syncOpsToContacts({ createNewUsers: true, onProgress: ({ processed, total }) => {
+                        const pct = 55 + (total > 0 ? Math.min(35, Math.round((processed / total) * 35)) : 0);
+                        setSaveState('pending', `Sincronizando ${processed}/${total}`);
+                        setLoadingState(true, `Sincronizando contactos ${processed}/${total}`, pct, false);
+                    }});
+                    setLoadingState(true, 'Detectando duplicados…', 92, false);
                     detectDuplicates();
+                    setLoadingState(true, 'Guardando…', 96, false);
                     saveData();
-                    addToHistory('Operaciones importadas', `${importedRows} filas procesadas`);
+                    addToHistory('Operaciones importadas', `${importedRows} filas · ${syncResult.createdCount} nuevos · ${syncResult.updatedCount} actualizados`);
                     render(true);
+                    setLoadingState(false, '', 100, false);
                     setSaveState('ok', `Operaciones listas ${new Date().toLocaleTimeString('es-ES')}`);
-                    showNotification(`✅ Operaciones actualizadas (${importedRows} filas)`, 'success');
+                    showNotification(`✅ Operaciones actualizadas (${importedRows} filas · +${syncResult.createdCount} nuevos)`, 'success');
                     announceGeneral(`Operaciones importadas: ${importedRows} filas`, 'success');
                 } catch (err) {
                     console.error('Error importando operaciones:', err);
+                    setLoadingState(false, '', 100, false);
                     setSaveState('warn', 'Error procesando operaciones');
                     showNotification('Error al importar operaciones', 'error');
                     announceGeneral('No se pudo procesar operaciones. Se aplicó modo seguro.', 'warn', 4500);
@@ -1680,6 +1721,7 @@
 
         function getLatestBackupContacts() {
             try {
+                const activeProfile = AppState.activeProfileId || 'default';
                 const backupKeys = Object.keys(localStorage)
                     .filter(k => k.startsWith('bk_'))
                     .sort()
@@ -1688,7 +1730,14 @@
                     const raw = localStorage.getItem(key);
                     if (!raw) continue;
                     const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed) && parsed.length) return parsed;
+                    if (Array.isArray(parsed) && parsed.length) {
+                        // SEPARACIÓN ESTRICTA: Solo retornar contactos del perfil activo
+                        const profileContacts = parsed.filter(c => (c.profileId || 'default') === activeProfile);
+                        if (profileContacts.length > 0) {
+                            console.log(`[getLatestBackupContacts] Recuperando ${profileContacts.length} contactos del perfil ${activeProfile} desde backup ${key}`);
+                            return profileContacts;
+                        }
+                    }
                 }
             } catch (e) {
                 console.error('Error leyendo backups:', e);
@@ -1698,6 +1747,8 @@
 
         function manageAutomaticBackup() {
             if (!AppState.contacts || AppState.contacts.length === 0) return;
+            // Skip localStorage backup for large datasets — contacts are persisted to disk via IPC
+            if (AppState.contacts.length > 5000) return;
             const currentPct = AppState.storageEstimate?.pct || 0;
             if (currentPct >= 90) {
                 const nowTs = Date.now();
@@ -1902,6 +1953,8 @@
         let contactsFlushInFlight = false;
         let hiddenAt = 0;
         let lastInteractionAt = Date.now();
+        let contactBuffer = [];
+        const CONTACT_BUFFER_SIZE = 1000;
         const CONTACT_SAVE_BATCH_SIZE = 300;
         const CONTACT_SAVE_MAX_WAIT_MS = 12000;
         function queueSaveData(delayMs = 1200) {
@@ -1935,23 +1988,16 @@
             const safeContacts = sanitizeContactsForStorage(AppState.contacts);
             AppState.currentPerfStage = 'save';
             try {
-                // Guardar por perfil — cada perfil tiene su propia clave
+                // Guardar en disco via IPC — fuente de verdad, no localStorage
                 const _saveProfileId = AppState.activeProfileId || 'default';
                 const _profileContacts = safeContacts.filter(c => (c.profileId || 'default') === _saveProfileId);
-                try {
-                    localStorage.setItem(`contactsData:${_saveProfileId}`, JSON.stringify(_profileContacts));
-                } catch (_storageErr) {
-                    // Si falla por quota, intentar con menos datos
-                    try {
-                        localStorage.setItem(`contactsData:${_saveProfileId}`, JSON.stringify(_profileContacts.slice(0, 10000)));
-                        setSaveState('warn', 'Base truncada por límite de storage');
-                    } catch (_) {}
-                }
-                // También guardar en nexoStore (archivo en disco) con todos los contactos
-                if (window.nexoStore && typeof window.nexoStore.asyncSaveRequest === 'function') {
-                    window.nexoStore.asyncSaveRequest({ contactsData: safeContacts });
-                } else if (window.nexoStore && typeof window.nexoStore.patch === 'function') {
-                    await window.nexoStore.patch({ contactsData: safeContacts });
+
+                if (window.electronAPI?.saveProfile) {
+                    // IPC directo al archivo de perfil en disco
+                    await window.electronAPI.saveProfile({ profileId: _saveProfileId, contacts: _profileContacts });
+                } else if (window.nexoStore && typeof window.nexoStore.asyncSaveRequest === 'function') {
+                    // Fallback legacy — manda solo los del perfil activo
+                    window.nexoStore.asyncSaveRequest({ contactsData: _profileContacts });
                 }
                 manageAutomaticBackup();
                 maybeDownloadAutomaticBackup(`save:${reason}`);
@@ -1967,7 +2013,7 @@
                 recordStageCost('save', AppState.perfStats.saveMs);
             } catch (e) {
                 console.warn('No se pudo guardar diferido, fallback localStorage:', e);
-                try { localStorage.setItem('contactsData', JSON.stringify(safeContacts)); } catch (_) {}
+                try { localStorage.setItem(`contactsData:${AppState.activeProfileId || 'default'}`, JSON.stringify(safeContacts)); } catch (_) {}
                 setSaveState('warn', 'Guardado diferido con fallback');
                 return false;
             } finally {
@@ -1983,15 +2029,63 @@
             AppState.statsDirty = true;
             if (!deltaOnly) contactsDirty = true;
             pendingContactMutations += 1;
-            setSaveState('pending', 'Guardado diferido');
-            if (force) {
-                flushSaveQueue('forced');
-                return;
+            
+            // Guardar datos livianos en localStorage siempre
+            saveLightweightData();
+            
+            // Buffer system: acumular cambios hasta 1000 o forzar
+            contactBuffer.push(...AppState.contacts.slice(-10)); // Últimos contactos modificados
+            if (contactBuffer.length >= CONTACT_BUFFER_SIZE || force) {
+                setSaveState('pending', 'Guardando en disco...');
+                return flushSaveQueue(force ? 'force' : 'buffer-full');
+            } else {
+                setSaveState('ok', `Buffer: ${contactBuffer.length}/${CONTACT_BUFFER_SIZE} cambios`);
             }
             
-            // Zero-lag: debounce optimizado a 800ms
             queueSaveData(800);
         }
+
+        function saveLightweightData() {
+            try {
+                const profileId = AppState.activeProfileId || 'default';
+                
+                // MÉTRICAS TOTALES - no limitadas
+                localStorage.setItem(`metricEvents:${profileId}`, JSON.stringify(AppState.metricEvents || []));
+                
+                // HISTORIAL COMPLETO - 500+ movimientos
+                localStorage.setItem(`history:${profileId}`, JSON.stringify(AppState.history || []));
+                
+                // TRANSICIONES DE ESTADO COMPLETAS
+                localStorage.setItem(`statusTransitions:${profileId}`, JSON.stringify(AppState.statusTransitions || []));
+                
+                // SNAPSHOTS DE TURNOS HISTÓRICOS
+                localStorage.setItem(`shiftSnapshots:${profileId}`, JSON.stringify(AppState.shiftSnapshots || []));
+                
+                // DATOS DE RENDIMIENTO
+                localStorage.setItem(`perfStats:${profileId}`, JSON.stringify(AppState.perfStats || {}));
+                
+                console.log(`[saveLightweightData] ✅ Datos históricos completos guardados para ${profileId}`);
+            } catch (e) {
+                console.warn('Error guardando datos históricos:', e);
+                // Si localStorage se llena, guardar en disco
+                if (window.electronAPI?.saveProfileMetrics) {
+                    window.electronAPI.saveProfileMetrics({
+                        profileId: AppState.activeProfileId,
+                        metricEvents: AppState.metricEvents,
+                        history: AppState.history,
+                        statusTransitions: AppState.statusTransitions,
+                        shiftSnapshots: AppState.shiftSnapshots
+                    }).catch(diskError => console.warn('Error guardando métricas en disco:', diskError));
+                }
+            }
+        }
+
+        // Detectar cierre de aplicación
+        window.addEventListener('beforeunload', () => {
+            if (contactBuffer.length > 0) {
+                flushSaveQueue('app-closing');
+            }
+        });
 
         function compactExactDuplicatesForLargeDatasets() {
             const contacts = Array.isArray(AppState.contacts) ? AppState.contacts : [];
@@ -2025,28 +2119,39 @@
         async function loadData() {
             showLoadingOverlay('Cargando contactos…', 'Preparando base local, turnos y validaciones iniciales.');
             try {
-                // Cargar todos los perfiles en memoria, cada uno desde su clave
-                const _loadedContacts = [];
-                const _profileIds = (AppState.profiles || []).map(p => p.id || 'default');
-                if (!_profileIds.includes('default')) _profileIds.unshift('default');
-                for (const _pid of _profileIds) {
-                    const _raw = localStorage.getItem(`contactsData:${_pid}`);
+                // SOLO cargar el perfil activo desde disco via IPC
+                // Los otros perfiles se cargan al hacer switchProfile
+                const _activePid = AppState.activeProfileId || 'default';
+                let _loadedContacts = [];
+
+                if (window.electronAPI?.loadProfile) {
+                    setLoadingState(true, 'Cargando desde disco…', 5, false);
+                    const result = await window.electronAPI.loadProfile({ profileId: _activePid });
+                    if (result?.ok && Array.isArray(result.contacts)) {
+                        _loadedContacts = result.contacts;
+                        _loadedContacts.forEach(c => { if (!c.profileId) c.profileId = _activePid; });
+                        console.log(`[loadData] Perfil ${_activePid}: ${_loadedContacts.length} contactos desde disco`);
+                    }
+                }
+
+                // Fallback localStorage SOLO del perfil específico (sin mezclar perfiles)
+                if (_loadedContacts.length === 0) {
+                    const _raw = localStorage.getItem(`contactsData:${_activePid}`);
                     if (_raw) {
                         try {
                             const _parsed = JSON.parse(_raw);
                             if (Array.isArray(_parsed)) {
-                                // Asegurar que todos tienen el profileId correcto
-                                _parsed.forEach(c => { if (!c.profileId) c.profileId = _pid; });
-                                _loadedContacts.push(..._parsed);
+                                _loadedContacts = _parsed.filter(c => (c.profileId || 'default') === _activePid);
+                                _loadedContacts.forEach(c => { if (!c.profileId) c.profileId = _activePid; });
+                                console.log(`[loadData] Fallback localStorage perfil ${_activePid}: ${_loadedContacts.length} contactos`);
                             }
                         } catch (_) {}
                     }
                 }
-                // Fallback: clave legacy sin perfil
-                const _legacySaved = _loadedContacts.length === 0 ? localStorage.getItem('contactsData') : null;
-                const saved = _loadedContacts.length > 0 ? JSON.stringify(_loadedContacts) : _legacySaved;
+
+                const saved = _loadedContacts.length > 0;
                 if (saved) {
-                    AppState.contacts = typeof saved === 'string' ? JSON.parse(saved) : saved;
+                    AppState.contacts = _loadedContacts;
                     const removedByCompaction = compactExactDuplicatesForLargeDatasets();
                     if (removedByCompaction > 0) {
                         addToHistory('Compactación automática', `Se removieron ${removedByCompaction} duplicados exactos al iniciar`);
@@ -2071,7 +2176,7 @@
                     if (backupContacts) {
                         AppState.contacts = backupContacts;
                         try {
-                            localStorage.setItem('contactsData', JSON.stringify(sanitizeContactsForStorage(AppState.contacts)));
+                            localStorage.setItem(`contactsData:${AppState.activeProfileId || 'default'}`, JSON.stringify(sanitizeContactsForStorage(AppState.contacts)));
                         } catch (persistErr) {
                             reportError('loadData:backup-persist', persistErr);
                             setSaveState('warn', 'Recovery sin persistir (storage lleno)');
@@ -2103,7 +2208,7 @@
 
                     assignShifts();
                     detectDuplicates();
-                    const syncResult = syncOpsToContacts({ createNewUsers: false });
+                    const syncResult = await syncOpsToContacts({ createNewUsers: false });
                     if (syncResult.updatedCount > 0) saveData();
                     elements.uploadScreen.classList.add('hidden');
                     elements.mainApp.style.display = 'block';
@@ -2442,6 +2547,25 @@
             AppState.searchIndexDirty = false;
         }
 
+        // Agrega un único contacto al índice sin reconstruir todo
+        function addContactToIndex(contact) {
+            if (!contact || !AppState.searchIndex) return;
+            const idx = AppState.searchIndex;
+            buildContactDerivedFields(contact);
+            const id = contact.id;
+            // Evitar duplicados si ya estaba
+            if (!idx.byId.has(id)) idx.allIds.push(id);
+            idx.byId.set(id, contact);
+            mapPush(idx.byStatus, normalizeSearchText(contact.status), id);
+            mapPush(idx.byShift, normalizeSearchText(contact.assignedShift), id);
+            mapPush(idx.byProfile, String(contact.profileId || 'default'), id);
+            const phoneType = hasMissingUsername(contact) ? 'missing-user' : (contact.phoneAlert ? 'suspicious' : ((contact.phone || '').trim() ? 'with' : 'without'));
+            mapPush(idx.byPhoneType, phoneType, id);
+            mapPush(idx.byOrigin, normalizeSearchText(contact.origin), id);
+            const searchTokens = String(contact._searchKey || '').split(/\s+/).filter(Boolean);
+            for (const token of searchTokens) mapPush(idx.bySearchToken, token, id);
+        }
+
         function intersectIds(baseIds, allowedSet) {
             if (!allowedSet) return baseIds;
             return baseIds.filter((id) => allowedSet.has(id));
@@ -2583,6 +2707,42 @@
             if (from !== 'sin revisar' && to === 'sin revisar') dec('reviewed');
         }
 
+        function calculateCurrentShiftSpeed() {
+            const now = new Date();
+            const hour = now.getHours();
+            
+            // Determine current shift
+            let currentShift;
+            if (hour >= 6 && hour < 14) currentShift = 'tm';
+            else if (hour >= 14 && hour < 22) currentShift = 'tt';
+            else currentShift = 'tn';
+            
+            // Get shift start time
+            let shiftStart;
+            if (currentShift === 'tm') shiftStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 6, 0, 0);
+            else if (currentShift === 'tt') shiftStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 14, 0, 0);
+            else {
+                // TN shift can start previous day at 22:00 or today at 22:00
+                if (hour >= 22) shiftStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 22, 0, 0);
+                else shiftStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 22, 0, 0);
+            }
+            
+            const hoursWorked = Math.max(0.1, (now - shiftStart) / (1000 * 60 * 60)); // Minimum 0.1h to avoid division by zero
+            
+            // Count status changes in current shift from metricEvents
+            const shiftEvents = (AppState.metricEvents || []).filter(event => {
+                const eventTime = new Date(event.timestamp);
+                return eventTime >= shiftStart && 
+                       event.type === 'status_change' && 
+                       event.payload?.newStatus !== 'sin revisar';
+            });
+            
+            const usersProcessed = shiftEvents.length;
+            const usersPerHour = Math.round(usersProcessed / hoursWorked);
+            
+            return usersPerHour;
+        }
+
         function updateStats() {
             const activeProfile = AppState.activeProfileId || 'default';
             const profileContacts = AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile);
@@ -2621,6 +2781,11 @@
             const totalDuplicateEntries = (AppState.duplicates || []).reduce((sum, group) => sum + group.contacts.filter(c => (c.profileId || 'default') === activeProfile).length, 0);
             $('#duplicatesCount').textContent = totalDuplicateEntries;
 
+            // Speed counter: users/hour calculation
+            const speedCount = calculateCurrentShiftSpeed();
+            const speedEl = $('#speedCount');
+            if (speedEl) speedEl.textContent = speedCount;
+
             updateExportUrgencyBadge();
             const progressPercentage = totals.total > 0 ? Math.round((totals.reviewed / totals.total) * 100) : 0;
 
@@ -2629,12 +2794,132 @@
             $('#progressPercentage').textContent = `${progressPercentage}%`;
             $('#progressFill').style.width = `${progressPercentage}%`;
 
+            // Check for shift completion and show summary
+            checkShiftCompletion(progressPercentage, totals);
+
             const uniqueOrigins = [...originSet].sort();
             const lastUploadLabel = AppState.lastImportFileName ? `Última subida (${AppState.lastImportFileName})` : 'Última subida';
             elements.originFilter.innerHTML = '<option value="">Todos los orígenes</option>' +
                 `<option value="__last_upload__">${lastUploadLabel}</option>` +
                 uniqueOrigins.map(o => `<option value="${o}">${o}</option>`).join('');
             elements.originFilter.value = AppState.originFilter;
+        }
+
+        function checkShiftCompletion(progressPercentage, totals) {
+            // Only check for completion if we have a reasonable amount of contacts
+            if (totals.total < 10) return;
+            
+            // Check if we just reached high completion (95%+) and haven't shown summary recently
+            const completionThreshold = 95;
+            const lastSummaryKey = `lastShiftSummary:${AppState.activeProfileId || 'default'}`;
+            const lastSummaryTime = localStorage.getItem(lastSummaryKey);
+            const now = Date.now();
+            
+            // Don't show summary more than once per hour
+            if (lastSummaryTime && (now - parseInt(lastSummaryTime)) < 60 * 60 * 1000) return;
+            
+            if (progressPercentage >= completionThreshold) {
+                // Determine current shift
+                const hour = new Date().getHours();
+                let currentShift;
+                if (hour >= 6 && hour < 14) currentShift = 'TM';
+                else if (hour >= 14 && hour < 22) currentShift = 'TT';
+                else currentShift = 'TN';
+                
+                // Show completion summary
+                showShiftCompletionSummary(currentShift, totals);
+                localStorage.setItem(lastSummaryKey, String(now));
+            }
+        }
+        
+        function showShiftCompletionSummary(shift, totals) {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed;
+                inset: 0;
+                background: rgba(0,0,0,0.7);
+                z-index: 99999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                animation: fadeIn 0.3s ease;
+            `;
+            
+            const completionPct = totals.total > 0 ? Math.round((totals.reviewed / totals.total) * 100) : 0;
+            
+            overlay.innerHTML = `
+                <div style="
+                    background: var(--bg-card);
+                    border: 2px solid var(--accent);
+                    border-radius: 16px;
+                    padding: 24px 28px;
+                    max-width: 420px;
+                    text-align: center;
+                    animation: slideUp 0.4s ease;
+                ">
+                    <div style="font-size: 2rem; margin-bottom: 8px;">🎉</div>
+                    <div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 8px; color: var(--accent);">
+                        ¡Turno ${shift} completado!
+                    </div>
+                    <div style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px;">
+                        Resumen de tu trabajo:
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                        <div style="background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); border-radius: 8px; padding: 8px;">
+                            <div style="font-weight: 700; color: #10b981; font-size: 1.2rem;">${totals.reviewed}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Revisados</div>
+                        </div>
+                        <div style="background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; padding: 8px;">
+                            <div style="font-weight: 700; color: #3b82f6; font-size: 1.2rem;">${totals.contactado}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Contactados</div>
+                        </div>
+                        <div style="background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 8px;">
+                            <div style="font-weight: 700; color: #f59e0b; font-size: 1.2rem;">${totals.sinWsp}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Sin WhatsApp</div>
+                        </div>
+                        <div style="background: rgba(139,92,246,0.15); border: 1px solid rgba(139,92,246,0.3); border-radius: 8px; padding: 8px;">
+                            <div style="font-weight: 700; color: #8b5cf6; font-size: 1.2rem;">${totals.jugando}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Jugando</div>
+                        </div>
+                    </div>
+                    <div style="background: rgba(var(--accent-rgb,99,102,241),0.1); border-radius: 8px; padding: 8px; margin-bottom: 12px;">
+                        <div style="font-weight: 700; color: var(--accent); font-size: 1.1rem;">${completionPct}% completado</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">¡Excelente trabajo!</div>
+                    </div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);">
+                        El siguiente operador verá este estado al entrar
+                    </div>
+                </div>
+            `;
+            
+            // Add CSS animations
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+            `;
+            document.head.appendChild(style);
+            
+            document.body.appendChild(overlay);
+            
+            // Auto-remove after 3 seconds
+            setTimeout(() => {
+                overlay.style.animation = 'fadeIn 0.3s ease reverse';
+                setTimeout(() => {
+                    if (overlay.parentNode) {
+                        document.body.removeChild(overlay);
+                        document.head.removeChild(style);
+                    }
+                }, 300);
+            }, 3000);
+            
+            // Click to dismiss
+            overlay.onclick = () => {
+                if (overlay.parentNode) {
+                    document.body.removeChild(overlay);
+                    document.head.removeChild(style);
+                }
+            };
         }
 
         function calculateStats() {
@@ -2690,6 +2975,53 @@
             if (hour >= 6 && hour < 14) return 'tm';
             if (hour >= 14 && hour < 22) return 'tt';
             return 'tn';
+        }
+
+        // Returns { from: Date, to: Date } for the requested shift on a reference date.
+        // TN (22:00-06:00) spans midnight: it starts the previous evening.
+        function getShiftDateRange(shiftKey, referenceDate = new Date()) {
+            const d = new Date(referenceDate);
+            const y = d.getFullYear(), mo = d.getMonth(), day = d.getDate();
+            if (shiftKey === 'tm') return { from: new Date(y, mo, day, 6, 0, 0), to: new Date(y, mo, day, 13, 59, 59, 999) };
+            if (shiftKey === 'tt') return { from: new Date(y, mo, day, 14, 0, 0), to: new Date(y, mo, day, 21, 59, 59, 999) };
+            // TN: 22:00 of previous calendar day → 05:59:59 of referenceDate
+            const prevDay = new Date(y, mo, day - 1);
+            return {
+                from: new Date(prevDay.getFullYear(), prevDay.getMonth(), prevDay.getDate(), 22, 0, 0),
+                to: new Date(y, mo, day, 5, 59, 59, 999)
+            };
+        }
+
+        // Daily log: archive buttonPressEvents + metricEvents into a per-shift log key at rotation time
+        function archiveShiftDailyLog(shiftKey) {
+            try {
+                const pid = AppState.activeProfileId || 'default';
+                const logKey = `shiftDailyLog:${pid}`;
+                let logs = [];
+                try { logs = JSON.parse(localStorage.getItem(logKey) || '[]'); } catch (_) {}
+                const range = getShiftDateRange(shiftKey, new Date());
+                const events = (AppState.metricEvents || []).filter(e => {
+                    const t = new Date(e.at || 0).getTime();
+                    return t >= range.from.getTime() && t <= range.to.getTime() && String(e.shift || '').toLowerCase() === shiftKey;
+                });
+                const transitions = (AppState.statusTransitions || []).filter(t => {
+                    const ts = new Date(t.at || 0).getTime();
+                    return ts >= range.from.getTime() && ts <= range.to.getTime() && String(t.shift || '').toLowerCase() === shiftKey;
+                });
+                const entry = {
+                    shift: shiftKey,
+                    archivedAt: new Date().toISOString(),
+                    rangeFrom: range.from.toISOString(),
+                    rangeTo: range.to.toISOString(),
+                    totalActions: events.length,
+                    totalTransitions: transitions.length,
+                    statusSummary: transitions.reduce((acc, t) => { acc[t.to] = (acc[t.to] || 0) + 1; return acc; }, {}),
+                    events: events.slice(0, 3000)
+                };
+                logs.unshift(entry);
+                if (logs.length > 90) logs = logs.slice(0, 90); // keep ~30 days × 3 shifts
+                localStorage.setItem(logKey, JSON.stringify(logs));
+            } catch (e) { console.warn('archiveShiftDailyLog error', e); }
         }
 
         function inferShiftFromIso(isoString) {
@@ -3209,6 +3541,7 @@
             }
         };
         
+
         function fallbackCopy(text) {
             try {
                 const textarea = document.createElement('textarea');
@@ -3448,8 +3781,50 @@
                 localStorage.setItem('activeThemeId', AppState.activeThemeId || 'whaticket-blue');
                 localStorage.setItem('lightMode', AppState.lightMode ? '1' : '0');
                 localStorage.setItem('profilePageMap', JSON.stringify(AppState.profilePageMap || {}));
+                
+                // SEPARACIÓN ESTRICTA: Guardar contactos del perfil activo automáticamente
+                saveCurrentProfileContacts();
             } catch (e) {
                 console.error('Error al guardar preferencias:', e);
+                // Graceful degradation: try saving only essential preferences
+                try {
+                    localStorage.setItem('activeProfileId', AppState.activeProfileId || 'default');
+                    localStorage.setItem('operatorName', AppState.operatorName || 'PC local');
+                    localStorage.setItem('activeThemeId', AppState.activeThemeId || 'whaticket-blue');
+                    localStorage.setItem('lightMode', AppState.lightMode ? '1' : '0');
+                } catch (e2) {
+                    console.warn('No se pudieron guardar preferencias básicas:', e2);
+                }
+            }
+        }
+
+        function saveCurrentProfileContacts() {
+            if (!AppState.activeProfileId) return;
+            
+            try {
+                const profileContacts = AppState.contacts.filter(c => 
+                    (c.profileId || 'default') === AppState.activeProfileId
+                );
+                
+                if (window.electronAPI?.saveProfile) {
+                    // Async save via IPC (no await to avoid blocking UI)
+                    window.electronAPI.saveProfile({ 
+                        profileId: AppState.activeProfileId, 
+                        contacts: profileContacts 
+                    }).catch(e => console.warn('[saveCurrentProfileContacts] IPC save failed:', e));
+                } else {
+                    // Fallback localStorage con manejo de errores mejorado
+                    try {
+                        localStorage.setItem(`contactsData:${AppState.activeProfileId}`, JSON.stringify(profileContacts));
+                    } catch (storageError) {
+                        console.warn('[saveCurrentProfileContacts] localStorage lleno, omitiendo guardado automático');
+                        // No intentar limpiar aquí para evitar interferir con el flujo normal
+                    }
+                }
+                
+                console.log(`[saveCurrentProfileContacts] Guardados ${profileContacts.length} contactos del perfil ${AppState.activeProfileId}`);
+            } catch (error) {
+                console.warn('[saveCurrentProfileContacts] Error:', error);
             }
         }
 
@@ -3624,73 +3999,129 @@
 
         function drawDonut(canvas, entries, colors) {
             if (!canvas || !canvas.getContext) return;
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.parentElement?.getBoundingClientRect() || { width: 280, height: 200 };
+            const cssW = Math.max(240, Math.floor(rect.width));
+            const cssH = Math.max(180, 200);
+            canvas.width = cssW * dpr;
+            canvas.height = cssH * dpr;
+            canvas.style.width = cssW + 'px';
+            canvas.style.height = cssH + 'px';
             const ctx = canvas.getContext('2d');
-            const w = canvas.width, h = canvas.height;
-            ctx.clearRect(0, 0, w, h);
+            ctx.scale(dpr, dpr);
+            ctx.clearRect(0, 0, cssW, cssH);
             const total = entries.reduce((a, b) => a + b.value, 0);
-            if (!total) { ctx.fillStyle = '#94a3b8'; ctx.fillText('Sin datos', 12, 20); return; }
+            if (!total) { ctx.fillStyle = '#94a3b8'; ctx.font = '13px sans-serif'; ctx.fillText('Sin datos', 12, 24); return; }
             let start = -Math.PI / 2;
-            const cx = 90, cy = 90, r = 64;
+            const cx = 80, cy = cssH / 2, r = Math.min(70, cssH / 2 - 10);
+            const innerR = r * 0.52;
             entries.forEach((entry, idx) => {
                 const angle = (entry.value / total) * Math.PI * 2;
                 ctx.beginPath();
-                ctx.moveTo(cx, cy);
+                ctx.moveTo(cx + Math.cos(start) * innerR, cy + Math.sin(start) * innerR);
                 ctx.arc(cx, cy, r, start, start + angle);
+                ctx.arc(cx, cy, innerR, start + angle, start, true);
                 ctx.closePath();
                 ctx.fillStyle = colors[idx % colors.length];
                 ctx.fill();
                 start += angle;
             });
-            ctx.globalCompositeOperation = 'destination-out';
-            ctx.beginPath();
-            ctx.arc(cx, cy, 34, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.fillStyle = '#cbd5e1';
-            ctx.font = '12px sans-serif';
-            entries.slice(0, 5).forEach((entry, idx) => {
-                ctx.fillText(`${entry.label} ${Math.round((entry.value / total) * 100)}%`, 180, 22 + (idx * 18));
+            // Center total
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(String(total), cx, cy + 2);
+            ctx.font = '10px sans-serif';
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillText('total', cx, cy + 15);
+            ctx.textAlign = 'left';
+            // Legend on the right
+            const legendX = cx + r + 20;
+            const availableWidth = cssW - legendX - 10;
+            const legendStartY = Math.max(14, cy - entries.slice(0, 6).length * 11);
+            ctx.font = '11px sans-serif';
+            entries.slice(0, 6).forEach((entry, idx) => {
+                const y = legendStartY + idx * 20;
+                ctx.fillStyle = colors[idx % colors.length];
+                ctx.beginPath();
+                ctx.arc(legendX, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#e2e8f0';
+                const pct = Math.round((entry.value / total) * 100);
+                // Smart text wrapping for long labels
+                let label = entry.label;
+                const maxChars = Math.floor(availableWidth / 6.5); // Approximate chars that fit
+                if (label.length > maxChars) {
+                    label = label.slice(0, maxChars - 1) + '…';
+                }
+                ctx.fillText(`${label} ${pct}%`, legendX + 10, y + 3);
+                // Value on next line if label is long
+                if (entry.label.length > 12) {
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '10px sans-serif';
+                    ctx.fillText(`(${entry.value})`, legendX + 10, y + 14);
+                    ctx.font = '11px sans-serif';
+                } else {
+                    ctx.fillText(` (${entry.value})`, legendX + 10 + ctx.measureText(`${label} ${pct}%`).width, y + 3);
+                }
             });
         }
 
         function drawBars(canvas, entries, color = '#3b82f6') {
             if (!canvas || !canvas.getContext) return;
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.parentElement?.getBoundingClientRect() || { width: 500, height: 200 };
+            const visibleEntries = entries.slice(0, 10);
+            const barH = 22;
+            const gap = 6;
+            const cssW = Math.max(300, Math.floor(rect.width));
+            const cssH = Math.max(120, visibleEntries.length * (barH + gap) + 20);
+            canvas.width = cssW * dpr;
+            canvas.height = cssH * dpr;
+            canvas.style.width = cssW + 'px';
+            canvas.style.height = cssH + 'px';
             const ctx = canvas.getContext('2d');
-            const w = canvas.width, h = canvas.height;
-            ctx.clearRect(0, 0, w, h);
-            if (!entries.length) { ctx.fillStyle = '#94a3b8'; ctx.fillText('Sin datos', 12, 20); return; }
-            const max = Math.max(1, ...entries.map((e) => e.value));
-            const barW = Math.max(16, Math.floor((w - 40) / Math.max(1, entries.length)) - 8);
-            entries.slice(0, 12).forEach((entry, idx) => {
-                const x = 20 + idx * (barW + 8);
-                const bh = Math.max(2, Math.round((entry.value / max) * (h - 50)));
-                const y = h - 24 - bh;
-                const grad = ctx.createLinearGradient(x, y, x + barW, y + bh);
-                grad.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--accent-primary').trim() || color);
-                grad.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--accent-secondary').trim() || '#10b981');
+            ctx.scale(dpr, dpr);
+            ctx.clearRect(0, 0, cssW, cssH);
+            if (!visibleEntries.length) { ctx.fillStyle = '#94a3b8'; ctx.font = '13px sans-serif'; ctx.fillText('Sin datos', 12, 24); return; }
+            const max = Math.max(1, ...visibleEntries.map(e => e.value));
+            const labelW = 120;
+            const barAreaW = cssW - labelW - 60;
+            const gradColors = ['#3b82f6', '#10b981'];
+            visibleEntries.forEach((entry, idx) => {
+                const y = 8 + idx * (barH + gap);
+                const bw = Math.max(4, Math.round((entry.value / max) * barAreaW));
+                // Label
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = '11px sans-serif';
+                ctx.textAlign = 'right';
+                const label = entry.label.length > 16 ? entry.label.slice(0, 15) + '…' : entry.label;
+                ctx.fillText(label, labelW - 8, y + barH / 2 + 4);
+                // Bar
+                const grad = ctx.createLinearGradient(labelW, y, labelW + bw, y);
+                grad.addColorStop(0, gradColors[0]);
+                grad.addColorStop(1, gradColors[1]);
                 ctx.fillStyle = grad;
-                const radius = 6;
+                const radius = 4;
                 ctx.beginPath();
-                ctx.moveTo(x + radius, y);
-                ctx.lineTo(x + barW - radius, y);
-                ctx.quadraticCurveTo(x + barW, y, x + barW, y + radius);
-                ctx.lineTo(x + barW, y + bh - radius);
-                ctx.quadraticCurveTo(x + barW, y + bh, x + barW - radius, y + bh);
-                ctx.lineTo(x + radius, y + bh);
-                ctx.quadraticCurveTo(x, y + bh, x, y + bh - radius);
-                ctx.lineTo(x, y + radius);
-                ctx.quadraticCurveTo(x, y, x + radius, y);
+                ctx.moveTo(labelW + radius, y);
+                ctx.lineTo(labelW + bw - radius, y);
+                ctx.quadraticCurveTo(labelW + bw, y, labelW + bw, y + radius);
+                ctx.lineTo(labelW + bw, y + barH - radius);
+                ctx.quadraticCurveTo(labelW + bw, y + barH, labelW + bw - radius, y + barH);
+                ctx.lineTo(labelW + radius, y + barH);
+                ctx.quadraticCurveTo(labelW, y + barH, labelW, y + barH - radius);
+                ctx.lineTo(labelW, y + radius);
+                ctx.quadraticCurveTo(labelW, y, labelW + radius, y);
                 ctx.closePath();
                 ctx.fill();
-                ctx.fillStyle = '#cbd5e1';
-                ctx.font = '10px sans-serif';
-                ctx.fillText(String(entry.value), x, y - 4);
-                ctx.save();
-                ctx.translate(x + 2, h - 8);
-                ctx.rotate(-0.35);
-                ctx.fillText(entry.label.slice(0, 14), 0, 0);
-                ctx.restore();
+                // Value
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = 'bold 11px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText(String(entry.value), labelW + bw + 6, y + barH / 2 + 4);
             });
+            ctx.textAlign = 'left';
         }
 
         function getDuplicateReason(group) {
@@ -4327,12 +4758,7 @@
                 };
             }
             if (elements.closeProfilesModal) elements.closeProfilesModal.onclick = () => elements.profilesModal && elements.profilesModal.classList.remove('active');
-            if (elements.splitImportByFileToggle) {
-                elements.splitImportByFileToggle.onchange = (e) => {
-                    AppState.splitImportByFile = !!e.target.checked;
-                    localStorage.setItem('splitImportByFile', AppState.splitImportByFile ? '1' : '0');
-                };
-            }
+            // splitImportByFile toggle removed — import always goes to activeProfileId
             const hashPreviewShort = (value) => {
                 if (!value) return '';
                 const raw = String(value).trim();
@@ -4918,6 +5344,7 @@
 
             const startMidnightControlScheduler = () => {
                 updateMidnightButtonState();
+                let lastCheckedShift = getLocalCompetitionShift(new Date());
                 setInterval(() => {
                     const now = new Date();
                     const dateKey = now.toISOString().slice(0, 10);
@@ -4928,21 +5355,47 @@
                         updateMidnightButtonState();
                         exportControlFile('auto');
                     }
+                    // Archive shift log when shift boundary is crossed
+                    const currentShift = getLocalCompetitionShift(now);
+                    if (currentShift !== lastCheckedShift) {
+                        // Archive the shift that just ended
+                        archiveShiftDailyLog(lastCheckedShift);
+                        lastCheckedShift = currentShift;
+                    }
                 }, 30000);
             };
 
             const getFilteredMetricEvents = () => {
-                const from = elements.metricsFromDate?.value ? new Date(`${elements.metricsFromDate.value}T00:00:00`).getTime() : 0;
-                const to = elements.metricsToDate?.value ? new Date(`${elements.metricsToDate.value}T23:59:59`).getTime() : Number.MAX_SAFE_INTEGER;
                 const shift = elements.metricsShiftFilter?.value || 'all';
-                const hourRange = AppState.metricsHourRange;
                 const status = elements.metricsStatusFilter?.value || 'all';
                 const selectionType = elements.metricsSelectionTypeFilter?.value || 'all';
                 const onlyChanges = !!elements.metricsOnlyChanges?.checked;
+                const pid = AppState.activeProfileId || 'default';
+
+                // Compute time bounds. For TN shift we need cross-midnight range.
+                let fromTs = 0;
+                let toTs = Number.MAX_SAFE_INTEGER;
+
+                const fromVal = elements.metricsFromDate?.value;
+                const toVal = elements.metricsToDate?.value;
+
+                if (shift !== 'all' && (fromVal || toVal)) {
+                    // Use the shift's natural time range for the selected date
+                    const refDate = toVal ? new Date(`${toVal}T12:00:00`) : new Date(`${fromVal}T12:00:00`);
+                    const range = getShiftDateRange(shift, refDate);
+                    fromTs = range.from.getTime();
+                    toTs = range.to.getTime();
+                } else {
+                    if (fromVal) fromTs = new Date(`${fromVal}T00:00:00`).getTime();
+                    if (toVal) toTs = new Date(`${toVal}T23:59:59`).getTime();
+                }
+
+                const hourRange = AppState.metricsHourRange;
+
                 return (AppState.metricEvents || []).filter((ev) => {
-                    if ((ev.profileId || 'default') !== (AppState.activeProfileId || 'default')) return false;
+                    if ((ev.profileId || 'default') !== pid) return false;
                     const at = new Date(ev.at || 0).getTime();
-                    if (!Number.isFinite(at) || at < from || at > to) return false;
+                    if (!Number.isFinite(at) || at < fromTs || at > toTs) return false;
                     if (hourRange && Number.isFinite(hourRange.from) && Number.isFinite(hourRange.to)) {
                         const dt = new Date(at);
                         const h = dt.getHours() + (dt.getMinutes() / 60);
@@ -5065,10 +5518,20 @@
             if (elements.showQuickMetricsOption) {
                 elements.showQuickMetricsOption.onclick = () => {
                     const now = new Date();
-                    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 10);
-                    if (elements.metricsFromDate) elements.metricsFromDate.value = today;
-                    if (elements.metricsToDate) elements.metricsToDate.value = today;
+                    const currentShift = getLocalCompetitionShift(now);
+                    const shiftRange = getShiftDateRange(currentShift, now);
+
+                    // Set date pickers to match the real calendar dates covered by this shift
+                    const fromDate = shiftRange.from.toISOString().slice(0, 10);
+                    const toDate = shiftRange.to.toISOString().slice(0, 10);
+                    if (elements.metricsFromDate) elements.metricsFromDate.value = fromDate;
+                    if (elements.metricsToDate) elements.metricsToDate.value = toDate;
                     AppState.metricsHourRange = null;
+
+                    // Auto-select current shift pill
+                    window.setMetricsShift(currentShift);
+
+                    const today = now.toISOString().slice(0, 10);
                     const yesterdayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
                     const yesterday = yesterdayDate.toISOString().slice(0, 10);
                     const dayFromIso = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : '');
@@ -5085,8 +5548,22 @@
                         if (byShift[shiftKey] !== undefined && day === today) byShift[shiftKey]++;
                     });
 
-                    const transitions24h = (AppState.statusTransitions || []).filter((t) => withinLastHours(t.at, 24));
-                    const buttons24h = (AppState.buttonPressEvents || []).filter((t) => withinLastHours(t.at, 24));
+                    // Compute shift-aware 24h window for transitions/buttons
+                    const shiftFromTs = shiftRange.from.getTime();
+                    const shiftToTs = shiftRange.to.getTime();
+                    const pid = AppState.activeProfileId || 'default';
+
+                    const transitionsShift = (AppState.statusTransitions || []).filter((t) => {
+                        const ts = new Date(t.at || 0).getTime();
+                        return ts >= shiftFromTs && ts <= shiftToTs && (t.profileId || 'default') === pid;
+                    });
+                    const buttonsShift = (AppState.buttonPressEvents || []).filter((t) => {
+                        const ts = new Date(t.at || 0).getTime();
+                        return ts >= shiftFromTs && ts <= shiftToTs && (t.profileId || 'default') === pid;
+                    });
+                    const transitions24h = (AppState.statusTransitions || []).filter((t) => withinLastHours(t.at, 24) && (t.profileId || 'default') === pid);
+                    const buttons24h = (AppState.buttonPressEvents || []).filter((t) => withinLastHours(t.at, 24) && (t.profileId || 'default') === pid);
+
                     const shiftTotals = {};
                     transitions24h.forEach((t) => {
                         const key = String(t.shift || 'sin-turno').toLowerCase();
@@ -5097,22 +5574,28 @@
                     });
                     const topShift = Object.values(shiftTotals).sort((a,b) => b.total-a.total)[0] || null;
                     const topShiftText = topShift ? `${String(topShift.shift).toUpperCase()} (${topShift.total})` : 'sin datos';
-                    const buttonsPerHour = Math.round(((buttons24h.length / 24) + Number.EPSILON) * 100) / 100;
+
+                    // Shift duration in hours for rate calc
+                    const shiftDurationHours = (shiftToTs - shiftFromTs) / 3600000;
+                    const shiftElapsedHours = Math.min(shiftDurationHours, (now.getTime() - shiftFromTs) / 3600000);
+                    const buttonsPerHour = shiftElapsedHours > 0 ? Math.round(((buttonsShift.length / shiftElapsedHours) + Number.EPSILON) * 100) / 100 : 0;
+
                     const filteredEvents = getFilteredMetricEvents();
                     const opTotal = filteredEvents.filter((e) => ['operation_created', 'status_changed'].includes(e.type)).length;
                     const newUsers = filteredEvents.filter((e) => e.type === 'user_created').length;
                     const statusChanges = filteredEvents.filter((e) => e.type === 'status_changed').length;
                     const usersInRange = new Set(filteredEvents.map((e) => e.contactId).filter(Boolean)).size;
 
-                    if (elements.metricsDateLabel) elements.metricsDateLabel.textContent = `Métricas de las últimas 24h`;
+                    const shiftLabel = { tm: 'TM (06-14)', tt: 'TT (14-22)', tn: 'TN (22-06)' }[currentShift] || currentShift.toUpperCase();
+                    if (elements.metricsDateLabel) elements.metricsDateLabel.textContent = `Turno actual: ${shiftLabel} · ${transitionsShift.length} movimientos`;
                     if (elements.metricsOpsSummary) {
                         const opsSummary = getOpsSummaryForMetrics();
-                        elements.metricsOpsSummary.textContent = `Movimientos ops hoy: ${opsSummary.day} · turno ${String(opsSummary.shiftNow || "-").toUpperCase()}: ${opsSummary.shift}`;
+                        elements.metricsOpsSummary.textContent = `Ops turno: ${opsSummary.shift} · ops hoy: ${opsSummary.day} · turno ${String(opsSummary.shiftNow || '-').toUpperCase()}`;
                     }
-                    if (elements.metricEditedToday) elements.metricEditedToday.textContent = String(opTotal || editedToday);
+                    if (elements.metricEditedToday) elements.metricEditedToday.textContent = String(opTotal || transitionsShift.length || editedToday);
                     if (elements.metricEditedYesterday) elements.metricEditedYesterday.textContent = String(usersInRange || editedYesterday);
                     if (elements.metricTopShift) elements.metricTopShift.textContent = topShiftText;
-                    if (elements.metricTransitions24h) elements.metricTransitions24h.textContent = String(statusChanges || transitions24h.length);
+                    if (elements.metricTransitions24h) elements.metricTransitions24h.textContent = String(statusChanges || transitionsShift.length);
                     if (elements.metricTopShift24h) elements.metricTopShift24h.textContent = topShiftText;
                     if (elements.metricButtonsPerHour) elements.metricButtonsPerHour.textContent = String(buttonsPerHour || newUsers);
                     const allTransitions = buildTransitionSummary();
@@ -5157,11 +5640,17 @@
                             shiftRich[key].total += 1;
                             shiftRich[key].byTo[row.to] = (shiftRich[key].byTo[row.to] || 0) + 1;
                         });
-                        const sorted = Object.values(shiftRich).sort((a, b) => b.total - a.total);
+                        // Highlight current shift
+                        const sorted = Object.values(shiftRich).sort((a, b) => {
+                            if (a.shift === currentShift) return -1;
+                            if (b.shift === currentShift) return 1;
+                            return b.total - a.total;
+                        });
                         const cards = sorted.map((row) => {
                             const topStates = Object.entries(row.byTo).sort((a, b) => b[1] - a[1]).slice(0, 3);
                             const lines = topStates.map(([status, amount]) => `${status}: ${amount}`).join(' · ');
-                            return `<div class="metrics-card"><div class="k">${String(row.shift).toUpperCase()} ${row.total} usuarios</div><div class="v">${row.total}</div><div class="k">${lines || 'Sin cambios'}</div></div>`;
+                            const isCurrent = row.shift === currentShift;
+                            return `<div class="metrics-card${isCurrent ? ' metrics-card-active' : ''}"><div class="k">${String(row.shift).toUpperCase()}${isCurrent ? ' ★' : ''} ${row.total} usuarios</div><div class="v">${row.total}</div><div class="k">${lines || 'Sin cambios'}</div></div>`;
                         });
                         elements.metricShiftBreakdown.innerHTML = cards.length ? cards.join('') : '<div style="color:var(--text-secondary)">Sin datos por turno en 24h.</div>';
                         if (elements.metricShiftRanking) {
@@ -5171,7 +5660,8 @@
                                 const top = sorted[0];
                                 const lines = sorted.map((row, idx) => {
                                     const topStates = Object.entries(row.byTo).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([st, qty]) => `${st} ${qty}`).join(', ');
-                                    return `${idx + 1}º ${String(row.shift).toUpperCase()} ${row.total} usuarios${topStates ? ` — ${topStates}` : ''}`;
+                                    const isCurr = row.shift === currentShift ? ' ← actual' : '';
+                                    return `${idx + 1}º ${String(row.shift).toUpperCase()} ${row.total} usuarios${topStates ? ` — ${topStates}` : ''}${isCurr}`;
                                 });
                                 elements.metricShiftRanking.innerHTML = `<div><strong>${String(top.shift).toUpperCase()} 1er puesto:</strong> ${top.total} usuarios</div><div style="margin-top:6px">${lines.join('<br>')}</div>`;
                             }
@@ -5194,9 +5684,287 @@
 
                     renderMetricChartsFromEvents();
 
+                    updateMetricsProfileBadge();
                     if (elements.metricsModal) elements.metricsModal.classList.add('active');
                 };
             }
+
+            // ── Centro de Mando: tabs y comparación de perfiles ─────────────
+            window.switchMetricsTab = (tab) => {
+                ['operator','supervisor','compare','export'].forEach(t => {
+                    const btn = document.getElementById(`metricsTab${t.charAt(0).toUpperCase()+t.slice(1)}`);
+                    const content = document.getElementById(`metricsTabContent${t.charAt(0).toUpperCase()+t.slice(1)}`);
+                    if (btn) btn.classList.toggle('active', t === tab);
+                    if (content) content.classList.toggle('active', t === tab);
+                });
+                if (tab === 'compare') renderProfileCompare();
+                if (tab === 'supervisor') window.renderShiftDailyLogs();
+            };
+
+            let currentMetricsFilter = 'today';
+            
+            window.setMetricsHistoryFilter = (filter) => {
+                currentMetricsFilter = filter;
+                // Update button states
+                ['filterToday', 'filterYesterday', 'filterDayBefore', 'filterWeek', 'filterMonth'].forEach(id => {
+                    const btn = document.getElementById(id);
+                    if (btn) btn.classList.toggle('active', id === 'filter' + filter.charAt(0).toUpperCase() + filter.slice(1));
+                });
+                window.renderMetricsHistory();
+            };
+
+            window.renderMetricsHistory = () => {
+                const container = document.getElementById('metricsHistoryContainer');
+                const summaryBar = document.getElementById('metricsHistorySummary');
+                if (!container) return;
+                
+                const events = AppState.metricEvents || [];
+                if (!events.length) {
+                    container.innerHTML = '<div style="color:var(--text-secondary);font-size:.85rem;">No hay actividad registrada aún.</div>';
+                    if (summaryBar) summaryBar.style.display = 'none';
+                    return;
+                }
+
+                // Calculate date range based on filter
+                const now = new Date();
+                let fromDate, toDate;
+                
+                if (currentMetricsFilter === 'today') {
+                    fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                } else if (currentMetricsFilter === 'yesterday') {
+                    fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+                    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                } else if (currentMetricsFilter === 'dayBefore') {
+                    fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2);
+                    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+                } else if (currentMetricsFilter === 'week') {
+                    fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+                    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                } else if (currentMetricsFilter === 'month') {
+                    fromDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+                    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                } else if (currentMetricsFilter === 'custom') {
+                    const fromEl = document.getElementById('customFromDate');
+                    const toEl = document.getElementById('customToDate');
+                    if (fromEl?.value) fromDate = new Date(fromEl.value + 'T00:00:00');
+                    if (toEl?.value) toDate = new Date(toEl.value + 'T23:59:59');
+                }
+
+                // Filter events by date range
+                const filtered = events.filter(e => {
+                    const eventDate = new Date(e.timestamp);
+                    return (!fromDate || eventDate >= fromDate) && (!toDate || eventDate <= toDate);
+                });
+
+                // Group by day
+                const byDay = {};
+                filtered.forEach(e => {
+                    const day = new Date(e.timestamp).toISOString().split('T')[0];
+                    if (!byDay[day]) byDay[day] = [];
+                    byDay[day].push(e);
+                });
+
+                // Summary
+                if (summaryBar) {
+                    if (filtered.length) {
+                        const actionTypes = {};
+                        filtered.forEach(e => {
+                            actionTypes[e.type] = (actionTypes[e.type] || 0) + 1;
+                        });
+                        const topActions = Object.entries(actionTypes).sort((a, b) => b[1] - a[1]).slice(0, 4)
+                            .map(([type, count]) => `<span style="font-weight:600;">${type}</span>: ${count}`).join(' · ');
+                        summaryBar.innerHTML = `<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                            <span><i class="fas fa-calendar"></i> <strong>${Object.keys(byDay).length}</strong> días</span>
+                            <span><i class="fas fa-bolt"></i> <strong>${filtered.length}</strong> acciones</span>
+                        </div>${topActions ? `<div style="margin-top:6px;color:var(--text-secondary);font-size:.82rem;">${topActions}</div>` : ''}`;
+                        summaryBar.style.display = 'block';
+                    } else {
+                        summaryBar.style.display = 'none';
+                    }
+                }
+
+                if (!Object.keys(byDay).length) {
+                    container.innerHTML = '<div style="color:var(--text-secondary);font-size:.85rem;">No hay actividad en el período seleccionado.</div>';
+                    return;
+                }
+
+                // Render days
+                const dayEntries = Object.entries(byDay).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 30);
+                const rows = dayEntries.map(([day, dayEvents]) => {
+                    const date = new Date(day + 'T12:00:00');
+                    const dayStr = date.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' });
+                    
+                    const actionsByType = {};
+                    dayEvents.forEach(e => {
+                        actionsByType[e.type] = (actionsByType[e.type] || 0) + 1;
+                    });
+                    
+                    const topActions = Object.entries(actionsByType).sort((a, b) => b[1] - a[1]).slice(0, 5)
+                        .map(([type, count]) => `${type}: ${count}`).join(' · ');
+                    
+                    return `<div style="background:rgba(30,41,59,.6);border:1px solid rgba(148,163,184,.15);border-radius:10px;padding:10px 12px;font-size:.83rem;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                            <span style="font-weight:700;">${dayStr}</span>
+                            <span style="color:var(--text-secondary);font-size:.78rem;">${dayEvents.length} acciones</span>
+                        </div>
+                        <div style="color:var(--text-secondary);font-size:.8rem;">${topActions || 'sin actividad'}</div>
+                    </div>`;
+                }).join('');
+                
+                container.innerHTML = rows;
+            };
+
+            // Legacy function for compatibility
+            window.renderShiftDailyLogs = window.renderMetricsHistory;
+
+            window.setMetricsShift = (shift) => {
+                // Update pills visual
+                ['metricsShiftMorningBtn','metricsShiftAfternoonBtn','metricsShiftNightBtn','metricsShiftResetBtn'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.classList.remove('active');
+                });
+                const map = { tm: 'metricsShiftMorningBtn', tt: 'metricsShiftAfternoonBtn', tn: 'metricsShiftNightBtn', all: 'metricsShiftResetBtn' };
+                if (map[shift]) document.getElementById(map[shift])?.classList.add('active');
+                // Set the hidden select value and trigger update
+                if (elements.metricsShiftFilter) {
+                    elements.metricsShiftFilter.value = shift;
+                    elements.metricsShiftFilter.dispatchEvent(new Event('change'));
+                }
+            };
+
+            async function renderProfileCompare() {
+                const container = document.getElementById('metricsProfileCompare');
+                if (!container) return;
+                const profiles = AppState.profiles || [{ id: 'default', name: 'Base principal' }];
+                const activePid = AppState.activeProfileId || 'default';
+                
+                // Load data from ALL profiles for comparison
+                const profileMetrics = await Promise.all(profiles.map(async profile => {
+                    const pid = profile.id;
+                    let contacts = [];
+                    
+                    if (pid === activePid) {
+                        contacts = AppState.contacts;
+                    } else {
+                        try {
+                            const result = await window.electronAPI?.loadProfile({ profileId: pid });
+                            if (result?.ok && Array.isArray(result.contacts)) {
+                                contacts = result.contacts;
+                            }
+                        } catch (e) {
+                            contacts = [];
+                        }
+                    }
+                    const total = contacts.length;
+                    const reviewed = contacts.filter(c => c.status !== 'sin revisar').length;
+                    const sinWsp = contacts.filter(c => c.status === 'sin wsp').length;
+                    const contactado = contacts.filter(c => c.status === 'contactado').length;
+                    const jugando = contacts.filter(c => c.status === 'jugando').length;
+                    const noInteresado = contacts.filter(c => c.status === 'no interesado').length;
+                    const revisado = contacts.filter(c => c.status === 'revisado').length;
+                    
+                    // Activity metrics from metricEvents
+                    let todayEvents = 0;
+                    let weekEvents = 0;
+                    try {
+                        const events = JSON.parse(localStorage.getItem(`metricEvents:${pid}`) || '[]');
+                        const today = new Date();
+                        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                        const weekStart = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                        
+                        todayEvents = events.filter(e => new Date(e.timestamp) >= todayStart).length;
+                        weekEvents = events.filter(e => new Date(e.timestamp) >= weekStart).length;
+                    } catch (_) {}
+                    
+                    const pct = total ? Math.round((reviewed / total) * 100) : 0;
+                    const isActive = pid === activePid;
+                    
+                    return {
+                        profile, pid, isActive, total, reviewed, pct,
+                        sinWsp, contactado, jugando, noInteresado, revisado,
+                        todayEvents, weekEvents
+                    };
+                }));
+                
+                // Sort by total contacts (largest first)
+                profileMetrics.sort((a, b) => b.total - a.total);
+                
+                const cards = profileMetrics.map(metrics => {
+                    const { profile, pid, isActive, total, reviewed, pct, sinWsp, contactado, jugando, noInteresado, revisado, todayEvents, weekEvents } = metrics;
+                    
+                    return `<div class="metrics-compare-card ${isActive ? 'active-profile' : ''}" onclick="window.switchToProfile('${pid}')">
+                        <div class="metrics-compare-header">
+                            <div class="metrics-compare-name">
+                                ${isActive ? '<i class="fas fa-circle" style="color:var(--accent);font-size:.7rem;"></i>' : '<i class="fas fa-circle-o" style="color:rgba(148,163,184,.4);font-size:.7rem;"></i>'}
+                                <span style="font-weight:700;">${profile.name}</span>
+                                ${isActive ? '<span class="active-badge">ACTIVO</span>' : '<span class="switch-hint">clic para activar</span>'}
+                            </div>
+                            <div class="metrics-compare-progress">
+                                <div style="background:rgba(148,163,184,.15);border-radius:999px;height:8px;overflow:hidden;">
+                                    <div style="background:${pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444'};height:100%;width:${pct}%;border-radius:999px;transition:width .5s;"></div>
+                                </div>
+                                <span style="font-weight:700;font-size:.85rem;">${pct}% completado</span>
+                            </div>
+                        </div>
+                        
+                        <div class="metrics-compare-grid">
+                            <div class="metrics-compare-stat primary">
+                                <span class="stat-label">Total</span>
+                                <span class="stat-value">${total.toLocaleString()}</span>
+                            </div>
+                            <div class="metrics-compare-stat">
+                                <span class="stat-label">Revisados</span>
+                                <span class="stat-value" style="color:#10b981;">${reviewed}</span>
+                            </div>
+                            <div class="metrics-compare-stat">
+                                <span class="stat-label">Contactado</span>
+                                <span class="stat-value" style="color:#3b82f6;">${contactado}</span>
+                            </div>
+                            <div class="metrics-compare-stat">
+                                <span class="stat-label">Jugando</span>
+                                <span class="stat-value" style="color:#8b5cf6;">${jugando}</span>
+                            </div>
+                            <div class="metrics-compare-stat">
+                                <span class="stat-label">Sin WSP</span>
+                                <span class="stat-value" style="color:#f59e0b;">${sinWsp}</span>
+                            </div>
+                            <div class="metrics-compare-stat">
+                                <span class="stat-label">No interesa</span>
+                                <span class="stat-value" style="color:#ef4444;">${noInteresado}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="metrics-compare-activity">
+                            <div class="activity-stat">
+                                <i class="fas fa-bolt"></i>
+                                <span>Hoy: <strong>${todayEvents}</strong> acciones</span>
+                            </div>
+                            <div class="activity-stat">
+                                <i class="fas fa-calendar-week"></i>
+                                <span>Semana: <strong>${weekEvents}</strong> acciones</span>
+                            </div>
+                        </div>
+                    </div>`;
+                });
+                
+                container.innerHTML = cards.join('');
+            }
+            
+            // Helper function to switch profiles from comparison
+            window.switchToProfile = (profileId) => {
+                if (AppState.activeProfileId === profileId) return;
+                window.switchProfile(profileId);
+            };
+
+            // Update profile badge when modal opens
+            function updateMetricsProfileBadge() {
+                const badge = document.getElementById('metricsProfileBadge');
+                if (!badge) return;
+                const profile = (AppState.profiles || []).find(p => p.id === (AppState.activeProfileId || 'default'));
+                badge.textContent = profile?.name || 'Base principal';
+            }
+            // ────────────────────────────────────────────────────────────────
 
             syncMetricsFilters();
             [elements.metricsShiftFilter, elements.metricsFromDate, elements.metricsToDate, elements.metricsStatusFilter, elements.metricsSelectionTypeFilter, elements.metricsOnlyChanges].forEach((el) => {
@@ -5766,8 +6534,11 @@
             };
 
             $('#exportBtn').onclick = () => {
+                const pid = AppState.activeProfileId || 'default';
+                const profileContacts = AppState.contacts.filter(c => (c.profileId || 'default') === pid);
+                const profileName = (AppState.profiles || []).find(p => p.id === pid)?.name || 'Base principal';
                 $('#exportFilteredCount').textContent = `${AppState.filteredContacts.length} contactos`;
-                $('#exportAllCount').textContent = `${AppState.contacts.length} contactos`;
+                $('#exportAllCount').textContent = `${profileContacts.length} contactos (${profileName})`;
                 $('#exportModal').classList.add('active');
             };
 
@@ -5778,7 +6549,9 @@
                 const selectedFormatEl = $('#exportModal .export-option[data-format].selected');
                 const type = selectedTypeEl ? selectedTypeEl.dataset.type : 'all';
                 const format = selectedFormatEl ? selectedFormatEl.dataset.format : 'sheet';
-                const contactsToExport = type === 'filtered' ? AppState.filteredContacts : AppState.contacts;
+                const pid = AppState.activeProfileId || 'default';
+                const profileContacts = AppState.contacts.filter(c => (c.profileId || 'default') === pid);
+                const contactsToExport = type === 'filtered' ? AppState.filteredContacts : profileContacts;
 
                 if (!contactsToExport.length) {
                     showNotification('No hay contactos para exportar', 'warning');
@@ -5858,6 +6631,9 @@
                     const newSnapshot = `${contact.name} | ${contact.phone || 'sin teléfono'} | ${contact.origin || 'Manual'} | ${contact.status || 'sin revisar'}`;
                     addToHistory('Contacto editado', `${oldSnapshot} → ${newSnapshot}`, contact.id);
                     detectDuplicates();
+                    // Actualizar índice del contacto editado sin rebuild completo
+                    addContactToIndex(contact);
+                    AppState.searchIndexDirty = false;
                     saveData();
                     render();
                     resetAddSingleModalState();
@@ -5879,15 +6655,22 @@
                     isDuplicate: false
                 };
 
+                // Asignar profileId al nuevo contacto
+                newContact.profileId = AppState.activeProfileId || 'default';
                 AppState.contacts.push(newContact);
+                // Indexar inmediatamente sin reconstruir todo el índice
+                addContactToIndex(newContact);
+                AppState.lastEditedContact = newContact.id;
                 recordMetricEvent('user_created', { profileId: AppState.activeProfileId || 'default', contactId: newContact.id, status: newContact.status, selectionType: 'manual' });
                 addToHistory('Contacto agregado manualmente', name);
                 detectDuplicates();
                 saveData();
+                // render con índice ya actualizado — la búsqueda funciona al instante
+                AppState.searchIndexDirty = false;
                 render();
                 resetAddSingleModalState();
                 $('#addSingleModal').classList.remove('active');
-                showNotification('✅ Contacto agregado', 'success');
+                showNotification('✅ Contacto agregado — ya podés buscarlo', 'success');
             };
 
             $('#deleteAllBtn').onclick = async () => {

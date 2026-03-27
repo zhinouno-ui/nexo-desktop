@@ -11,48 +11,104 @@
     return window.elements || window.NexoElements || {};
   }
 
-  function refreshProfilesUI() {
-    const appState = state();
-    const ui = elements();
-    const helpers = actions();
+  async function refreshProfilesUI() {
     const t0 = performance.now();
     try {
-      helpers.ensureActiveProfile?.();
-      const profileCounts = Object.create(null);
-      (appState.contacts || []).forEach((contact) => {
-        const profileId = contact?.profileId || 'default';
-        profileCounts[profileId] = (profileCounts[profileId] || 0) + 1;
-      });
-      const profileList = Array.isArray(appState.profiles) && appState.profiles.length
-        ? appState.profiles
-        : [{ id: 'default', name: 'Base principal' }];
+      const appState = state();
+      const helpers = actions();
+      const ui = elements();
+      if (!ui.profilesList) return;
 
-      if (ui.profileSelect) {
-        ui.profileSelect.innerHTML = profileList.map((profile) => `<option value="${profile.id}">${profile.name}</option>`).join('');
-        ui.profileSelect.value = appState.activeProfileId;
-      }
+      const profiles = appState.profiles || [];
+      const activeId = appState.activeProfileId || 'default';
 
-      if (ui.profilesList) {
-        ui.profilesList.innerHTML = '';
-        if (window.NexoProfilesUI?.buildProfileRows) {
-          ui.profilesList.innerHTML = window.NexoProfilesUI.buildProfileRows(profileList, profileCounts);
+      // Obtener cantidad de contactos por perfil para previsualización
+      const profileCounts = {};
+      for (const profile of profiles) {
+        try {
+          let contactCount = 0;
+          if (profile.id === activeId) {
+            // Perfil activo: usar contactos en memoria
+            contactCount = appState.contacts.length;
+          } else {
+            // Otros perfiles: cargar desde disco para contar
+            if (window.electronAPI?.loadProfile) {
+              const result = await window.electronAPI.loadProfile({ profileId: profile.id });
+              if (result?.ok && Array.isArray(result.contacts)) {
+                contactCount = result.contacts.length;
+              }
+            } else {
+              // Fallback localStorage
+              const raw = localStorage.getItem(`contactsData:${profile.id}`);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                contactCount = Array.isArray(parsed) ? parsed.length : 0;
+              }
+            }
+          }
+          profileCounts[profile.id] = contactCount;
+        } catch (e) {
+          profileCounts[profile.id] = 0;
         }
       }
 
-      if (ui.splitImportByFileToggle) ui.splitImportByFileToggle.checked = !!appState.splitImportByFile;
-      if (ui.profilesList && !ui.profilesList.dataset.boundActions) {
-        ui.profilesList.dataset.boundActions = '1';
-        ui.profilesList.onclick = (ev) => {
-          const button = ev.target.closest('[data-profile-action]');
-          if (!button) return;
-          const action = button.getAttribute('data-profile-action');
-          const profileId = button.getAttribute('data-profile-id');
-          if (!profileId) return;
-          if (action === 'open') window.switchProfile(profileId);
-          else if (action === 'rename') window.renameProfile(profileId);
-          else if (action === 'delete') window.deleteProfile(profileId);
-        };
-      }
+      ui.profilesList.innerHTML = profiles.map(profile => {
+        const isActive = profile.id === activeId;
+        const statusIcon = isActive ? 'fas fa-check-circle' : 'fas fa-circle';
+        const statusColor = isActive ? 'var(--accent)' : 'rgba(148,163,184,0.5)';
+        const contactCount = profileCounts[profile.id] || 0;
+        const countLabel = contactCount.toLocaleString('es-ES');
+        
+        return `
+          <div class="profile-item ${isActive ? 'active' : ''}" data-profile-id="${profile.id}">
+            <div class="profile-info">
+              <div class="profile-name">
+                <i class="${statusIcon}" style="color: ${statusColor}; margin-right: 8px;"></i>
+                ${profile.name}
+                <span class="profile-count" style="margin-left: 8px; background: rgba(148,163,184,0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem;">
+                  ${countLabel} contactos
+                </span>
+              </div>
+              <div class="profile-meta">
+                Creado: ${new Date(profile.createdAt).toLocaleDateString('es-ES')}
+              </div>
+            </div>
+            <div class="profile-actions">
+              ${!isActive ? `<button class="btn btn-sm profile-activate-btn" data-profile-id="${profile.id}">Activar</button>` : ''}
+              <button class="btn btn-sm btn-secondary profile-rename-btn" data-profile-id="${profile.id}">Renombrar</button>
+              ${profiles.length > 1 ? `<button class="btn btn-sm btn-danger profile-delete-btn" data-profile-id="${profile.id}">Eliminar</button>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Add event listeners for profile buttons
+      ui.profilesList.querySelectorAll('.profile-activate-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const profileId = btn.getAttribute('data-profile-id');
+          if (profileId) switchProfile(profileId);
+        });
+      });
+
+      ui.profilesList.querySelectorAll('.profile-rename-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const profileId = btn.getAttribute('data-profile-id');
+          if (profileId) renameProfile(profileId);
+        });
+      });
+
+      ui.profilesList.querySelectorAll('.profile-delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const profileId = btn.getAttribute('data-profile-id');
+          if (profileId) deleteProfile(profileId);
+        });
+      });
     } catch (error) {
       console.error('refreshProfilesUI failed', error);
       try { helpers.reportError?.('refreshProfilesUI', error); } catch (_) {}
@@ -70,11 +126,51 @@
     try {
       helpers.setLoadingState?.(true, 'Cambiando base…', 20, false);
       try { await helpers.flushSaveQueue?.('profile-switch'); } catch (_) {}
+      
+      // SEPARACIÓN TOTAL: Guardar perfil anterior ANTES de cambiar activeProfileId
+      const previousProfileId = appState.activeProfileId;
+      if (previousProfileId && previousProfileId !== profileId && appState.contacts.length > 0) {
+        try {
+          console.log(`[switchProfile] Guardando ${appState.contacts.length} contactos del perfil anterior: ${previousProfileId}`);
+          if (window.electronAPI?.saveProfile) {
+            await window.electronAPI.saveProfile({ 
+              profileId: previousProfileId, 
+              contacts: appState.contacts 
+            });
+            console.log(`[switchProfile] ✅ Guardado en DISCO: ${appState.contacts.length} contactos`);
+          } else {
+            console.warn('[switchProfile] ⚠️ electronAPI no disponible - datos NO guardados permanentemente');
+            console.warn('[switchProfile] Los contactos se perderán al cerrar la aplicación');
+            // Solo guardar configuración básica, NO contactos masivos
+            try {
+              const basicInfo = { 
+                profileId: previousProfileId, 
+                contactCount: appState.contacts.length,
+                lastSaved: new Date().toISOString()
+              };
+              localStorage.setItem(`profileInfo:${previousProfileId}`, JSON.stringify(basicInfo));
+            } catch (e) {
+              console.warn('[switchProfile] No se pudo guardar info básica:', e);
+            }
+          }
+        } catch (e) {
+          console.error('[switchProfile] Error guardando perfil anterior:', e);
+        }
+      }
+      
+      // LIMPIAR COMPLETAMENTE la memoria
+      appState.contacts = [];
       appState.selectedContacts.clear();
       appState.searchIndex = { allIds: [], byId: new Map(), byStatus: new Map(), byShift: new Map(), byProfile: new Map(), byPhoneType: new Map(), byOrigin: new Map(), bySearchToken: new Map() };
       appState.searchIndexDirty = true;
       appState.statsDirty = true;
       appState.lastEditedContact = null;
+      appState.filteredContacts = [];
+      appState.searchQuery = '';
+      appState.statusFilter = '';
+      appState.originFilter = '';
+      
+      // CAMBIAR perfil activo
       appState.activeProfileId = profileId;
       localStorage.setItem('activeProfileId', appState.activeProfileId);
       appState.currentPage = Math.max(1, Number(appState.profilePageMap?.[profileId] || 1));
@@ -84,7 +180,7 @@
 
       // Historial
       try {
-        const h = localStorage.getItem(`contactsHistory:${pid}`);
+        const h = localStorage.getItem(`history:${pid}`);
         appState.history = h ? JSON.parse(h) : [];
       } catch (_) { appState.history = []; }
 
@@ -127,30 +223,54 @@
         }
       } catch (_) {}
 
-      // Contactos del nuevo perfil — cargar desde clave profile-scoped
-      // y combinar con contactos de otros perfiles que ya están en memoria
+      // Cargar contactos del nuevo perfil
       try {
-        const _newRaw = localStorage.getItem(`contactsData:${pid}`);
-        const _newContacts = _newRaw ? JSON.parse(_newRaw) : [];
-        // Asegurar profileId correcto
-        _newContacts.forEach(c => { if (!c.profileId) c.profileId = pid; });
-        // Reemplazar contactos de este perfil en AppState, preservar otros perfiles
-        const _otherContacts = appState.contacts.filter(c => (c.profileId || 'default') !== pid);
-        appState.contacts = [..._otherContacts, ..._newContacts];
-        appState.searchIndexDirty = true;
-        appState.statsDirty = true;
+        let _newContacts = [];
+        if (window.electronAPI?.loadProfile) {
+          const result = await window.electronAPI.loadProfile({ profileId: pid });
+          if (result?.ok && Array.isArray(result.contacts)) {
+            _newContacts = result.contacts;
+            _newContacts.forEach(c => { if (!c.profileId) c.profileId = pid; });
+            console.log(`[switchProfile] ✅ Cargado desde DISCO: ${_newContacts.length} contactos del perfil ${pid}`);
+          } else {
+            console.warn(`[switchProfile] ⚠️ No se encontraron datos en disco para perfil ${pid}`);
+          }
+        } else {
+          console.warn('[switchProfile] ⚠️ electronAPI no disponible - usando localStorage (LIMITADO)');
+          // Fallback localStorage (solo para desarrollo/emergencia)
+          const _raw = localStorage.getItem(`contactsData:${pid}`);
+          if (_raw) {
+            try {
+              _newContacts = JSON.parse(_raw);
+              _newContacts.forEach(c => { if (!c.profileId) c.profileId = pid; });
+              console.warn(`[switchProfile] ⚠️ Cargado desde localStorage: ${_newContacts.length} contactos (TEMPORAL)`);
+            } catch (e) {
+              console.error('[switchProfile] Error parseando localStorage:', e);
+            }
+          }
+        }
+        
+        // Cargar SOLO los contactos del nuevo perfil (memoria ya está limpia)
+        appState.contacts = [..._newContacts];
+        console.log(`[switchProfile] Perfil ${pid} cargado con ${_newContacts.length} contactos (separación total)`);
       } catch (_e) {
         console.warn('[switchProfile] No se pudieron cargar contactos del perfil:', pid, _e);
+        appState.contacts = [];
       }
       // ───────────────────────────────────────────────────────────────────
 
       refreshProfilesUI();
-      const finish = () => {
-        helpers.remountDashboardState?.('profile-switch');
-        helpers.setLoadingState?.(false, 'Listo', 100, false);
-      };
-      if (typeof requestIdleCallback === 'function') requestIdleCallback(() => finish(), { timeout: 180 });
-      else setTimeout(() => finish(), 0);
+      helpers.remountDashboardState?.('profile-switch');
+      helpers.setLoadingState?.(false, 'Listo', 100, false);
+      
+      // Forzar actualización visual del selector de perfiles
+      setTimeout(() => {
+        refreshProfilesUI();
+        const activeProfileElement = document.querySelector('.profile-card.active-profile');
+        if (activeProfileElement) {
+          activeProfileElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 100);
     } finally {
       if (ui.profilesModal) ui.profilesModal.classList.remove('active');
     }
@@ -286,24 +406,27 @@
         const count = profileCounts[profile.id] || 0;
         const isActive = profile.id === activeId;
         return `
-          <div class="history-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.07);">
-            <div style="display:flex;align-items:center;gap:8px;">
-              ${isActive ? '<span style="color:var(--accent);font-size:.7rem;">●</span>' : '<span style="opacity:0;">●</span>'}
-              <span style="font-weight:${isActive ? '600' : '400'};color:${isActive ? 'var(--text-primary)' : 'var(--text-secondary)'};">
+          <div class="history-item" style="display:flex;align-items:center;justify-content:space-between;padding:10px 6px;border-bottom:1px solid rgba(255,255,255,.07);">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+              ${isActive ? '<span style="background:var(--accent);color:#fff;font-size:.65rem;padding:2px 6px;border-radius:4px;font-weight:700;white-space:nowrap;">ACTIVO</span>' : ''}
+              <span style="font-weight:${isActive ? '600' : '400'};color:${isActive ? 'var(--text-primary)' : 'var(--text-secondary)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                 ${profile.name || profile.id}
               </span>
-              <span style="font-size:.75rem;color:var(--text-secondary);opacity:.7;">(${count} contactos)</span>
+              <span style="font-size:.75rem;color:var(--text-secondary);opacity:.7;white-space:nowrap;">(${count})</span>
             </div>
-            <div style="display:flex;gap:6px;">
-              <button class="btn" style="padding:3px 8px;font-size:.75rem;" data-profile-action="open" data-profile-id="${profile.id}">
-                ${isActive ? 'Activo' : 'Abrir'}
+            <div style="display:flex;gap:4px;flex-shrink:0;">
+              ${!isActive ? `<button class="btn" style="padding:3px 8px;font-size:.75rem;" data-profile-action="open" data-profile-id="${profile.id}">
+                <i class="fas fa-sign-in-alt"></i> Activar
+              </button>` : ''}
+              <button class="btn" style="padding:3px 8px;font-size:.75rem;" data-profile-action="import-csv" data-profile-id="${profile.id}" title="Importar CSV a este perfil">
+                <i class="fas fa-file-upload"></i> Importar CSV
               </button>
               <button class="btn" style="padding:3px 8px;font-size:.75rem;" data-profile-action="rename" data-profile-id="${profile.id}">
-                Renombrar
+                <i class="fas fa-pen"></i>
               </button>
               ${profile.id !== 'default' ? `
               <button class="btn" style="padding:3px 8px;font-size:.75rem;color:#ef4444;border-color:#ef4444;" data-profile-action="delete" data-profile-id="${profile.id}">
-                Borrar
+                <i class="fas fa-trash"></i>
               </button>` : ''}
             </div>
           </div>`;

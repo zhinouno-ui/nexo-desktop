@@ -38,6 +38,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteProfile: (payload) => ipcRenderer.invoke('profile:delete', payload || {}),
   resolveImportMode: () => ipcRenderer.invoke('profile:resolveImportMode'),
   buildExport: (payload) => ipcRenderer.invoke('export:build', payload || {}),
+  loadProfile: (payload) => ipcRenderer.invoke('profile:load', payload || {}),
+  saveProfile: (payload) => ipcRenderer.invoke('profile:save', payload || {}),
+
 
   zoomIn: () => ipcRenderer.invoke('zoom:in'),
   zoomOut: () => ipcRenderer.invoke('zoom:out'),

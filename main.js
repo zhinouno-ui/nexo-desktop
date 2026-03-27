@@ -15,7 +15,7 @@ const gunzipAsync = promisify(zlib.gunzip);
 
 const MIN_UPDATE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_UPDATE_SIZE_BYTES = 500 * 1024 * 1024;
-const STABLE_TAG = 'v1.1.10';
+const STABLE_TAG = 'v1.2.0';
 const RELEASE_OWNER = 'zhinouno-ui';
 const RELEASE_REPO = 'nexo-desktop';
 const RELEASE_CHANNEL = 'latest';
@@ -1155,6 +1155,42 @@ async function getUpdaterDiagnostics(lastAttempt = lastUpdateAttempt) {
 ipcMain.handle('store:getAll', async () => readDb());
 
 ipcMain.handle('profile:list', async () => ({ profiles: await readProfilesMeta() }));
+
+// profile:load — carga los contactos de un perfil específico desde disco
+ipcMain.handle('profile:load', async (_event, payload) => {
+  const profileId = String(payload?.profileId || 'default');
+  try {
+    const db = await readProfileDb(profileId);
+    const contacts = Array.isArray(db.contactsData) ? db.contactsData : [];
+    // Asegurar que todos tienen el profileId correcto
+    contacts.forEach(c => { if (!c.profileId) c.profileId = profileId; });
+    console.log(`[profile:load] Perfil ${profileId}: ${contacts.length} contactos`);
+    return { ok: true, profileId, contacts };
+  } catch (err) {
+    await appendErrorLog('profile:load', err, { profileId });
+    return { ok: false, profileId, contacts: [], message: err?.message || String(err) };
+  }
+});
+
+// profile:save — guarda los contactos de un perfil específico en disco
+ipcMain.handle('profile:save', async (_event, payload) => {
+  const profileId = String(payload?.profileId || 'default');
+  const contacts = Array.isArray(payload?.contacts) ? payload.contacts : [];
+  try {
+    const existing = await readProfileDb(profileId);
+    const updated = {
+      ...existing,
+      profileId,
+      contactsData: contacts.map(c => ({ ...c, profileId }))
+    };
+    await writeProfileDb(profileId, updated);
+    console.log(`[profile:save] Perfil ${profileId}: ${contacts.length} contactos guardados`);
+    return { ok: true, profileId, count: contacts.length };
+  } catch (err) {
+    await appendErrorLog('profile:save', err, { profileId, count: contacts.length });
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
 ipcMain.handle('profile:create', async (_event, payload) => {
   const name = String(payload?.name || '').trim().slice(0, 60);
   if (!name) return { ok: false, message: 'Nombre inválido' };
@@ -1405,6 +1441,7 @@ ipcMain.handle('admin:hasAccess', async (event) => {
   const until = Number(adminUnlockByWebContentsId.get(Number(webContentsId)) || 0);
   return { ok: hasAdminAccessForWebContentsId(webContentsId), expiresAt: until || 0 };
 });
+
 ipcMain.handle('dialog:openImportFiles', async () => {
   const result = await dialog.showOpenDialog({
     title: 'Seleccionar archivos para importar',

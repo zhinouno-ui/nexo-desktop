@@ -132,5 +132,18 @@
 - Fixed "Borrar última subida" logic to work with both `lastImportBatchId` and legacy `importBatchId` records.
 - Fixed possible duplicated version label format (`vv1.1.x`).
 
+## 1.2.0
+- **MAJOR**: Fixed profile management system with strict data separation
+- **MAJOR**: Implemented hybrid storage system - contacts on disk (150k+ support), metrics in localStorage
+- **MAJOR**: Fixed profile comparison to load data from ALL profiles, not just active one
+- **FIX**: Profile switching now properly saves previous profile data before loading new one
+- **FIX**: Contact duplication and mixing between profiles completely resolved
+- **FIX**: Profile selector UI visual issues fixed - proper selection state after switching
+- **FEATURE**: Buffer system for contact saves (1000 contacts before disk write)
+- **FEATURE**: Complete historical data preservation - all metrics, 500+ movements per shift
+- **FEATURE**: Auto-save on app close to prevent data loss
+- **PERFORMANCE**: Optimized for large datasets (150k+ contacts across multiple profiles)
+- **UI**: Improved profile comparison view with real-time data from all profiles
+
 ## 1.1.15
 - Base release introducing updater manager, release automation, and multi-profile UI foundation.
