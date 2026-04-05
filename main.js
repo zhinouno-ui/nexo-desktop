@@ -57,95 +57,65 @@ function getProfileDbPath(profileId = 'default') {
   return path.join(app.getPath('userData'), `nexo-db-${safeId}.json`);
 }
 
-async function readProfileDb(profileId = 'default', { force = false } = {}) {
+async function readProfileDb(profileId = 'default') {
   const profilePath = getProfileDbPath(profileId);
   try {
     const raw = await fs.readFile(profilePath, 'utf8');
     const parsed = JSON.parse(raw);
-    
-    // FASE 2: MIGRACIÓN LEGACY - Verificar si el perfil está vacío y migrar desde legacy
-    if (!Array.isArray(parsed.contactsData) || parsed.contactsData.length === 0) {
-      console.log(`[PROFILE] Perfil [${profileId}] vacío, intentando migración desde legacy...`);
-      
+    const shardContacts = Array.isArray(parsed.contactsData) ? parsed.contactsData : [];
+
+    // SAFETY NET: solo para 'default', si el shard tiene MENOS contactos que el legacy,
+    // re-migrar UNA VEZ. Esto cubre el caso donde una versión anterior guardó un shard
+    // parcial o vacío mientras el legacy completo seguía existiendo.
+    if (profileId === 'default' && !parsed._legacyChecked) {
       try {
-        const legacyDb = await readDb();
-        
-        // Extraer contactos de múltiples posibles estructuras legacy
-        let legacyContacts = [];
-        
-        if (Array.isArray(legacyDb.contactsData) && legacyDb.contactsData.length > 0) {
-          legacyContacts = legacyDb.contactsData;
-        } else if (Array.isArray(legacyDb.contacts) && legacyDb.contacts.length > 0) {
-          legacyContacts = legacyDb.contacts;
-        } else if (Array.isArray(legacyDb) && legacyDb.length > 0) {
-          legacyContacts = legacyDb;
-        } else {
-          // Buscar arrays dentro del objeto legacy
-          for (const [key, value] of Object.entries(legacyDb || {})) {
-            if (Array.isArray(value) && value.length > 0 && 
-                (key.toLowerCase().includes('contact') || key.toLowerCase().includes('data'))) {
-              legacyContacts = value;
-              console.log(`[PROFILE] Encontrados ${legacyContacts.length} contactos en legacy.${key}`);
-              break;
-            }
+        const legacyPath = getDbPath();
+        if (fssync.existsSync(legacyPath)) {
+          const legacyRaw = await fs.readFile(legacyPath, 'utf8');
+          const legacyDb = JSON.parse(legacyRaw);
+          const legacyContacts = Array.isArray(legacyDb.contactsData) ? legacyDb.contactsData : [];
+          if (legacyContacts.length > shardContacts.length) {
+            console.log(`[PROFILE] ⚡ Legacy tiene ${legacyContacts.length} vs shard ${shardContacts.length} — re-migrando default`);
+            const merged = { ...DEFAULT_DB, ...parsed, profileId: 'default',
+              contactsData: legacyContacts.map(c => ({ ...c, profileId: 'default' })),
+              _legacyChecked: true
+            };
+            await writeProfileDb('default', merged);
+            return merged;
           }
         }
-        
-        if (legacyContacts.length > 0) {
-          console.log(`[PROFILE] 🔄 Migrando ${legacyContacts.length} contactos desde legacy al perfil [${profileId}]`);
-          
-          // Crear nueva base para el perfil con datos del legacy
-          const migratedDb = { 
-            ...DEFAULT_DB, 
-            ...legacyDb, // Heredar todo del legacy
-            profileId, 
-            contactsData: legacyContacts.map(contact => ({
-              ...contact,
-              profileId: profileId, // Asegurar que todos los contactos pertenezcan a este perfil
-              id: contact.id || `contact_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-            }))
-          };
-          
-          // Guardar en archivo shard del perfil
-          await writeProfileDb(profileId, migratedDb);
-          console.log(`[PROFILE] ✅ Migración completada para perfil [${profileId}]`);
-          return migratedDb;
-        } else {
-          console.warn(`[PROFILE] ⚠️ No se encontraron contactos en legacy para migrar`);
-        }
-      } catch (legacyErr) {
-        console.error('[PROFILE] ❌ Error en migración legacy:', legacyErr);
-      }
+      } catch (_) { /* legacy read failed — not critical */ }
+      // Mark as checked so we don't re-scan every load
+      parsed._legacyChecked = true;
     }
-    
-    return { ...DEFAULT_DB, ...parsed };
+
+    // Return the shard AS-IS — no auto-migration for non-default profiles.
+    // A profile with 0 contacts is a VALID state.
+    return { ...DEFAULT_DB, ...parsed, profileId };
   } catch (error) {
     if (error.code === 'ENOENT') {
-      // Si no existe, intentar migración desde legacy antes de crear base vacía
-      try {
-        const legacyDb = await readDb();
-        if (Array.isArray(legacyDb.contactsData) && legacyDb.contactsData.length > 0) {
-          console.log(`Creando perfil [${profileId}] con ${legacyDb.contactsData.length} contactos desde legacy`);
-          
-          const migratedDb = { 
-            ...DEFAULT_DB, 
-            ...legacyDb,
-            profileId,
-            contactsData: legacyDb.contactsData.map(contact => ({
-              ...contact,
-              profileId: profileId
-            }))
-          };
-          
-          await writeProfileDb(profileId, migratedDb);
-          return migratedDb;
-        }
-      } catch (legacyErr) {
-        console.warn('No se pudo migrar desde legacy, creando base vacía:', legacyErr);
+      // File doesn't exist: one-time legacy migration only for 'default'
+      if (profileId === 'default') {
+        try {
+          const legacyPath = getDbPath();
+          if (fssync.existsSync(legacyPath)) {
+            const legacyRaw = await fs.readFile(legacyPath, 'utf8');
+            const legacyDb = JSON.parse(legacyRaw);
+            const legacyContacts = Array.isArray(legacyDb.contactsData) ? legacyDb.contactsData : [];
+            if (legacyContacts.length > 0) {
+              console.log(`[PROFILE] Migración ONE-TIME: ${legacyContacts.length} contactos → default`);
+              const migratedDb = { ...DEFAULT_DB, profileId: 'default',
+                contactsData: legacyContacts.map(c => ({ ...c, profileId: 'default' })),
+                _legacyChecked: true
+              };
+              await writeProfileDb('default', migratedDb);
+              return migratedDb;
+            }
+          }
+        } catch (_) { /* legacy read failed — not critical */ }
       }
-      
-      // Si no hay legacy o falló, crear base por defecto para este perfil
-      const newDb = { ...DEFAULT_DB, profileId };
+      // Create empty profile (valid state)
+      const newDb = { ...DEFAULT_DB, profileId, contactsData: [], _legacyChecked: true };
       await writeProfileDb(profileId, newDb);
       return newDb;
     }
@@ -156,13 +126,22 @@ async function readProfileDb(profileId = 'default', { force = false } = {}) {
 
 async function writeProfileDb(profileId, data) {
   const profilePath = getProfileDbPath(profileId);
-  await fs.mkdir(path.dirname(profilePath), { recursive: true });
+  const dir = path.dirname(profilePath);
+  if (!fssync.existsSync(dir)) fssync.mkdirSync(dir, { recursive: true });
   const tmpPath = `${profilePath}.tmp`;
   const normalized = { ...DEFAULT_DB, ...data, profileId };
   const jsonString = JSON.stringify(normalized, null, 2);
-  await fs.writeFile(tmpPath, jsonString, 'utf8');
-  await fs.rename(tmpPath, profilePath);
-  
+  // Atomic write with fsync to survive abrupt shutdown
+  const fd = fssync.openSync(tmpPath, 'w');
+  try {
+    fssync.writeSync(fd, jsonString, 0, 'utf8');
+    fssync.fdatasyncSync(fd);
+  } finally {
+    fssync.closeSync(fd);
+  }
+  fssync.renameSync(tmpPath, profilePath);
+  console.log(`[writeProfileDb] ✅ ${profileId}: ${(jsonString.length / 1024).toFixed(1)} KB`);
+
   // Invalidar cache si es el perfil activo
   if (dbCache && dbCache.profileId === profileId) {
     dbCache = null;
@@ -1152,9 +1131,222 @@ async function getUpdaterDiagnostics(lastAttempt = lastUpdateAttempt) {
   };
 }
 
+// ─── SHADOW LOGGING: append-only activity log ─────────────────────────────────
+const LOG_MAX_BYTES = 10 * 1024 * 1024; // 10 MB rotation threshold
+const LOG_ROTATE_KEEP = 3; // keep .1 .2 .3
+
+function getLogsDir() {
+  return path.join(app.getPath('userData'), 'logs');
+}
+
+function getActivityLogPath(profileId) {
+  const safe = String(profileId || 'default').replace(/[^a-z0-9_-]/gi, '_');
+  return path.join(getLogsDir(), `activity-${safe}.log`);
+}
+
+function rotateActivityLogIfNeeded(logPath) {
+  try {
+    if (!fssync.existsSync(logPath)) return;
+    const stat = fssync.statSync(logPath);
+    if (stat.size < LOG_MAX_BYTES) return;
+
+    // Shift .3→delete, .2→.3, .1→.2, current→.1
+    for (let i = LOG_ROTATE_KEEP; i >= 1; i--) {
+      const from = i === 1 ? logPath : `${logPath}.${i - 1}`;
+      const to = `${logPath}.${i}`;
+      if (i === LOG_ROTATE_KEEP && fssync.existsSync(to)) fssync.unlinkSync(to);
+      if (fssync.existsSync(from)) fssync.renameSync(from, to);
+    }
+    console.log(`[SHADOW-LOG] Rotated ${logPath}`);
+  } catch (err) {
+    console.error('[SHADOW-LOG] Rotation error:', err.message);
+  }
+}
+
+function appendActivity(profileId, line) {
+  const logPath = getActivityLogPath(profileId);
+  const dir = path.dirname(logPath);
+  if (!fssync.existsSync(dir)) fssync.mkdirSync(dir, { recursive: true });
+  rotateActivityLogIfNeeded(logPath);
+  fssync.appendFileSync(logPath, line + '\n', 'utf8');
+}
+
+ipcMain.handle('store:logActivity', async (_event, payload) => {
+  try {
+    const profileId = String(payload?.profileId || 'default');
+    const now = new Date();
+    const ts = now.toISOString();
+    // Validate timestamp isn't garbage
+    if (payload?.timestamp) {
+      const parsed = new Date(payload.timestamp);
+      if (!Number.isNaN(parsed.getTime())) {
+        // use provided timestamp if valid
+      }
+    }
+    const entry = {
+      timestamp: ts,
+      profileId,
+      action: String(payload?.action || 'unknown'),
+      contactId: payload?.contactId || null,
+      from: payload?.from || null,
+      to: payload?.to || null,
+      shift: payload?.shift || null
+    };
+    appendActivity(profileId, JSON.stringify(entry));
+    return { ok: true };
+  } catch (err) {
+    console.error('[SHADOW-LOG] Error:', err.message);
+    return { ok: false, message: err.message };
+  }
+});
+
+// Read activity log and build 24h summary for "Mi Turno" tab
+function readJsonlSafe(filePath) {
+  const lines = [];
+  if (!fssync.existsSync(filePath)) return lines;
+  const raw = fssync.readFileSync(filePath, 'utf8');
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    try { lines.push(JSON.parse(line)); } catch (_) {}
+  }
+  return lines;
+}
+
+function classifyShift(isoString) {
+  const dt = new Date(isoString);
+  if (Number.isNaN(dt.getTime())) return '';
+  const h = dt.getHours();
+  if (h >= 6 && h < 14) return 'tm';
+  if (h >= 14 && h < 22) return 'tt';
+  return 'tn';
+}
+
+ipcMain.handle('metrics:summary24h', async (_event, payload) => {
+  try {
+    const profileId = String(payload?.profileId || 'default');
+    const logPath = getActivityLogPath(profileId);
+    const allEvents = readJsonlSafe(logPath);
+    const cutoff = Date.now() - 24 * 3600 * 1000;
+    const recent = allEvents.filter(e => new Date(e.timestamp).getTime() >= cutoff);
+
+    const summary = { total: recent.length, copias: 0, cambios: 0, tm: 0, tt: 0, tn: 0, topShift: '-' };
+    const shiftCounts = { tm: 0, tt: 0, tn: 0 };
+
+    for (const ev of recent) {
+      const shift = ev.shift || classifyShift(ev.timestamp);
+      if (shiftCounts[shift] !== undefined) shiftCounts[shift]++;
+
+      if (ev.action === 'copyToClipboard') summary.copias++;
+      else if (ev.action === 'changeContactStatus') summary.cambios++;
+    }
+
+    summary.tm = shiftCounts.tm;
+    summary.tt = shiftCounts.tt;
+    summary.tn = shiftCounts.tn;
+
+    const maxShift = Object.entries(shiftCounts).sort((a, b) => b[1] - a[1])[0];
+    if (maxShift && maxShift[1] > 0) summary.topShift = maxShift[0].toUpperCase();
+
+    return { ok: true, profileId, summary };
+  } catch (err) {
+    return { ok: false, message: err.message, summary: { total: 0, copias: 0, cambios: 0, tm: 0, tt: 0, tn: 0, topShift: '-' } };
+  }
+});
+
+// Tail: return last N events from the log (for Timeline tab)
+ipcMain.handle('metrics:tail', async (_event, payload) => {
+  try {
+    const profileId = String(payload?.profileId || 'default');
+    const limit = Math.min(200, Math.max(1, Number(payload?.limit) || 50));
+    const logPath = getActivityLogPath(profileId);
+    const all = readJsonlSafe(logPath);
+    return { ok: true, events: all.slice(-limit).reverse() };
+  } catch (err) {
+    return { ok: false, events: [], message: err.message };
+  }
+});
+
+// ─── END SHADOW LOGGING ───────────────────────────────────────────────────────
+
 ipcMain.handle('store:getAll', async () => readDb());
 
 ipcMain.handle('profile:list', async () => ({ profiles: await readProfilesMeta() }));
+
+// profile:comparatorScan — barrido rápido de TODOS los perfiles desde DISCO (no RAM del renderer)
+ipcMain.handle('profile:comparatorScan', async () => {
+  try {
+    const profiles = await readProfilesMeta();
+    const now = Date.now();
+    const COLD_MS = 10 * 86400000;
+    const todayStr = new Date(now).toISOString().slice(0, 10);
+    const yesterdayStr = new Date(now - 86400000).toISOString().slice(0, 10);
+
+    // Helper: extract contacts array from any DB structure
+    function extractContacts(db) {
+      if (Array.isArray(db?.contactsData) && db.contactsData.length > 0) return db.contactsData;
+      if (Array.isArray(db?.contacts) && db.contacts.length > 0) return db.contacts;
+      if (Array.isArray(db) && db.length > 0) return db;
+      return [];
+    }
+
+    const results = [];
+    for (const profile of profiles) {
+      try {
+        const db = await readProfileDb(profile.id);
+        let contacts = extractContacts(db);
+
+        // SAFETY NET: if shard reports 0, try the legacy file as fallback
+        if (contacts.length === 0) {
+          try {
+            const legacyPath = getDbPath();
+            if (fssync.existsSync(legacyPath)) {
+              const legacyRaw = await fs.readFile(legacyPath, 'utf8');
+              const legacyDb = JSON.parse(legacyRaw);
+              const legacyContacts = extractContacts(legacyDb);
+              // Only use legacy contacts that belong to this profile (or have no profileId)
+              const scoped = legacyContacts.filter(c =>
+                !c.profileId || c.profileId === profile.id || c.profileId === 'default'
+              );
+              if (scoped.length > contacts.length) {
+                console.log(`[comparatorScan] Shard ${profile.id} tiene 0 pero legacy tiene ${scoped.length} — usando legacy`);
+                contacts = scoped;
+              }
+            }
+          } catch (_legacyErr) { /* best effort */ }
+        }
+
+        let activos = 0, jugando = 0, frios = 0, sinWsp = 0, noInteresado = 0;
+        let accionesAyer = 0, accionesHoy = 0;
+
+        for (const c of contacts) {
+          if (c.status === 'jugando') {
+            jugando++;
+            const lastAct = c.lastUpdated || c.lastEditedAt || c.lastImportedAt || 0;
+            if (now - new Date(lastAct).getTime() > COLD_MS) frios++;
+          }
+          if (c.status === 'sin wsp') sinWsp++;
+          if (c.status === 'no interesado') noInteresado++;
+          if (c.status !== 'sin revisar' && c.status !== 'no interesado' && c.status !== 'sin wsp') activos++;
+          const editDay = (c.lastEditedAt || '').slice(0, 10);
+          if (editDay === todayStr) accionesHoy++;
+          if (editDay === yesterdayStr) accionesAyer++;
+        }
+
+        const reviewed = contacts.filter(c => c.status !== 'sin revisar').length;
+        results.push({
+          id: profile.id, name: profile.name || profile.id,
+          total: contacts.length, reviewed, activos, jugando, frios, sinWsp, noInteresado,
+          accionesAyer, accionesHoy
+        });
+      } catch (_) {
+        results.push({ id: profile.id, name: profile.name || profile.id, total: 0, reviewed: 0, activos: 0, jugando: 0, frios: 0, sinWsp: 0, noInteresado: 0, accionesAyer: 0, accionesHoy: 0 });
+      }
+    }
+    return { ok: true, profiles: results };
+  } catch (err) {
+    return { ok: false, profiles: [], message: err?.message || String(err) };
+  }
+});
 
 // profile:load — carga los contactos de un perfil específico desde disco
 ipcMain.handle('profile:load', async (_event, payload) => {

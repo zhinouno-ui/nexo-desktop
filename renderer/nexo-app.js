@@ -350,13 +350,15 @@
 
         function getOpsSuggestedStatus(lastCargaAt) {
             if (!lastCargaAt) return 'sin revisar';
-            const days = (Date.now() - new Date(lastCargaAt).getTime()) / 86400000;
-            if (days <= 2) return 'jugando';
-            if (days <= 7) return 'contactado';
-            if (days <= 21) return 'revisado';
-            // Nota: datos de operaciones no implican disponibilidad de WhatsApp.
-            // Evitamos sugerir 'sin wsp' solo por recencia.
-            return 'sin revisar';
+            const ms = Date.now() - new Date(lastCargaAt).getTime();
+            if (Number.isNaN(ms)) return 'sin revisar';
+            const hours = ms / 3600000;
+            const days = ms / 86400000;
+            // Unified tiers: <48h active, 7d warm, 30d cold, >30d frozen
+            if (hours <= 48) return 'jugando';      // Activo
+            if (days <= 7) return 'contactado';      // Tibio
+            if (days <= 30) return 'revisado';       // Target Revinculación
+            return 'sin revisar';                    // Congelado >30d
         }
 
         function suggestStatusByName(name) {
@@ -374,11 +376,16 @@
         }
 
         function getOpsHeatLabel(lastCargaAt) {
-            if (!lastCargaAt) return { text: 'Sin datos', cls: 'cold' };
-            const days = (Date.now() - new Date(lastCargaAt).getTime()) / 86400000;
-            if (days <= 7) return { text: '🔥 Activo', cls: 'hot' };
-            if (days <= 21) return { text: '⏳ Tibio', cls: '' };
-            return { text: '❄️ Frío', cls: 'cold' };
+            if (!lastCargaAt) return { text: 'Sin datos', cls: 'cold', tier: 'none' };
+            const ms = Date.now() - new Date(lastCargaAt).getTime();
+            if (Number.isNaN(ms)) return { text: 'Fecha inválida', cls: 'cold', tier: 'none' };
+            const hours = ms / 3600000;
+            const days = ms / 86400000;
+            // 3-tier system: <48h = Active, 7-30d = Cold/Revinculación, >30d = Frozen
+            if (hours <= 48) return { text: '🔥 Jugando Activo', cls: 'hot', tier: 'active' };
+            if (days <= 7) return { text: '⏳ Tibio', cls: '', tier: 'warm' };
+            if (days <= 30) return { text: '🧊 Target Revinculación', cls: 'cold', tier: 'cold' };
+            return { text: '💀 Inactivo (Congelado)', cls: 'cold', tier: 'frozen' };
         }
 
         function parseOperationsCsvChunkedFallback(text, onProgress) {
@@ -534,18 +541,23 @@
                     };
                     const getOpsSuggestedStatus = (lastCargaAt) => {
                         if (!lastCargaAt) return 'sin revisar';
-                        const days = (Date.now() - new Date(lastCargaAt).getTime()) / 86400000;
-                        if (days <= 2) return 'jugando';
-                        if (days <= 7) return 'contactado';
-                        if (days <= 21) return 'revisado';
+                        const _ms = Date.now() - new Date(lastCargaAt).getTime();
+                        if (Number.isNaN(_ms)) return 'sin revisar';
+                        const _h = _ms / 3600000, _d = _ms / 86400000;
+                        if (_h <= 48) return 'jugando';
+                        if (_d <= 7) return 'contactado';
+                        if (_d <= 30) return 'revisado';
                         return 'sin revisar';
                     };
                     const getOpsHeatLabel = (lastCargaAt) => {
-                        if (!lastCargaAt) return { text: 'Sin datos', cls: 'cold' };
-                        const days = (Date.now() - new Date(lastCargaAt).getTime()) / 86400000;
-                        if (days <= 7) return { text: '🔥 Activo', cls: 'hot' };
-                        if (days <= 21) return { text: '⏳ Tibio', cls: '' };
-                        return { text: '❄️ Frío', cls: 'cold' };
+                        if (!lastCargaAt) return { text: 'Sin datos', cls: 'cold', tier: 'none' };
+                        const _ms = Date.now() - new Date(lastCargaAt).getTime();
+                        if (Number.isNaN(_ms)) return { text: 'Fecha inválida', cls: 'cold', tier: 'none' };
+                        const _h = _ms / 3600000, _d = _ms / 86400000;
+                        if (_h <= 48) return { text: '🔥 Jugando Activo', cls: 'hot', tier: 'active' };
+                        if (_d <= 7) return { text: '⏳ Tibio', cls: '', tier: 'warm' };
+                        if (_d <= 30) return { text: '🧊 Target Revinculación', cls: 'cold', tier: 'cold' };
+                        return { text: '💀 Inactivo', cls: 'cold', tier: 'frozen' };
                     };
 
                     self.onmessage = (event) => {
@@ -2583,6 +2595,15 @@
             let ids = (AppState.searchIndex.byProfile.get(activeProfile) || []).slice();
 
             if (selectedStatus) ids = intersectIds(ids, new Set(AppState.searchIndex.byStatus.get(selectedStatus) || []));
+            // "Jugando" filter = only active (<48h ops). Cold/frozen contacts hidden from this filter.
+            if (selectedStatus === 'jugando') {
+                const now48 = Date.now() - 48 * 3600000;
+                ids = ids.filter(id => {
+                    const c = AppState.searchIndex.byId.get(id);
+                    if (!c?.ops?.lastCargaAt) return true; // no ops data → keep visible
+                    return new Date(c.ops.lastCargaAt).getTime() >= now48;
+                });
+            }
             if (selectedShift) ids = intersectIds(ids, new Set(AppState.searchIndex.byShift.get(selectedShift) || []));
             if (AppState.phoneFilter && AppState.phoneFilter !== 'all') {
                 const bucket = AppState.phoneFilter === 'with' ? 'with' : AppState.phoneFilter === 'without' ? 'without' : AppState.phoneFilter;
@@ -3539,6 +3560,17 @@
             } catch (error) {
                 fallbackCopy(text);
             }
+
+            // Shadow log — fire & forget, no bloquea la UI
+            try {
+                const shift = (typeof getLocalCompetitionShift === 'function') ? getLocalCompetitionShift(new Date()) : '';
+                window.telemetry?.logActivity?.({
+                    action: 'copyToClipboard',
+                    profileId: AppState.activeProfileId || 'default',
+                    contactId: text || null,
+                    shift
+                });
+            } catch (_) {}
         };
         
 
@@ -3651,6 +3683,18 @@
             setSaveState('pending', 'Guardado en segundo plano...');
             enqueueStatusDelta(contact, oldStatus, requestedStatus, eventAt);
             scheduleFastBackgroundSave(source);
+
+            // Shadow log — fire & forget
+            try {
+                window.telemetry?.logActivity?.({
+                    action: 'changeContactStatus',
+                    profileId: contact.profileId || AppState.activeProfileId || 'default',
+                    contactId: contact.id,
+                    from: oldStatus,
+                    to: requestedStatus,
+                    shift: shiftByEvent || contact.assignedShift || ''
+                });
+            } catch (_) {}
             } catch (statusErr) {
                 console.error('Error al cambiar estado:', statusErr);
                 showNotification(`No se pudo cambiar estado: ${statusErr?.message || statusErr}`, 'error');
@@ -5686,6 +5730,13 @@
 
                     updateMetricsProfileBadge();
                     if (elements.metricsModal) elements.metricsModal.classList.add('active');
+
+                    // Poblar "Mi Turno" con datos del shadow log (async, no bloquea)
+                    setTimeout(() => {
+                        if (typeof window.populateMiTurnoFromShadowLog === 'function') {
+                            window.populateMiTurnoFromShadowLog().catch(() => {});
+                        }
+                    }, 0);
                 };
             }
 
@@ -5699,6 +5750,41 @@
                 });
                 if (tab === 'compare') renderProfileCompare();
                 if (tab === 'supervisor') window.renderShiftDailyLogs();
+                if (tab === 'operator' && typeof window.populateMiTurnoFromShadowLog === 'function') {
+                    window.populateMiTurnoFromShadowLog().catch(() => {});
+                }
+            };
+
+            // ── Shadow Log: poblar "Mi Turno" desde el Main Process ──────────
+            window.populateMiTurnoFromShadowLog = async () => {
+                const safeSet = (id, val) => {
+                    try {
+                        const el = document.getElementById(id);
+                        if (el) el.textContent = String(val ?? 0);
+                    } catch (_) {}
+                };
+                try {
+                    const profileId = AppState.activeProfileId || 'default';
+                    if (!window.electronAPI?.metricsSummary24h) {
+                        console.warn('[SHADOW-LOG] metricsSummary24h not available');
+                        return;
+                    }
+                    const res = await window.electronAPI.metricsSummary24h({ profileId });
+                    if (!res?.ok) return;
+                    const s = res.summary || {};
+
+                    safeSet('metricEditedToday', s.total || 0);
+                    safeSet('metricTransitions24h', s.cambios || 0);
+                    safeSet('metricTopShift', s.topShift || '-');
+                    const hoursToday = Math.max(0.5, new Date().getHours() + new Date().getMinutes() / 60);
+                    safeSet('metricButtonsPerHour', Math.round((s.total || 0) / hoursToday));
+                    safeSet('metricShiftTm', s.tm || 0);
+                    safeSet('metricShiftTt', s.tt || 0);
+                    safeSet('metricShiftTn', s.tn || 0);
+                    console.log('[SHADOW-LOG] Mi Turno OK:', JSON.stringify(s));
+                } catch (err) {
+                    console.warn('[SHADOW-LOG] Error:', err?.message || err);
+                }
             };
 
             let currentMetricsFilter = 'today';
@@ -5751,18 +5837,24 @@
                     if (toEl?.value) toDate = new Date(toEl.value + 'T23:59:59');
                 }
 
-                // Filter events by date range
+                // Filter events by date range (guard against invalid dates)
                 const filtered = events.filter(e => {
+                    if (!e.timestamp) return false;
                     const eventDate = new Date(e.timestamp);
+                    if (Number.isNaN(eventDate.getTime())) return false;
                     return (!fromDate || eventDate >= fromDate) && (!toDate || eventDate <= toDate);
                 });
 
-                // Group by day
+                // Group by day (safe: skip events with un-parseable dates)
                 const byDay = {};
                 filtered.forEach(e => {
-                    const day = new Date(e.timestamp).toISOString().split('T')[0];
-                    if (!byDay[day]) byDay[day] = [];
-                    byDay[day].push(e);
+                    try {
+                        const dt = new Date(e.timestamp);
+                        if (Number.isNaN(dt.getTime())) return;
+                        const day = dt.toISOString().split('T')[0];
+                        if (!byDay[day]) byDay[day] = [];
+                        byDay[day].push(e);
+                    } catch (_) {}
                 });
 
                 // Summary
@@ -5836,119 +5928,63 @@
             async function renderProfileCompare() {
                 const container = document.getElementById('metricsProfileCompare');
                 if (!container) return;
-                const profiles = AppState.profiles || [{ id: 'default', name: 'Base principal' }];
+                container.innerHTML = '<div style="color:var(--text-secondary);font-size:.85rem;padding:12px;">Cargando perfiles desde disco…</div>';
+
                 const activePid = AppState.activeProfileId || 'default';
-                
-                // Load data from ALL profiles for comparison
-                const profileMetrics = await Promise.all(profiles.map(async profile => {
-                    const pid = profile.id;
-                    let contacts = [];
-                    
-                    if (pid === activePid) {
-                        contacts = AppState.contacts;
-                    } else {
-                        try {
-                            const result = await window.electronAPI?.loadProfile({ profileId: pid });
-                            if (result?.ok && Array.isArray(result.contacts)) {
-                                contacts = result.contacts;
-                            }
-                        } catch (e) {
-                            contacts = [];
-                        }
+
+                // SIEMPRE leer desde DISCO vía IPC — data fresca, sin ensuciar la RAM
+                let profileMetrics = [];
+                try {
+                    const res = await window.electronAPI?.comparatorScan?.();
+                    if (res?.ok && Array.isArray(res.profiles)) {
+                        profileMetrics = res.profiles;
                     }
-                    const total = contacts.length;
-                    const reviewed = contacts.filter(c => c.status !== 'sin revisar').length;
-                    const sinWsp = contacts.filter(c => c.status === 'sin wsp').length;
-                    const contactado = contacts.filter(c => c.status === 'contactado').length;
-                    const jugando = contacts.filter(c => c.status === 'jugando').length;
-                    const noInteresado = contacts.filter(c => c.status === 'no interesado').length;
-                    const revisado = contacts.filter(c => c.status === 'revisado').length;
-                    
-                    // Activity metrics from metricEvents
-                    let todayEvents = 0;
-                    let weekEvents = 0;
-                    try {
-                        const events = JSON.parse(localStorage.getItem(`metricEvents:${pid}`) || '[]');
-                        const today = new Date();
-                        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                        const weekStart = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-                        
-                        todayEvents = events.filter(e => new Date(e.timestamp) >= todayStart).length;
-                        weekEvents = events.filter(e => new Date(e.timestamp) >= weekStart).length;
-                    } catch (_) {}
-                    
-                    const pct = total ? Math.round((reviewed / total) * 100) : 0;
-                    const isActive = pid === activePid;
-                    
-                    return {
-                        profile, pid, isActive, total, reviewed, pct,
-                        sinWsp, contactado, jugando, noInteresado, revisado,
-                        todayEvents, weekEvents
-                    };
-                }));
-                
+                } catch (_) {}
+
+                // Fallback: si no hay IPC, mostrar solo el perfil activo en memoria
+                if (!profileMetrics.length) {
+                    const total = AppState.contacts.length;
+                    const reviewed = AppState.contacts.filter(c => c.status !== 'sin revisar').length;
+                    profileMetrics = [{ id: activePid, name: 'Perfil activo', total, reviewed, activos: reviewed, jugando: 0, frios: 0, sinWsp: 0, noInteresado: 0, accionesAyer: 0, accionesHoy: 0 }];
+                }
+
                 // Sort by total contacts (largest first)
-                profileMetrics.sort((a, b) => b.total - a.total);
-                
-                const cards = profileMetrics.map(metrics => {
-                    const { profile, pid, isActive, total, reviewed, pct, sinWsp, contactado, jugando, noInteresado, revisado, todayEvents, weekEvents } = metrics;
-                    
-                    return `<div class="metrics-compare-card ${isActive ? 'active-profile' : ''}" onclick="window.switchToProfile('${pid}')">
+                profileMetrics.sort((a, b) => (b.total || 0) - (a.total || 0));
+
+                const cards = profileMetrics.map(m => {
+                    const pct = m.total ? Math.round(((m.reviewed || 0) / m.total) * 100) : 0;
+                    const isActive = m.id === activePid;
+
+                    return `<div class="metrics-compare-card ${isActive ? 'active-profile' : ''}" onclick="window.switchToProfile('${m.id}')">
                         <div class="metrics-compare-header">
                             <div class="metrics-compare-name">
-                                ${isActive ? '<i class="fas fa-circle" style="color:var(--accent);font-size:.7rem;"></i>' : '<i class="fas fa-circle-o" style="color:rgba(148,163,184,.4);font-size:.7rem;"></i>'}
-                                <span style="font-weight:700;">${profile.name}</span>
+                                ${isActive ? '<i class="fas fa-circle" style="color:var(--accent);font-size:.7rem;"></i>' : '<i class="fas fa-circle" style="color:rgba(148,163,184,.4);font-size:.7rem;"></i>'}
+                                <span style="font-weight:700;">${m.name}</span>
                                 ${isActive ? '<span class="active-badge">ACTIVO</span>' : '<span class="switch-hint">clic para activar</span>'}
                             </div>
                             <div class="metrics-compare-progress">
                                 <div style="background:rgba(148,163,184,.15);border-radius:999px;height:8px;overflow:hidden;">
                                     <div style="background:${pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444'};height:100%;width:${pct}%;border-radius:999px;transition:width .5s;"></div>
                                 </div>
-                                <span style="font-weight:700;font-size:.85rem;">${pct}% completado</span>
+                                <span style="font-weight:700;font-size:.85rem;">${pct}% revisado</span>
                             </div>
                         </div>
-                        
                         <div class="metrics-compare-grid">
-                            <div class="metrics-compare-stat primary">
-                                <span class="stat-label">Total</span>
-                                <span class="stat-value">${total.toLocaleString()}</span>
-                            </div>
-                            <div class="metrics-compare-stat">
-                                <span class="stat-label">Revisados</span>
-                                <span class="stat-value" style="color:#10b981;">${reviewed}</span>
-                            </div>
-                            <div class="metrics-compare-stat">
-                                <span class="stat-label">Contactado</span>
-                                <span class="stat-value" style="color:#3b82f6;">${contactado}</span>
-                            </div>
-                            <div class="metrics-compare-stat">
-                                <span class="stat-label">Jugando</span>
-                                <span class="stat-value" style="color:#8b5cf6;">${jugando}</span>
-                            </div>
-                            <div class="metrics-compare-stat">
-                                <span class="stat-label">Sin WSP</span>
-                                <span class="stat-value" style="color:#f59e0b;">${sinWsp}</span>
-                            </div>
-                            <div class="metrics-compare-stat">
-                                <span class="stat-label">No interesa</span>
-                                <span class="stat-value" style="color:#ef4444;">${noInteresado}</span>
-                            </div>
+                            <div class="metrics-compare-stat primary"><span class="stat-label">Total</span><span class="stat-value">${Number(m.total).toLocaleString('es-ES')}</span></div>
+                            <div class="metrics-compare-stat"><span class="stat-label">Activos</span><span class="stat-value" style="color:#10b981;">${m.activos || 0}</span></div>
+                            <div class="metrics-compare-stat"><span class="stat-label">Jugando</span><span class="stat-value" style="color:#8b5cf6;">${m.jugando || 0}</span></div>
+                            <div class="metrics-compare-stat"><span class="stat-label">Fríos 🧊</span><span class="stat-value" style="color:${(m.frios || 0) > 0 ? '#f59e0b' : 'inherit'};">${m.frios || 0}</span></div>
+                            <div class="metrics-compare-stat"><span class="stat-label">Sin WSP</span><span class="stat-value" style="color:#f59e0b;">${m.sinWsp || 0}</span></div>
+                            <div class="metrics-compare-stat"><span class="stat-label">No interesa</span><span class="stat-value" style="color:#ef4444;">${m.noInteresado || 0}</span></div>
                         </div>
-                        
                         <div class="metrics-compare-activity">
-                            <div class="activity-stat">
-                                <i class="fas fa-bolt"></i>
-                                <span>Hoy: <strong>${todayEvents}</strong> acciones</span>
-                            </div>
-                            <div class="activity-stat">
-                                <i class="fas fa-calendar-week"></i>
-                                <span>Semana: <strong>${weekEvents}</strong> acciones</span>
-                            </div>
+                            <div class="activity-stat"><i class="fas fa-bolt"></i> Hoy: <strong>${m.accionesHoy || 0}</strong></div>
+                            <div class="activity-stat"><i class="fas fa-calendar-day"></i> Ayer: <strong>${m.accionesAyer || 0}</strong></div>
                         </div>
                     </div>`;
                 });
-                
-                container.innerHTML = cards.join('');
+
+                container.innerHTML = cards.join('') || '<div style="color:var(--text-secondary);padding:12px;">No se encontraron perfiles.</div>';
             }
             
             // Helper function to switch profiles from comparison
@@ -6703,6 +6739,9 @@
 
         // Exponer función de inicialización globalmente
         window.initNexoApp = init;
+        // Registrar módulo de shadow logging en el Bridge
+        if (window.NexoBridge) window.NexoBridge.register('shadow-log');
+
         window.NexoActions = {
             render,
             saveData,

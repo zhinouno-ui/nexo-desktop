@@ -14,6 +14,11 @@ contextBridge.exposeInMainWorld('nexoStore', {
   asyncSaveRequest: (payload) => ipcRenderer.send('async-save-request', payload || {})
 });
 
+// Shadow Logging — telemetría silenciosa de acciones
+contextBridge.exposeInMainWorld('telemetry', {
+  logActivity: (payload) => ipcRenderer.invoke('store:logActivity', payload || {})
+});
+
 contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => ipcRenderer.invoke('external:open', url),
   openImportDialog: () => ipcRenderer.invoke('dialog:openImportFiles'),
@@ -40,7 +45,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   buildExport: (payload) => ipcRenderer.invoke('export:build', payload || {}),
   loadProfile: (payload) => ipcRenderer.invoke('profile:load', payload || {}),
   saveProfile: (payload) => ipcRenderer.invoke('profile:save', payload || {}),
+  comparatorScan: () => ipcRenderer.invoke('profile:comparatorScan'),
 
+  metricsSummary24h: (payload) => ipcRenderer.invoke('metrics:summary24h', payload || {}),
+  metricsTail: (payload) => ipcRenderer.invoke('metrics:tail', payload || {}),
 
   zoomIn: () => ipcRenderer.invoke('zoom:in'),
   zoomOut: () => ipcRenderer.invoke('zoom:out'),

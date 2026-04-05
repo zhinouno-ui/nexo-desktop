@@ -585,26 +585,22 @@
 
             <!-- TAB: EXPORTAR -->
             <div id="metricsTabContentExport" class="metrics-tab-content">
+                <div style="font-size:.85rem;color:var(--text-secondary);margin-bottom:12px;">Sincronización rápida: exporta o importa la base completa del perfil activo.</div>
                 <div class="metrics-export-grid">
-                    <div class="metrics-export-card" onclick="document.getElementById('exportDailyNexoBtn').click()">
-                        <i class="fas fa-file-export"></i>
-                        <div class="metrics-export-title">Reporte del día</div>
-                        <div class="metrics-export-desc">Movimientos de las últimas 24hs. Liviano para Discord.</div>
-                    </div>
                     <div class="metrics-export-card" onclick="document.getElementById('exportBackupNexoBtn').click()">
-                        <i class="fas fa-archive"></i>
-                        <div class="metrics-export-title">Backup completo</div>
-                        <div class="metrics-export-desc">Snapshot total para que el superior reconstruya la base.</div>
-                    </div>
-                    <div class="metrics-export-card" onclick="document.getElementById('metricsDeleteLastBatchBtn').click()">
-                        <i class="fas fa-trash" style="color:#ef4444"></i>
-                        <div class="metrics-export-title">Borrar última subida</div>
-                        <div class="metrics-export-desc">Elimina los contactos del último CSV importado.</div>
+                        <i class="fas fa-download" style="color:#10b981"></i>
+                        <div class="metrics-export-title">Exportar Full Backup</div>
+                        <div class="metrics-export-desc">Descarga un .nexo con todos los contactos del perfil actual.</div>
                     </div>
                     <div class="metrics-export-card" onclick="document.getElementById('importFullSnapshotBtn').click()">
-                        <i class="fas fa-file-import"></i>
-                        <div class="metrics-export-title">Importar TODO</div>
-                        <div class="metrics-export-desc">Importar snapshot completo de otra PC.</div>
+                        <i class="fas fa-upload" style="color:#3b82f6"></i>
+                        <div class="metrics-export-title">Importar Data</div>
+                        <div class="metrics-export-desc">Auto-detecta el perfil y hace merge inteligente.</div>
+                    </div>
+                    <div class="metrics-export-card" onclick="document.getElementById('exportDailyNexoBtn').click()">
+                        <i class="fas fa-file-export" style="color:var(--text-secondary)"></i>
+                        <div class="metrics-export-title">Reporte diario</div>
+                        <div class="metrics-export-desc">Solo movimientos de hoy. Liviano.</div>
                     </div>
                 </div>
                 <!-- Botones ocultos que mantienen la funcionalidad original -->
