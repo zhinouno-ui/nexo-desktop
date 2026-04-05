@@ -350,15 +350,13 @@
 
         function getOpsSuggestedStatus(lastCargaAt) {
             if (!lastCargaAt) return 'sin revisar';
-            const ms = Date.now() - new Date(lastCargaAt).getTime();
-            if (Number.isNaN(ms)) return 'sin revisar';
-            const hours = ms / 3600000;
-            const days = ms / 86400000;
-            // Unified tiers: <48h active, 7d warm, 30d cold, >30d frozen
-            if (hours <= 48) return 'jugando';      // Activo
-            if (days <= 7) return 'contactado';      // Tibio
-            if (days <= 30) return 'revisado';       // Target Revinculación
-            return 'sin revisar';                    // Congelado >30d
+            const days = (Date.now() - new Date(lastCargaAt).getTime()) / 86400000;
+            if (days <= 2) return 'jugando';
+            if (days <= 7) return 'contactado';
+            if (days <= 21) return 'revisado';
+            // Nota: datos de operaciones no implican disponibilidad de WhatsApp.
+            // Evitamos sugerir 'sin wsp' solo por recencia.
+            return 'sin revisar';
         }
 
         function suggestStatusByName(name) {
@@ -376,16 +374,11 @@
         }
 
         function getOpsHeatLabel(lastCargaAt) {
-            if (!lastCargaAt) return { text: 'Sin datos', cls: 'cold', tier: 'none' };
-            const ms = Date.now() - new Date(lastCargaAt).getTime();
-            if (Number.isNaN(ms)) return { text: 'Fecha inválida', cls: 'cold', tier: 'none' };
-            const hours = ms / 3600000;
-            const days = ms / 86400000;
-            // 3-tier system: <48h = Active, 7-30d = Cold/Revinculación, >30d = Frozen
-            if (hours <= 48) return { text: '🔥 Jugando Activo', cls: 'hot', tier: 'active' };
-            if (days <= 7) return { text: '⏳ Tibio', cls: '', tier: 'warm' };
-            if (days <= 30) return { text: '🧊 Target Revinculación', cls: 'cold', tier: 'cold' };
-            return { text: '💀 Inactivo (Congelado)', cls: 'cold', tier: 'frozen' };
+            if (!lastCargaAt) return { text: 'Sin datos', cls: 'cold' };
+            const days = (Date.now() - new Date(lastCargaAt).getTime()) / 86400000;
+            if (days <= 7) return { text: '🔥 Activo', cls: 'hot' };
+            if (days <= 21) return { text: '⏳ Tibio', cls: '' };
+            return { text: '❄️ Frío', cls: 'cold' };
         }
 
         function parseOperationsCsvChunkedFallback(text, onProgress) {
@@ -401,7 +394,10 @@
                 const aliasIdx = h.findIndex(v => v.includes('alias'));
                 const amountIdx = h.findIndex(v => v.includes('cantidad'));
                 const dateIdx = h.findIndex(v => v.includes('fecha'));
+                const typeIdx = h.findIndex(v => v.includes('tipo') || v.includes('type'));
                 const stats = new Map();
+                // byMonth: "YYYY-MM" → { aliases: Set, volumenCargas, volumenRetiros, cargas, retiros, rawAliases: Set }
+                const byMonth = new Map();
                 const now = Date.now();
                 const chunk = 700;
                 const totalRows = Math.max(0, lines.length - idx);
@@ -446,6 +442,19 @@
                         st.netoTotal += amount;
                         st.hourHist[hour] += 1;
                         if (!st.lastAt || ts > st.lastAt) st.lastAt = ts;
+
+                        // ── Monthly bucketing ──────────────────────────────────
+                        const mDate = new Date(ts);
+                        const monthKey = `${mDate.getFullYear()}-${String(mDate.getMonth() + 1).padStart(2, '0')}`;
+                        if (!byMonth.has(monthKey)) {
+                            byMonth.set(monthKey, { month: monthKey, aliases: new Set(), rawAliases: new Set(), volumenCargas: 0, volumenRetiros: 0, cargas: 0, retiros: 0 });
+                        }
+                        const mb = byMonth.get(monthKey);
+                        mb.aliases.add(alias);
+                        mb.rawAliases.add(aliasRaw.trim());
+                        if (amount > 0) { mb.cargas++; mb.volumenCargas += amount; }
+                        else if (amount < 0) { mb.retiros++; mb.volumenRetiros += Math.abs(amount); }
+                        // ──────────────────────────────────────────────────────
 
                         const ageDays = (now - ts) / 86400000;
                         if (amount > 0) {
@@ -502,7 +511,20 @@
                         delete byAlias[alias].weeks30;
                         delete byAlias[alias].months90;
                     }
-                    resolve({ byAlias, importedRows });
+                    // Serialize byMonth Sets to arrays for JSON transfer
+                    const monthlyData = {};
+                    for (const [mk, mb] of byMonth.entries()) {
+                        monthlyData[mk] = {
+                            month: mb.month,
+                            uniqueAliasCount: mb.aliases.size,
+                            aliases: Array.from(mb.aliases),
+                            volumenCargas: mb.volumenCargas,
+                            volumenRetiros: mb.volumenRetiros,
+                            cargas: mb.cargas,
+                            retiros: mb.retiros
+                        };
+                    }
+                    resolve({ byAlias, importedRows, monthlyData });
                 };
                 process();
             });
@@ -541,23 +563,18 @@
                     };
                     const getOpsSuggestedStatus = (lastCargaAt) => {
                         if (!lastCargaAt) return 'sin revisar';
-                        const _ms = Date.now() - new Date(lastCargaAt).getTime();
-                        if (Number.isNaN(_ms)) return 'sin revisar';
-                        const _h = _ms / 3600000, _d = _ms / 86400000;
-                        if (_h <= 48) return 'jugando';
-                        if (_d <= 7) return 'contactado';
-                        if (_d <= 30) return 'revisado';
+                        const days = (Date.now() - new Date(lastCargaAt).getTime()) / 86400000;
+                        if (days <= 2) return 'jugando';
+                        if (days <= 7) return 'contactado';
+                        if (days <= 21) return 'revisado';
                         return 'sin revisar';
                     };
                     const getOpsHeatLabel = (lastCargaAt) => {
-                        if (!lastCargaAt) return { text: 'Sin datos', cls: 'cold', tier: 'none' };
-                        const _ms = Date.now() - new Date(lastCargaAt).getTime();
-                        if (Number.isNaN(_ms)) return { text: 'Fecha inválida', cls: 'cold', tier: 'none' };
-                        const _h = _ms / 3600000, _d = _ms / 86400000;
-                        if (_h <= 48) return { text: '🔥 Jugando Activo', cls: 'hot', tier: 'active' };
-                        if (_d <= 7) return { text: '⏳ Tibio', cls: '', tier: 'warm' };
-                        if (_d <= 30) return { text: '🧊 Target Revinculación', cls: 'cold', tier: 'cold' };
-                        return { text: '💀 Inactivo', cls: 'cold', tier: 'frozen' };
+                        if (!lastCargaAt) return { text: 'Sin datos', cls: 'cold' };
+                        const days = (Date.now() - new Date(lastCargaAt).getTime()) / 86400000;
+                        if (days <= 7) return { text: '🔥 Activo', cls: 'hot' };
+                        if (days <= 21) return { text: '⏳ Tibio', cls: '' };
+                        return { text: '❄️ Frío', cls: 'cold' };
                     };
 
                     self.onmessage = (event) => {
@@ -752,10 +769,24 @@
             let createdCount = 0;
             const CHUNK = 500;
 
-            // Build index for O(1) lookups
-            const contactsForProfile = AppState.contacts.filter(c => (c.profileId || 'default') === (AppState.activeProfileId || 'default'));
+            // Build reverse index: normalized alias → contact (all keys including name variants)
+            // This ensures O(1) lookup and prevents creating duplicates on successive imports.
+            const activeProfile = AppState.activeProfileId || 'default';
+            const contactsForProfile = AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile);
+            const aliasToContact = new Map();
+            for (const c of contactsForProfile) {
+                const keys = [
+                    normalizeAlias(c.alias || ''),
+                    normalizeAlias(extractPrimaryAlias(c.name || '')),
+                    normalizeAlias(c.name || '')
+                ].filter(Boolean);
+                for (const k of keys) {
+                    if (!aliasToContact.has(k)) aliasToContact.set(k, c);
+                }
+            }
             const total = contactsForProfile.length;
 
+            // Pass 1: match existing contacts to their ops profile entry
             for (let i = 0; i < total; i += CHUNK) {
                 const end = Math.min(total, i + CHUNK);
                 for (let j = i; j < end; j++) {
@@ -773,12 +804,26 @@
                     if (contact.status !== prevStatus || (contact.alias || '') !== prevAlias) updatedCount++;
                 }
                 if (onProgress) onProgress({ processed: end, total });
-                // Yield to UI thread every chunk
                 await new Promise(r => setTimeout(r, 0));
             }
 
             if (createNewUsers) {
-                const newAliases = Object.keys(profiles).filter(alias => !matchedAliases.has(alias));
+                // FORCE-CREATE: any alias in opsProfiles not matched to an existing contact MUST be created.
+                // Double-check via the reverse aliasToContact index to catch near-matches the main loop missed.
+                const newAliases = Object.keys(profiles).filter(alias => {
+                    if (matchedAliases.has(alias)) return false;
+                    // Check if a contact already has this alias (via reverse index)
+                    if (aliasToContact.has(alias)) {
+                        // Exists but wasn't matched in pass 1 — update it instead of creating duplicate
+                        const existing = aliasToContact.get(alias);
+                        existing.ops = profiles[alias];
+                        existing.alias = existing.alias || profiles[alias].aliasLabel || alias;
+                        applyOpsHeuristicsToContact(existing);
+                        updatedCount++;
+                        return false;
+                    }
+                    return true; // Truly new alias — must create contact
+                });
                 const newTotal = newAliases.length;
                 for (let i = 0; i < newTotal; i += CHUNK) {
                     const end = Math.min(newTotal, i + CHUNK);
@@ -1444,10 +1489,16 @@
             setSaveState('pending', 'Leyendo CSV…');
 
             try {
-            const snapshotStamp = new Date().toISOString().replace(/[:.]/g, '-');
             const activeProfileBefore = AppState.activeProfileId || 'default';
             const profileContactsBefore = AppState.contacts.filter(c => (c.profileId || 'default') === activeProfileBefore);
-            localStorage.setItem(`bk_profile_${activeProfileBefore}_${snapshotStamp}`, JSON.stringify(profileContactsBefore));
+            // Backup pre-import → disco (NUNCA localStorage: causa QuotaExceededError con 46k+)
+            if (window.electronAPI?.backupWriteToDisk) {
+                window.electronAPI.backupWriteToDisk({
+                    profileId: activeProfileBefore,
+                    label: 'pre-import',
+                    contacts: profileContactsBefore
+                }).catch(e => console.warn('Backup pre-import falló:', e));
+            }
 
             for (let fileIndex = 0; fileIndex < selectedFiles.length; fileIndex++) {
                 const file = selectedFiles[fileIndex];
@@ -1510,10 +1561,18 @@
                             detectDuplicates();
                             setLoadingState(true, 'Guardando…', 97, true);
                             saveData();
+                            // ── Guardar historial mensual en disco (async, sin bloquear UI) ──
+                            if (opsResult.monthlyData && window.electronAPI?.saveOpsMonthlyHistory) {
+                                const _pid = AppState.activeProfileId || 'default';
+                                window.electronAPI.saveOpsMonthlyHistory({ profileId: _pid, monthlyData: opsResult.monthlyData })
+                                    .then(r => console.log(`[OpsHistory] ${Object.keys(opsResult.monthlyData).length} meses guardados →`, r))
+                                    .catch(e => console.warn('[OpsHistory] Error guardando historial:', e));
+                            }
                             render();
                             setLoadingState(false, '', 100, false);
                             setSaveState('ok', `Operaciones importadas: ${opsResult.importedRows} filas`);
-                            showNotification(`Operaciones importadas: ${opsResult.importedRows} filas · ${syncResult.createdCount} nuevos · ${syncResult.updatedCount} actualizados`, 'success');
+                            const monthCount = opsResult.monthlyData ? Object.keys(opsResult.monthlyData).length : 0;
+                            showNotification(`Operaciones importadas: ${opsResult.importedRows} filas · ${syncResult.createdCount} nuevos · ${syncResult.updatedCount} actualizados · ${monthCount} meses registrados`, 'success');
                         } catch (opsErr) {
                             setLoadingState(false, '', 100, false);
                             showNotification(`Error procesando operaciones: ${opsErr?.message || opsErr}`, 'error');
@@ -1897,24 +1956,60 @@
         }
 
         function tryStorageRecovery() {
-            try {
-                const backupKeys = Object.keys(localStorage).filter(k => k.startsWith('bk_')).sort();
-                while (backupKeys.length > 2) {
-                    localStorage.removeItem(backupKeys.shift());
-                }
-                if (AppState.history.length > 25) {
-                    AppState.history = AppState.history.slice(0, 25);
-                    localStorage.setItem(`contactsHistory:${AppState.activeProfileId||'default'}`, JSON.stringify(AppState.history));
-                }
-                const opsRaw = localStorage.getItem('opsProfilesData');
-                if (opsRaw && opsRaw.length > 1200000) {
-                    localStorage.removeItem('opsProfilesData');
-                    localStorage.removeItem('opsLastImportedAt');
-                    AppState.opsProfiles = {};
-                    AppState.opsLastImportedAt = null;
-                }
-            } catch (_) {}
+            // Delegar a purgeLocalStorage que hace una limpieza más completa
+            window.purgeLocalStorage(true);
         }
+
+        // ██ PURGA DE LOCALSTORAGE ██
+        // Borra TODAS las entradas que pesen más de 1KB excepto claves esenciales.
+        // Debe ejecutarse al arranque para desbloquear QuotaExceededError.
+        window.purgeLocalStorage = function purgeLocalStorage(silent) {
+            const KEEP_KEYS = new Set([
+                'theme', 'activeProfileId', 'nexo_theme', 'colorTheme',
+                'activeThemeId', 'lightMode', 'duplicateMergeMode',
+                'uploadUnlockedUntil', 'adminLastAccess'
+            ]);
+            const KB = 1024;
+            let purgedCount = 0;
+            let purgedBytes = 0;
+            try {
+                const keysToRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (!key || KEEP_KEYS.has(key)) continue;
+                    const val = localStorage.getItem(key) || '';
+                    const sizeBytes = (key.length + val.length) * 2;
+                    // Borrar backups bk_* sin importar tamaño
+                    if (key.startsWith('bk_') || key.startsWith('bk_profile_')) {
+                        keysToRemove.push(key);
+                        purgedBytes += sizeBytes;
+                        continue;
+                    }
+                    // Borrar cualquier clave con contactsData (arrays gigantes)
+                    if (key.startsWith('contactsData:')) {
+                        keysToRemove.push(key);
+                        purgedBytes += sizeBytes;
+                        continue;
+                    }
+                    // Borrar entradas grandes (>1KB)
+                    if (sizeBytes > KB) {
+                        keysToRemove.push(key);
+                        purgedBytes += sizeBytes;
+                    }
+                }
+                for (const key of keysToRemove) {
+                    localStorage.removeItem(key);
+                    purgedCount++;
+                }
+                if (!silent && purgedCount > 0) {
+                    console.log(`[purgeLocalStorage] Limpiadas ${purgedCount} entradas · ${(purgedBytes / 1024).toFixed(1)} KB liberados`);
+                    setSaveState('ok', `Cache limpiado: ${purgedCount} entradas borradas`);
+                }
+            } catch (err) {
+                console.warn('[purgeLocalStorage] Error durante purga:', err.message);
+            }
+            return { purgedCount, purgedBytes };
+        };
 
         async function refreshStorageDiagnostics() {
             try {
@@ -2004,6 +2099,15 @@
                 const _saveProfileId = AppState.activeProfileId || 'default';
                 const _profileContacts = safeContacts.filter(c => (c.profileId || 'default') === _saveProfileId);
 
+                // ██ STOP-LOSS: JAMÁS sobreescribir un shard con 0 contactos ██
+                if (_profileContacts.length === 0 && reason !== 'user-delete-all') {
+                    console.warn(`[STOP-LOSS] ⛔ Bloqueado: intento de guardar 0 contactos en perfil ${_saveProfileId} (reason: ${reason})`);
+                    setSaveState('warn', 'Guardado cancelado: lista vacía');
+                    contactsFlushInFlight = false;
+                    AppState.currentPerfStage = 'idle';
+                    return false;
+                }
+
                 if (window.electronAPI?.saveProfile) {
                     // IPC directo al archivo de perfil en disco
                     await window.electronAPI.saveProfile({ profileId: _saveProfileId, contacts: _profileContacts });
@@ -2024,9 +2128,10 @@
                 AppState.perfStats.saveMs = Math.round(performance.now() - startedAt);
                 recordStageCost('save', AppState.perfStats.saveMs);
             } catch (e) {
-                console.warn('No se pudo guardar diferido, fallback localStorage:', e);
-                try { localStorage.setItem(`contactsData:${AppState.activeProfileId || 'default'}`, JSON.stringify(safeContacts)); } catch (_) {}
-                setSaveState('warn', 'Guardado diferido con fallback');
+                console.warn('[flushSaveQueue] Error IPC save:', e);
+                // ██ Sin fallback a localStorage: causa QuotaExceededError con 46k contactos ██
+                setSaveState('warn', 'Error al guardar — reintentando…');
+                queueSaveData(2000);
                 return false;
             } finally {
                 AppState.currentPerfStage = 'idle';
@@ -2184,18 +2289,9 @@
                         }
                     }
                 } else {
-                    const backupContacts = getLatestBackupContacts();
-                    if (backupContacts) {
-                        AppState.contacts = backupContacts;
-                        try {
-                            localStorage.setItem(`contactsData:${AppState.activeProfileId || 'default'}`, JSON.stringify(sanitizeContactsForStorage(AppState.contacts)));
-                        } catch (persistErr) {
-                            reportError('loadData:backup-persist', persistErr);
-                            setSaveState('warn', 'Recovery sin persistir (storage lleno)');
-                        }
-                        showNotification('Datos recuperados desde backup local', 'info');
-                        announceGeneral('Datos recuperados desde backup local', 'warn', 4200);
-                    }
+                    // Backup localStorage obsoleto — la fuente de verdad es el shard en disco.
+                    // Si loadProfile no devolvió datos, el perfil está vacío legítimamente.
+                    console.warn('[loadData] Sin contactos en disco para perfil', _activePid);
                 }
 
                 if (AppState.contacts.length > 0) {
@@ -2595,15 +2691,6 @@
             let ids = (AppState.searchIndex.byProfile.get(activeProfile) || []).slice();
 
             if (selectedStatus) ids = intersectIds(ids, new Set(AppState.searchIndex.byStatus.get(selectedStatus) || []));
-            // "Jugando" filter = only active (<48h ops). Cold/frozen contacts hidden from this filter.
-            if (selectedStatus === 'jugando') {
-                const now48 = Date.now() - 48 * 3600000;
-                ids = ids.filter(id => {
-                    const c = AppState.searchIndex.byId.get(id);
-                    if (!c?.ops?.lastCargaAt) return true; // no ops data → keep visible
-                    return new Date(c.ops.lastCargaAt).getTime() >= now48;
-                });
-            }
             if (selectedShift) ids = intersectIds(ids, new Set(AppState.searchIndex.byShift.get(selectedShift) || []));
             if (AppState.phoneFilter && AppState.phoneFilter !== 'all') {
                 const bucket = AppState.phoneFilter === 'with' ? 'with' : AppState.phoneFilter === 'without' ? 'without' : AppState.phoneFilter;
@@ -2765,6 +2852,11 @@
         }
 
         function updateStats() {
+            // Force-sync activeProfileId if localStorage has a more recent value
+            const storedPid = localStorage.getItem('activeProfileId');
+            if (storedPid && storedPid !== AppState.activeProfileId) {
+                AppState.activeProfileId = storedPid;
+            }
             const activeProfile = AppState.activeProfileId || 'default';
             const profileContacts = AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile);
             const totals = {
@@ -3856,15 +3948,8 @@
                         profileId: AppState.activeProfileId, 
                         contacts: profileContacts 
                     }).catch(e => console.warn('[saveCurrentProfileContacts] IPC save failed:', e));
-                } else {
-                    // Fallback localStorage con manejo de errores mejorado
-                    try {
-                        localStorage.setItem(`contactsData:${AppState.activeProfileId}`, JSON.stringify(profileContacts));
-                    } catch (storageError) {
-                        console.warn('[saveCurrentProfileContacts] localStorage lleno, omitiendo guardado automático');
-                        // No intentar limpiar aquí para evitar interferir con el flujo normal
-                    }
                 }
+                // ██ Sin fallback a localStorage: causa QuotaExceededError con 46k contactos ██
                 
                 console.log(`[saveCurrentProfileContacts] Guardados ${profileContacts.length} contactos del perfil ${AppState.activeProfileId}`);
             } catch (error) {
@@ -5742,7 +5827,7 @@
 
             // ── Centro de Mando: tabs y comparación de perfiles ─────────────
             window.switchMetricsTab = (tab) => {
-                ['operator','supervisor','compare','export'].forEach(t => {
+                ['operator','supervisor','compare','history','export'].forEach(t => {
                     const btn = document.getElementById(`metricsTab${t.charAt(0).toUpperCase()+t.slice(1)}`);
                     const content = document.getElementById(`metricsTabContent${t.charAt(0).toUpperCase()+t.slice(1)}`);
                     if (btn) btn.classList.toggle('active', t === tab);
@@ -5750,6 +5835,7 @@
                 });
                 if (tab === 'compare') renderProfileCompare();
                 if (tab === 'supervisor') window.renderShiftDailyLogs();
+                if (tab === 'history') renderOpsCalendar();
                 if (tab === 'operator' && typeof window.populateMiTurnoFromShadowLog === 'function') {
                     window.populateMiTurnoFromShadowLog().catch(() => {});
                 }
@@ -5757,33 +5843,25 @@
 
             // ── Shadow Log: poblar "Mi Turno" desde el Main Process ──────────
             window.populateMiTurnoFromShadowLog = async () => {
-                const safeSet = (id, val) => {
-                    try {
-                        const el = document.getElementById(id);
-                        if (el) el.textContent = String(val ?? 0);
-                    } catch (_) {}
-                };
                 try {
                     const profileId = AppState.activeProfileId || 'default';
-                    if (!window.electronAPI?.metricsSummary24h) {
-                        console.warn('[SHADOW-LOG] metricsSummary24h not available');
-                        return;
-                    }
-                    const res = await window.electronAPI.metricsSummary24h({ profileId });
+                    const res = await window.electronAPI?.metricsSummary24h?.({ profileId });
                     if (!res?.ok) return;
                     const s = res.summary || {};
 
-                    safeSet('metricEditedToday', s.total || 0);
-                    safeSet('metricTransitions24h', s.cambios || 0);
-                    safeSet('metricTopShift', s.topShift || '-');
-                    const hoursToday = Math.max(0.5, new Date().getHours() + new Date().getMinutes() / 60);
-                    safeSet('metricButtonsPerHour', Math.round((s.total || 0) / hoursToday));
-                    safeSet('metricShiftTm', s.tm || 0);
-                    safeSet('metricShiftTt', s.tt || 0);
-                    safeSet('metricShiftTn', s.tn || 0);
-                    console.log('[SHADOW-LOG] Mi Turno OK:', JSON.stringify(s));
+                    const set = (id, val) => {
+                        const el = document.getElementById(id);
+                        if (el) el.textContent = String(val ?? 0);
+                    };
+                    set('metricEditedToday', s.total || 0);
+                    set('metricTransitions24h', s.cambios || 0);
+                    set('metricTopShift', s.topShift || '-');
+                    // Ritmo/hora: total acciones / horas transcurridas hoy
+                    const hoursToday = Math.max(1, (new Date().getHours() + new Date().getMinutes() / 60) || 1);
+                    set('metricButtonsPerHour', Math.round((s.total || 0) / hoursToday));
+                    console.log('[SHADOW-LOG] Mi Turno actualizado:', s);
                 } catch (err) {
-                    console.warn('[SHADOW-LOG] Error:', err?.message || err);
+                    console.warn('[SHADOW-LOG] Error al poblar Mi Turno:', err);
                 }
             };
 
@@ -5910,6 +5988,137 @@
             // Legacy function for compatibility
             window.renderShiftDailyLogs = window.renderMetricsHistory;
 
+            // ── CALENDARIO OPERATIVO: Historial de Operaciones 12 Meses ─────────
+            async function renderOpsCalendar() {
+                const container = document.getElementById('opsCalendarContainer');
+                if (!container) return;
+                container.innerHTML = '<div style="color:var(--text-secondary);font-size:.85rem;padding:8px 0;">Cargando historial…</div>';
+
+                let history = null;
+                try {
+                    const profileId = AppState.activeProfileId || 'default';
+                    const res = await window.electronAPI?.getOpsMonthlyHistory?.({ profileId });
+                    if (res?.ok) history = res.history;
+                } catch (_) {}
+
+                if (!history || !Object.keys(history.months || {}).length) {
+                    container.innerHTML = `
+                        <div style="text-align:center;padding:32px 16px;color:var(--text-secondary);">
+                            <div style="font-size:2rem;margin-bottom:8px;">📅</div>
+                            <div style="font-weight:700;color:var(--text-primary);margin-bottom:6px;">Sin historial de operaciones</div>
+                            <div style="font-size:.85rem;">Importa un archivo CSV de operaciones para comenzar a construir el historial mensual.</div>
+                        </div>`;
+                    return;
+                }
+
+                // Build the 12-month grid (last 12 months from today)
+                const now = new Date();
+                const months = [];
+                for (let i = 11; i >= 0; i--) {
+                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                    months.push(key);
+                }
+
+                // Also include any older months in history that are outside the 12-month window
+                const allMonthKeys = Object.keys(history.months).sort();
+                const extraOld = allMonthKeys.filter(k => !months.includes(k));
+
+                const renderCard = (monthKey) => {
+                    const data = history.months[monthKey];
+                    const hasData = !!data;
+                    const label = data?.label || formatMonthKeyLabel(monthKey);
+                    const vol = hasData ? (data.volumenCargas || 0).toLocaleString('es-AR') : '—';
+                    const retiros = hasData ? (data.volumenRetiros || 0).toLocaleString('es-AR') : '—';
+                    const users = hasData ? (data.uniqueAliasCount || 0) : '—';
+                    const newUsers = hasData ? (data.newAliasCount || 0) : '—';
+                    const isGap = !hasData;
+
+                    const borderColor = isGap ? '#f59e0b' : '#10b981';
+                    const bgColor = isGap ? 'rgba(245,158,11,.08)' : 'rgba(16,185,129,.08)';
+                    const dotColor = isGap ? '#f59e0b' : '#10b981';
+                    const dotLabel = isGap ? 'SIN DATA' : 'COMPLETO';
+
+                    const clickAction = isGap
+                        ? `window._opsCalendarAlert('${monthKey}','${label}')`
+                        : `window._opsCalendarDetail('${monthKey}','${label}',${JSON.stringify(data).replace(/'/g,"\\'")})`; // eslint-disable-line
+
+                    return `<div onclick="${clickAction}" style="background:${bgColor};border:1.5px solid ${borderColor};border-radius:12px;padding:14px 16px;cursor:pointer;transition:transform .15s;user-select:none;" onmouseenter="this.style.transform='scale(1.02)'" onmouseleave="this.style.transform='scale(1)'">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                            <span style="font-weight:700;font-size:.95rem;">${label}</span>
+                            <span style="font-size:.7rem;font-weight:700;color:${dotColor};background:rgba(0,0,0,.18);padding:2px 7px;border-radius:999px;">${dotLabel}</span>
+                        </div>
+                        ${hasData ? `
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:.8rem;">
+                            <div style="color:var(--text-secondary);">💰 Cargas</div><div style="font-weight:600;">$${vol}</div>
+                            <div style="color:var(--text-secondary);">📤 Retiros</div><div style="font-weight:600;">$${retiros}</div>
+                            <div style="color:var(--text-secondary);">👤 Jugadores</div><div style="font-weight:600;">${users}</div>
+                            <div style="color:var(--text-secondary);">🆕 Nuevos</div><div style="font-weight:600;">${newUsers}</div>
+                        </div>` : `
+                        <div style="color:var(--text-secondary);font-size:.82rem;">Haz click para subir data faltante</div>`}
+                    </div>`;
+                };
+
+                const grid12 = months.map(renderCard).join('');
+                const extraSection = extraOld.length ? `
+                    <div style="margin-top:24px;border-top:1px solid rgba(148,163,184,.2);padding-top:16px;">
+                        <div style="font-size:.8rem;color:var(--text-secondary);font-weight:700;margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em;">Meses anteriores</div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;">
+                            ${extraOld.map(renderCard).join('')}
+                        </div>
+                    </div>` : '';
+
+                const updatedAt = history.updatedAt ? `<div style="font-size:.75rem;color:rgba(148,163,184,.5);text-align:right;margin-top:12px;">Actualizado: ${new Date(history.updatedAt).toLocaleString('es-AR')}</div>` : '';
+                const knownCount = (history.knownAliases || []).length;
+
+                container.innerHTML = `
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+                        <div style="font-size:.85rem;color:var(--text-secondary);">
+                            <span style="color:#10b981;font-weight:700;">${allMonthKeys.filter(k => history.months[k]).length}</span> meses con datos ·
+                            <span style="color:#f59e0b;font-weight:700;">${months.filter(k => !history.months[k]).length}</span> huecos en los últimos 12 meses ·
+                            <span style="font-weight:700;">${knownCount}</span> jugadores históricos únicos
+                        </div>
+                        <button onclick="renderOpsCalendar()" style="background:rgba(148,163,184,.12);border:none;color:var(--text-secondary);padding:5px 12px;border-radius:8px;cursor:pointer;font-size:.8rem;">↻ Actualizar</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:10px;">
+                        ${grid12}
+                    </div>
+                    ${extraSection}
+                    ${updatedAt}`;
+
+                // Expose calendar as global so the onclick in cards works
+                window.renderOpsCalendar = renderOpsCalendar;
+            }
+
+            // Fallback label formatter (for cards not yet saved with a label)
+            function formatMonthKeyLabel(monthKey) {
+                const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+                try {
+                    const [y, m] = monthKey.split('-');
+                    return `${MONTHS_ES[parseInt(m, 10) - 1]} ${y}`;
+                } catch (_) { return monthKey; }
+            }
+
+            // Calendar click handlers
+            window._opsCalendarAlert = (monthKey, label) => {
+                const msg = `No hay data de ${label}.\n\nPor favor, importa el archivo CSV de operaciones correspondiente a ese período.`;
+                // Show a styled toast instead of blocking alert
+                showNotification(msg, 'warn', 5000);
+            };
+
+            window._opsCalendarDetail = (monthKey, label, data) => {
+                try {
+                    const d = typeof data === 'string' ? JSON.parse(data) : data;
+                    const vol = (d.volumenCargas || 0).toLocaleString('es-AR');
+                    const ret = (d.volumenRetiros || 0).toLocaleString('es-AR');
+                    const net = ((d.volumenCargas || 0) - (d.volumenRetiros || 0)).toLocaleString('es-AR');
+                    showNotification(`📅 ${label} — Cargas: $${vol} · Retiros: $${ret} · Neto: $${net} · Jugadores: ${d.uniqueAliasCount || 0} (${d.newAliasCount || 0} nuevos)`, 'info', 6000);
+                } catch (_) {
+                    showNotification(`📅 ${label} — datos disponibles`, 'info', 3000);
+                }
+            };
+            // ── END CALENDARIO OPERATIVO ──────────────────────────────────────
+
             window.setMetricsShift = (shift) => {
                 // Update pills visual
                 ['metricsShiftMorningBtn','metricsShiftAfternoonBtn','metricsShiftNightBtn','metricsShiftResetBtn'].forEach(id => {
@@ -5926,8 +6135,12 @@
             };
 
             async function renderProfileCompare() {
+                // ██ RESET: limpiar HTML sucio de sesión anterior ██
                 const container = document.getElementById('metricsProfileCompare');
                 if (!container) return;
+                container.innerHTML = '';
+                const oldBody = document.getElementById('cmdComparadorBody');
+                if (oldBody) oldBody.innerHTML = '';
                 container.innerHTML = '<div style="color:var(--text-secondary);font-size:.85rem;padding:12px;">Cargando perfiles desde disco…</div>';
 
                 const activePid = AppState.activeProfileId || 'default';
@@ -6967,6 +7180,28 @@
 
         async function init() {
             try {
+                // ── PURGA PREVENTIVA DE LOCALSTORAGE ─────────────────────────────────────
+                // Ejecutar ANTES de cualquier otra operación para desbloquear la app
+                // si un QuotaExceededError previo dejó el storage saturado.
+                try {
+                    if (typeof window.purgeLocalStorage === 'function') {
+                        window.purgeLocalStorage(true);
+                    } else {
+                        // Fallback inline por si purgeLocalStorage aún no se declaró
+                        const KEEP = new Set(['theme', 'activeProfileId', 'nexo_theme', 'colorTheme', 'activeThemeId', 'lightMode']);
+                        for (let i = localStorage.length - 1; i >= 0; i--) {
+                            const k = localStorage.key(i);
+                            if (k && !KEEP.has(k)) {
+                                const v = localStorage.getItem(k) || '';
+                                if (k.startsWith('bk_') || k.startsWith('contactsData:') || (k.length + v.length) * 2 > 1024) {
+                                    localStorage.removeItem(k);
+                                }
+                            }
+                        }
+                    }
+                } catch (_purgErr) { /* no-op: continuar aunque falle */ }
+                // ── FIN PURGA ──────────────────────────────────────────────────────────────
+
                 await (window.__nexoStoreReady || Promise.resolve());
                 try {
                     const version = await window.electronAPI?.getAppVersion?.();

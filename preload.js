@@ -46,9 +46,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadProfile: (payload) => ipcRenderer.invoke('profile:load', payload || {}),
   saveProfile: (payload) => ipcRenderer.invoke('profile:save', payload || {}),
   comparatorScan: () => ipcRenderer.invoke('profile:comparatorScan'),
+  backupWriteToDisk: (payload) => ipcRenderer.invoke('backup:writeToDisk', payload || {}),
 
   metricsSummary24h: (payload) => ipcRenderer.invoke('metrics:summary24h', payload || {}),
   metricsTail: (payload) => ipcRenderer.invoke('metrics:tail', payload || {}),
+  metricsGetCompleteHistory: (payload) => ipcRenderer.invoke('metrics:getCompleteHistory', payload || {}),
+
+  // Ops Monthly History — Calendario Operativo
+  saveOpsMonthlyHistory: (payload) => ipcRenderer.invoke('ops:saveMonthlyHistory', payload || {}),
+  getOpsMonthlyHistory: (payload) => ipcRenderer.invoke('ops:getMonthlyHistory', payload || {}),
 
   zoomIn: () => ipcRenderer.invoke('zoom:in'),
   zoomOut: () => ipcRenderer.invoke('zoom:out'),

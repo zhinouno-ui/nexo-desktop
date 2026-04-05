@@ -445,6 +445,9 @@
                 <button class="metrics-tab" id="metricsTabCompare" onclick="switchMetricsTab('compare')">
                     <i class="fas fa-columns"></i> Comparar perfiles
                 </button>
+                <button class="metrics-tab" id="metricsTabHistory" onclick="switchMetricsTab('history')">
+                    <i class="fas fa-calendar-alt"></i> Historial
+                </button>
                 <button class="metrics-tab" id="metricsTabExport" onclick="switchMetricsTab('export')">
                     <i class="fas fa-file-export"></i> Exportar
                 </button>
@@ -583,6 +586,16 @@
                 </div>
             </div>
 
+            <!-- TAB: HISTORIAL DE OPERACIONES -->
+            <div id="metricsTabContentHistory" class="metrics-tab-content">
+                <div class="metrics-supervisor-intro">
+                    <i class="fas fa-calendar-alt"></i>
+                    Historial de Operaciones (12 Meses) â€” Verde: datos completos Â· Naranja: sin datos registrados.
+                </div>
+                <div id="opsCalendarContainer">
+                    <div style="color:var(--text-secondary);font-size:.9rem;padding:12px 0;">Importa un archivo CSV de operaciones para ver el historial mensual.</div>
+                </div>
+            </div>
             <!-- TAB: EXPORTAR -->
             <div id="metricsTabContentExport" class="metrics-tab-content">
                 <div style="font-size:.85rem;color:var(--text-secondary);margin-bottom:12px;">Sincronización rápida: exporta o importa la base completa del perfil activo.</div>
