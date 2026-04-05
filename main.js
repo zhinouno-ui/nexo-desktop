@@ -1364,6 +1364,54 @@ ipcMain.handle('ops:getMonthlyHistory', async (_event, payload) => {
 });
 // ─── END OPS MONTHLY HISTORY ──────────────────────────────────────────────────
 
+// ─── COMPLETE HISTORY: unified read of shadow log + ops monthly history ───────
+// Returns a single object with both data sources so the renderer can populate
+// AppState.metricEvents (timeline) and the Ops Calendar in a single round-trip.
+ipcMain.handle('metrics:getCompleteHistory', async (_event, payload) => {
+  const profileId = String(payload?.profileId || 'default');
+  const logLimit  = Math.min(5000, Math.max(1, Number(payload?.logLimit) || 1000));
+
+  const result = {
+    ok:         true,
+    profileId,
+    shadowLog:  [],   // last logLimit events from activity-{profileId}.log
+    opsHistory: null, // full history-{profileId}.json content
+    errors:     []
+  };
+
+  // 1 ─ Shadow log (activity events)
+  try {
+    const logPath  = getActivityLogPath(profileId);
+    const allLines = readJsonlSafe(logPath);
+    // Validate timestamps: parse & normalize each event so the renderer
+    // never receives an "Invalid Date" string.
+    const validated = [];
+    for (const ev of allLines) {
+      try {
+        const ts = new Date(ev.timestamp);
+        if (Number.isNaN(ts.getTime())) continue; // discard corrupt lines
+        validated.push({ ...ev, timestamp: ts.toISOString() });
+      } catch (_) { /* skip unparse-able lines */ }
+    }
+    // Return the last logLimit events (most recent first for the timeline)
+    result.shadowLog = validated.slice(-logLimit).reverse();
+  } catch (logErr) {
+    result.errors.push({ source: 'shadowLog', message: logErr?.message || String(logErr) });
+  }
+
+  // 2 ─ Ops Monthly History (calendar)
+  try {
+    result.opsHistory = await readOpsHistory(profileId);
+  } catch (histErr) {
+    result.errors.push({ source: 'opsHistory', message: histErr?.message || String(histErr) });
+    result.opsHistory = { profileId, months: {}, knownAliases: [], updatedAt: null };
+  }
+
+  if (result.errors.length > 0) result.ok = false;
+  return result;
+});
+// ─── END COMPLETE HISTORY ─────────────────────────────────────────────────────
+
 ipcMain.handle('store:getAll', async () => readDb());
 
 ipcMain.handle('profile:list', async () => ({ profiles: await readProfilesMeta() }));

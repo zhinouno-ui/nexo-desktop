@@ -5865,6 +5865,95 @@
                 }
             };
 
+            // ── WARM BOOT: sincronización determinista Dashboard ↔ Disco ──────────
+            // Se ejecuta justo después de loadData() en init().
+            // Lee el historial completo desde el Main (shadow log + ops calendar)
+            // y lo inyecta en AppState para que el Dashboard refleje el disco físico.
+            window.syncDashboardWithDisk = async function syncDashboardWithDisk(profileId) {
+                const pid = profileId || AppState.activeProfileId || 'default';
+                console.log(`[WARM-BOOT] Iniciando sincronización para perfil ${pid}…`);
+
+                if (!window.electronAPI?.metricsGetCompleteHistory) {
+                    console.warn('[WARM-BOOT] metricsGetCompleteHistory no disponible — omitiendo sync');
+                    return;
+                }
+
+                try {
+                    const res = await window.electronAPI.metricsGetCompleteHistory({
+                        profileId: pid,
+                        logLimit: 1000
+                    });
+
+                    if (!res) {
+                        console.warn('[WARM-BOOT] Sin respuesta del IPC');
+                        return;
+                    }
+
+                    if (res.errors && res.errors.length) {
+                        res.errors.forEach(e => console.warn(`[WARM-BOOT] Error en ${e.source}: ${e.message}`));
+                    }
+
+                    // ── Acción 1: Poblar AppState.metricEvents con el shadow log real ──
+                    // Transforma cada línea del log en un objeto de metricEvent compatible
+                    // con renderMetricsHistory(), con fechas validadas.
+                    if (Array.isArray(res.shadowLog) && res.shadowLog.length > 0) {
+                        const diskEvents = res.shadowLog.map(ev => {
+                            // Asegurar timestamp como objeto Date válido (string ISO)
+                            let ts = ev.timestamp;
+                            try {
+                                const parsed = new Date(ts);
+                                ts = Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+                            } catch (_) { ts = new Date().toISOString(); }
+
+                            return {
+                                id:        ev.id || `${ts}-${Math.random().toString(36).slice(2)}`,
+                                timestamp: ts,
+                                at:        ts,
+                                type:      ev.action === 'copyToClipboard'      ? 'copy'
+                                         : ev.action === 'changeContactStatus'  ? 'status_change'
+                                         : (ev.action || 'shadow_log'),
+                                payload: {
+                                    contactId:  ev.contactId,
+                                    fromStatus: ev.fromStatus || ev.from,
+                                    newStatus:  ev.toStatus   || ev.to,
+                                    shift:      ev.shift,
+                                    profileId:  ev.profileId  || pid
+                                }
+                            };
+                        });
+
+                        // Fusionar con los eventos en memoria (evitando duplicados por id)
+                        const existingIds = new Set((AppState.metricEvents || []).map(e => e.id));
+                        const newEvents   = diskEvents.filter(e => !existingIds.has(e.id));
+                        if (newEvents.length > 0) {
+                            AppState.metricEvents = newEvents.concat(AppState.metricEvents || []);
+                            // Limitar a 30k para no explotar RAM
+                            if (AppState.metricEvents.length > 30000) {
+                                AppState.metricEvents = AppState.metricEvents.slice(0, 30000);
+                            }
+                            console.log(`[WARM-BOOT] ${newEvents.length} eventos del shadow log cargados en AppState.metricEvents`);
+                        } else {
+                            console.log(`[WARM-BOOT] Shadow log ya estaba sincronizado (${diskEvents.length} eventos, 0 nuevos)`);
+                        }
+                    } else {
+                        console.log(`[WARM-BOOT] Shadow log vacío para perfil ${pid}`);
+                    }
+
+                    // ── Acción 2: Registrar el historial mensual de operaciones ──────────
+                    // Si ya hay datos en disco, los pre-cargamos en AppState._opsHistoryCache
+                    // para que renderOpsCalendar() no tenga que hacer otro IPC round-trip.
+                    if (res.opsHistory && Object.keys(res.opsHistory.months || {}).length > 0) {
+                        if (!AppState._opsHistoryCache) AppState._opsHistoryCache = {};
+                        AppState._opsHistoryCache[pid] = res.opsHistory;
+                        console.log(`[WARM-BOOT] ${Object.keys(res.opsHistory.months).length} meses de historial de operaciones pre-cargados`);
+                    }
+
+                    console.log(`[WARM-BOOT] Sincronización completa para perfil ${pid} ✓`);
+                } catch (err) {
+                    console.error('[WARM-BOOT] Error fatal en syncDashboardWithDisk:', err);
+                }
+            };
+
             let currentMetricsFilter = 'today';
             
             window.setMetricsHistoryFilter = (filter) => {
@@ -5997,8 +6086,13 @@
                 let history = null;
                 try {
                     const profileId = AppState.activeProfileId || 'default';
-                    const res = await window.electronAPI?.getOpsMonthlyHistory?.({ profileId });
-                    if (res?.ok) history = res.history;
+                    // Usar caché pre-cargado por syncDashboardWithDisk() si existe
+                    if (AppState._opsHistoryCache?.[profileId]) {
+                        history = AppState._opsHistoryCache[profileId];
+                    } else {
+                        const res = await window.electronAPI?.getOpsMonthlyHistory?.({ profileId });
+                        if (res?.ok) history = res.history;
+                    }
                 } catch (_) {}
 
                 if (!history || !Object.keys(history.months || {}).length) {
@@ -7245,6 +7339,14 @@
                 loadOpsData();
                 setLoadingState(true, 'Hidratando datos…', 8, false);
                 await perfMark('init/hidratacion', async () => loadData());
+                // ── WARM BOOT: sincronizar Dashboard con archivos físicos del disco ──
+                // setTimeout(..., 0) para no bloquear el renderizado inicial
+                setTimeout(() => {
+                    if (typeof window.syncDashboardWithDisk === 'function') {
+                        window.syncDashboardWithDisk(AppState.activeProfileId || 'default')
+                              .catch(e => console.warn('[WARM-BOOT] No crítico:', e?.message));
+                    }
+                }, 0);
                 window.restoreShiftModeMemory?.();
                 window.initProfilesLogic?.();
                 window.initSyncManager?.();
