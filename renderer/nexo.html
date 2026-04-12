@@ -83,10 +83,11 @@
                     <div class="stat-value" id="duplicatesCount">0</div>
                     <div class="stat-label">Duplicados</div>
                 </div>
+                <!-- stat-speed eliminado: worker de velocidad desconectado, siempre mostraba 0
                 <div class="stat-box stat-speed" id="speedStatBox" title="Velocidad de procesamiento en el turno actual">
                     <div class="stat-value" id="speedCount">0</div>
                     <div class="stat-label">usuarios/h</div>
-                </div>
+                </div> -->
             </div>
             <div class="view-actions" style="margin-right:8px;">
                 <select id="profileSelect" class="filter-select" style="min-width:200px;"></select>
@@ -241,6 +242,7 @@
             </div>
             <div class="modal-actions">
                 <button id="cancelExport" class="btn"><i class="fas fa-times"></i> Cancelar</button>
+                <button id="deleteLastUpload" class="btn" style="background:rgba(245,158,11,.15);border-color:rgba(245,158,11,.3);opacity:.7;" title="Elimina la última subida de datos"><i class="fas fa-trash"></i> Borrar última subida</button>
                 <button id="confirmExport" class="btn btn-success"><i class="fas fa-download"></i> Exportar</button>
             </div>
         </div>
@@ -448,6 +450,9 @@
                 <button class="metrics-tab" id="metricsTabExport" onclick="switchMetricsTab('export')">
                     <i class="fas fa-file-export"></i> Exportar
                 </button>
+                <button class="metrics-tab" id="metricsTabIntel" onclick="switchMetricsTab('intel')">
+                    <i class="fas fa-fire"></i> Inteligencia 12M
+                </button>
             </div>
 
             <!-- TAB: OPERADOR -->
@@ -477,9 +482,9 @@
                         <div class="metrics-kpi-label">Turno líder</div>
                     </div>
                     <div class="metrics-kpi">
-                        <div class="metrics-kpi-icon"><i class="fas fa-tachometer-alt"></i></div>
+                        <div class="metrics-kpi-icon"><i class="fas fa-snowflake"></i></div>
                         <div class="metrics-kpi-val" id="metricButtonsPerHour">0</div>
-                        <div class="metrics-kpi-label">Ritmo / hora</div>
+                        <div class="metrics-kpi-label">Fríos -1mes</div>
                     </div>
                 </div>
                 <!-- Filtros avanzados colapsables -->
@@ -542,31 +547,18 @@
                     <i class="fas fa-chart-line"></i>
                     Historial de actividad del perfil activo. Revisá acciones por día y turno.
                 </div>
-                <!-- Filtros rápidos -->
                 <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
-                    <button id="filterToday" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('today')">
-                        <i class="fas fa-calendar-day"></i> Hoy
-                    </button>
-                    <button id="filterYesterday" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('yesterday')">
-                        <i class="fas fa-calendar-minus"></i> Ayer
-                    </button>
-                    <button id="filterDayBefore" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('dayBefore')">
-                        <i class="fas fa-calendar-alt"></i> Anteayer
-                    </button>
-                    <button id="filterWeek" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('week')">
-                        <i class="fas fa-calendar-week"></i> Semana
-                    </button>
-                    <button id="filterMonth" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('month')">
-                        <i class="fas fa-calendar"></i> Mes
-                    </button>
+                    <button id="filterToday" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('today')"><i class="fas fa-calendar-day"></i> Hoy</button>
+                    <button id="filterYesterday" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('yesterday')"><i class="fas fa-calendar-minus"></i> Ayer</button>
+                    <button id="filterDayBefore" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('dayBefore')"><i class="fas fa-calendar-alt"></i> Anteayer</button>
+                    <button id="filterWeek" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('week')"><i class="fas fa-calendar-week"></i> Semana</button>
+                    <button id="filterMonth" class="btn" style="padding:4px 12px;font-size:.8rem;" onclick="window.setMetricsHistoryFilter('month')"><i class="fas fa-calendar"></i> Mes</button>
                     <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
                         <input id="customFromDate" type="date" class="origin-input" style="margin-top:0;max-width:130px;font-size:.8rem;" onchange="window.setMetricsHistoryFilter('custom')">
                         <input id="customToDate" type="date" class="origin-input" style="margin-top:0;max-width:130px;font-size:.8rem;" onchange="window.setMetricsHistoryFilter('custom')">
                     </div>
                 </div>
-                <!-- Resumen dinámico -->
                 <div id="metricsHistorySummary" style="display:none;background:rgba(30,41,59,.7);border:1px solid rgba(148,163,184,.2);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:.85rem;"></div>
-                <!-- Listado de actividad por día -->
                 <div id="metricsHistoryContainer" style="display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;">
                     <div style="color:var(--text-secondary);font-size:.85rem;">Seleccioná un filtro para ver el historial de actividad.</div>
                 </div>
@@ -602,6 +594,11 @@
                         <div class="metrics-export-title">Reporte diario</div>
                         <div class="metrics-export-desc">Solo movimientos de hoy. Liviano.</div>
                     </div>
+                    <div class="metrics-export-card" onclick="document.getElementById('metricsDeleteLastBatchBtn').click()" style="border-color:rgba(239,68,68,.45);">
+                        <i class="fas fa-trash-alt" style="color:#ef4444"></i>
+                        <div class="metrics-export-title" style="color:#ef4444">Borrar Último Import</div>
+                        <div class="metrics-export-desc">Elimina del perfil activo los contactos del último lote CSV importado.</div>
+                    </div>
                 </div>
                 <!-- Botones ocultos que mantienen la funcionalidad original -->
                 <div style="display:none;">
@@ -616,6 +613,13 @@
                     <input id="controlPasswordNew" type="password">
                     <button id="controlPasswordSaveBtn"></button>
                     <div id="controlPasswordPanel"></div>
+                </div>
+            </div>
+
+            <!-- TAB: INTELIGENCIA 12 MESES -->
+            <div id="metricsTabContentIntel" class="metrics-tab-content">
+                <div id="tempDashboardContainer">
+                    <div style="color:var(--text-secondary);font-size:.9rem;text-align:center;padding:24px;">Cargando inteligencia...</div>
                 </div>
             </div>
 
@@ -750,10 +754,13 @@
     </div>
 
     <script src="nexo-bridge.js"></script>
+    <script src="nexo-engine.js"></script>
+    <script src="nexo.ui.js"></script>
     <script src="modules/admin-auth.js"></script>
     <script src="profiles-logic.js"></script>
     <script src="shifts-memory.js"></script>
     <script src="sync-manager.js"></script>
+    <script src="temperature-dashboard.js"></script>
     <script src="nexo-app.js"></script>
 
 

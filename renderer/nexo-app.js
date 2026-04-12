@@ -2,6 +2,24 @@
         const $ = (sel) => document.querySelector(sel);
         const $$ = (sel) => document.querySelectorAll(sel);
 
+        // === Aliases desde módulos precargados (nexo-engine.js / nexo-ui.js) ===
+        const {
+            normalizePhoneNumber, hasMissingUsername, isApocryphalPhone,
+            normalizeUsername, normalizeName, normalizeAlias, extractPrimaryAlias,
+            parseCsvRow, median,
+            getOpsSuggestedStatus, suggestStatusByName, getOpsHeatLabel,
+            normalizeSearchText, parseSearchQuery, buildContactDerivedFields,
+            getStatusRank, getHigherPriorityStatus, intersectIds,
+            getStatusOption, isRecontactDue, getContactUrgency, getMessageSentBadge,
+            getLocalCompetitionShift, getShiftDateRange, inferShiftFromIso
+        } = window.NexoEngine;
+
+        const {
+            getOpsMiniHtml, updateExportUrgencyBadge,
+            createCard, createListItem, renderPaginatedView, renderPagination
+        } = window.NexoUI;
+        // ======================================================================
+
         const STATUS_OPTIONS = [
             { id: 'sin revisar', label: 'Sin Revisar', icon: 'fa-question-circle', color: '#9ca3af', rgb: '156, 163, 175' },
             { id: 'contactado', label: 'Contactado', icon: 'fa-check-circle', color: '#10b981', rgb: '16, 185, 129' },
@@ -276,131 +294,60 @@
 
         let selectedFiles = [];
 
-        function normalizePhoneNumber(phone) {
-            if (!phone) return '';
-            return phone.toString().replace(/\D/g, '');
-        }
-
-        function hasMissingUsername(contact) {
-            const rawName = String(contact?.name || '').trim();
-            const nameDigits = rawName.replace(/\D/g, '');
-            const phoneDigits = normalizePhoneNumber(contact?.phone || '');
-            if (!rawName) return true;
-            if (/^\d+$/.test(rawName)) return true;
-            if (nameDigits && phoneDigits && nameDigits === phoneDigits) return true;
-            return false;
-        }
-
-        function isApocryphalPhone(phone) {
-            const digits = normalizePhoneNumber(phone || '');
-            if (!digits) return false;
-            if (/^(\d)\1{7,}$/.test(digits)) return true;
-            if (/^(012345|123456|987654|000000)/.test(digits)) return true;
-            if (digits.startsWith('54')) {
-                if (digits.length < 12 || digits.length > 13) return true;
-            } else if (digits.length < 10 || digits.length > 15) {
-                return true;
-            }
-            if (digits.includes('0000000')) return true;
-            return false;
-        }
-
-        function normalizeUsername(name) {
-            if (!name) return '';
-            return name.toString().toLowerCase().trim();
-        }
-
-        function normalizeName(name) {
-            return normalizeUsername(name).replace(/\s+/g, ' ').trim();
-        }
-
-        function normalizeAlias(alias) {
-            return normalizeUsername(alias).replace(/\s+/g, '');
-        }
-
-        function extractPrimaryAlias(name = '') {
-            const base = (name || '').split('/')[0].trim();
-            const token = base.split(/\s+/)[0] || base;
-            return token.trim();
-        }
-
-        function parseCsvRow(line) {
-            const out = [];
-            let cur = '';
-            let q = false;
-            for (let i = 0; i < line.length; i++) {
-                const ch = line[i];
-                if (ch === '"') {
-                    if (q && line[i + 1] === '"') { cur += '"'; i++; }
-                    else q = !q;
-                } else if (ch === ',' && !q) {
-                    out.push(cur); cur = '';
-                } else cur += ch;
-            }
-            out.push(cur);
-            return out.map(v => v.trim());
-        }
-
-        function median(values) {
-            if (!values.length) return 0;
-            const sorted = [...values].sort((a, b) => a - b);
-            const mid = Math.floor(sorted.length / 2);
-            return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-        }
-
-        function getOpsSuggestedStatus(lastCargaAt) {
-            if (!lastCargaAt) return 'sin revisar';
-            const ms = Date.now() - new Date(lastCargaAt).getTime();
-            if (Number.isNaN(ms)) return 'sin revisar';
-            const hours = ms / 3600000;
-            const days = ms / 86400000;
-            // Unified tiers: <48h active, 7d warm, 30d cold, >30d frozen
-            if (hours <= 48) return 'jugando';      // Activo
-            if (days <= 7) return 'contactado';      // Tibio
-            if (days <= 30) return 'revisado';       // Target Revinculación
-            return 'sin revisar';                    // Congelado >30d
-        }
-
-        function suggestStatusByName(name) {
-            try {
-                const n = normalizeName(name || '');
-                if (!n) return 'sin revisar';
-                if (n.includes('vip') || n.includes('high roller')) return 'contactado';
-                if (n.includes('activo') || n.includes('hot') || n.includes('reciente')) return 'jugando';
-                if (n.includes('dormido') || n.includes('frio') || n.includes('cold')) return 'revisado';
-                return 'sin revisar';
-            } catch (error) {
-                console.warn('[import] suggest fallback', error);
-                return 'sin revisar';
-            }
-        }
-
-        function getOpsHeatLabel(lastCargaAt) {
-            if (!lastCargaAt) return { text: 'Sin datos', cls: 'cold', tier: 'none' };
-            const ms = Date.now() - new Date(lastCargaAt).getTime();
-            if (Number.isNaN(ms)) return { text: 'Fecha inválida', cls: 'cold', tier: 'none' };
-            const hours = ms / 3600000;
-            const days = ms / 86400000;
-            // 3-tier system: <48h = Active, 7-30d = Cold/Revinculación, >30d = Frozen
-            if (hours <= 48) return { text: '🔥 Jugando Activo', cls: 'hot', tier: 'active' };
-            if (days <= 7) return { text: '⏳ Tibio', cls: '', tier: 'warm' };
-            if (days <= 30) return { text: '🧊 Target Revinculación', cls: 'cold', tier: 'cold' };
-            return { text: '💀 Inactivo (Congelado)', cls: 'cold', tier: 'frozen' };
-        }
+        // normalizePhoneNumber, hasMissingUsername, isApocryphalPhone,
+        // normalizeUsername, normalizeName, normalizeAlias, extractPrimaryAlias,
+        // parseCsvRow, median, getOpsSuggestedStatus, suggestStatusByName, getOpsHeatLabel
+        // → extraídas a nexo-engine.js, disponibles como alias al inicio de esta IIFE.
 
         function parseOperationsCsvChunkedFallback(text, onProgress) {
             return new Promise((resolve) => {
-                const lines = text.split('\n').map(line => line.replace(/\r$/, '')).filter(Boolean);
+                // Strip BOM before anything else
+                const cleanText = (text || '').replace(/^\uFEFF/, '');
+                const lines = cleanText.split('\n').map(line => line.replace(/\r$/, '')).filter(Boolean);
                 if (!lines.length) return resolve({ byAlias: {}, importedRows: 0 });
 
+                // Detect delimiter from SEP= or auto-detect
+                let delim = ',';
                 let idx = 0;
-                if (lines[0].toLowerCase().startsWith('sep=')) idx = 1;
-                const header = parseCsvRow(lines[idx] || '');
+                const firstLineLow = (lines[0] || '').toLowerCase();
+                if (firstLineLow.startsWith('sep=')) {
+                    const sepChar = lines[0].slice(4).trim();
+                    if (sepChar === ';' || sepChar === '\t' || sepChar === '|') delim = sepChar;
+                    idx = 1;
+                }
+                if (delim === ',' && idx === 0) {
+                    const sample = lines[0] || '';
+                    if ((sample.match(/;/g) || []).length > (sample.match(/,/g) || []).length) delim = ';';
+                    else if ((sample.match(/\t/g) || []).length > 1) delim = '\t';
+                }
+
+                // Delimiter-aware ops row parser
+                const parseOpsRow = (line) => {
+                    if (delim === ',') return parseCsvRow(line);
+                    const out = []; let cur = ''; let inQ = false;
+                    for (let ci = 0; ci < line.length; ci++) {
+                        const ch = line[ci];
+                        if (ch === '"') { if (inQ && line[ci+1] === '"') { cur += '"'; ci++; } else inQ = !inQ; }
+                        else if (ch === delim && !inQ) { out.push(cur); cur = ''; }
+                        else cur += ch;
+                    }
+                    out.push(cur);
+                    return out.map(v => v.trim());
+                };
+
+                const header = parseOpsRow(lines[idx] || '');
                 idx++;
                 const h = header.map(v => normalizeUsername(v));
-                const aliasIdx = h.findIndex(v => v.includes('alias'));
-                const amountIdx = h.findIndex(v => v.includes('cantidad'));
-                const dateIdx = h.findIndex(v => v.includes('fecha'));
+                // Expanded: alias|usuario|cuenta|nombre / cantidad|monto|importe|total / fecha|date|dia
+                const aliasIdx = h.findIndex(v => /alias|usuario|cuenta|nombre|jugador|usuario_master|user/.test(v));
+                const amountIdx = h.findIndex(v => /cantidad|monto|importe|total|balance|deposito|movimiento/.test(v));
+                const dateIdx = h.findIndex(v => /fecha|date|creacion|dia|timestamp|hora/.test(v));
+                
+                // DEBUG: Log if header detection failed
+                if (aliasIdx === -1 || amountIdx === -1 || dateIdx === -1) {
+                    console.warn(`[NEXO-CSV-FIX] ⚠️ Header detection: A=${aliasIdx} M=${amountIdx} D=${dateIdx}. Headers found: ${h.join(' | ')}`);
+                }
+                
                 const stats = new Map();
                 const now = Date.now();
                 const chunk = 700;
@@ -411,7 +358,7 @@
                 const process = () => {
                     const end = Math.min(lines.length, idx + chunk);
                     for (; idx < end; idx++) {
-                        const row = parseCsvRow(lines[idx]);
+                        const row = parseOpsRow(lines[idx]); // ← FIX: Usar parseOpsRow que respeta delimitador
                         const aliasRaw = row[aliasIdx] || '';
                         const alias = normalizeAlias(aliasRaw);
                         if (!alias) continue;
@@ -486,6 +433,9 @@
                         const recencyDays = st.lastCargaAt ? (Date.now() - st.lastCargaAt) / 86400000 : 999;
                         const recencyScore = Math.max(0, 40 - recencyDays);
                         const score = recencyScore + Math.min(35, st.cargas30d * 3) + Math.min(20, st.cargado90d / 10000) + (loyalty * 8);
+                        const _sugStatus = getOpsSuggestedStatus(st.lastCargaAt);
+                        const _heatObj = getOpsHeatLabel(st.lastCargaAt);
+                        const _isFrozen = _heatObj.tier === 'frozen';
                         byAlias[alias] = {
                             ...st,
                             lastAt: st.lastAt ? new Date(st.lastAt).toISOString() : null,
@@ -495,8 +445,9 @@
                             topHours,
                             loyalty,
                             score: Math.round(score),
-                            suggestedStatus: getOpsSuggestedStatus(st.lastCargaAt),
-                            heat: getOpsHeatLabel(st.lastCargaAt)
+                            suggestedStatus: _sugStatus,
+                            heat: _heatObj,
+                            isFrozen: _isFrozen
                         };
                         delete byAlias[alias].cargasVals;
                         delete byAlias[alias].weeks30;
@@ -515,7 +466,7 @@
             return new Promise((resolve, reject) => {
                 const workerScript = `
                     const normalizeUsername = (value = '') => (value || '').toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    const normalizeAlias = (value = '') => normalizeUsername(value).replace(/\s+/g, '');
+                    const normalizeAlias = (value = '') => normalizeUsername(value).replace(/[^a-z0-9]/g, '');
                     const parseCsvRow = (line = '') => {
                         const out = [];
                         let cur = '';
@@ -546,8 +497,9 @@
                         const _h = _ms / 3600000, _d = _ms / 86400000;
                         if (_h <= 48) return 'jugando';
                         if (_d <= 7) return 'contactado';
-                        if (_d <= 30) return 'revisado';
-                        return 'sin revisar';
+                        // > 7d y <= 30d = frío revinculación; > 30d = congelado
+                        // ambos vuelven 'revisado' para no reinsertar en cola activa
+                        return 'revisado';
                     };
                     const getOpsHeatLabel = (lastCargaAt) => {
                         if (!lastCargaAt) return { text: 'Sin datos', cls: 'cold', tier: 'none' };
@@ -663,6 +615,9 @@
                                 const recencyDays = st.lastCargaAt ? (Date.now() - st.lastCargaAt) / 86400000 : 999;
                                 const recencyScore = Math.max(0, 40 - recencyDays);
                                 const score = recencyScore + Math.min(35, st.cargas30d * 3) + Math.min(20, st.cargado90d / 10000) + (loyalty * 8);
+                                const _sugStatus = getOpsSuggestedStatus(st.lastCargaAt);
+                                const _heatObj = getOpsHeatLabel(st.lastCargaAt);
+                                const _isFrozen = _heatObj.tier === 'frozen';
                                 byAlias[alias] = {
                                     ...st,
                                     lastAt: st.lastAt ? new Date(st.lastAt).toISOString() : null,
@@ -672,8 +627,9 @@
                                     topHours,
                                     loyalty,
                                     score: Math.round(score),
-                                    suggestedStatus: getOpsSuggestedStatus(st.lastCargaAt),
-                                    heat: getOpsHeatLabel(st.lastCargaAt)
+                                    suggestedStatus: _sugStatus,
+                                    heat: _heatObj,
+                                    isFrozen: _isFrozen
                                 };
                                 delete byAlias[alias].cargasVals;
                                 delete byAlias[alias].weeks30;
@@ -730,7 +686,18 @@
         function applyOpsHeuristicsToContact(contact) {
             if (!contact || !contact.ops?.suggestedStatus) return;
             const suggested = contact.ops.suggestedStatus;
-            const nextStatus = getHigherPriorityStatus(contact.status, suggested);
+            const lastCargaAt = contact.ops?.lastCargaAt;
+            const daysSince = lastCargaAt
+                ? (Date.now() - new Date(lastCargaAt).getTime()) / 86400000
+                : Infinity;
+            const isFrozen = daysSince > 30;
+            if (contact.ops) contact.ops.isFrozen = isFrozen;
+            // Cualquier 'jugando' cuya última carga fue > 7 días → forzar 'revisado'
+            // (getHigherPriorityStatus rank 3 > 2 nunca lo bajaría solo)
+            const needsDowngrade = contact.status === 'jugando' && daysSince > 7;
+            const nextStatus = needsDowngrade
+                ? 'revisado'
+                : getHigherPriorityStatus(contact.status, suggested);
             if (nextStatus !== contact.status) {
                 const oldStatus = contact.status;
                 contact.status = nextStatus;
@@ -756,6 +723,7 @@
             const contactsForProfile = AppState.contacts.filter(c => (c.profileId || 'default') === (AppState.activeProfileId || 'default'));
             const total = contactsForProfile.length;
 
+            const profileKeysList = Object.keys(profiles);
             for (let i = 0; i < total; i += CHUNK) {
                 const end = Math.min(total, i + CHUNK);
                 for (let j = i; j < end; j++) {
@@ -763,7 +731,17 @@
                     const prevStatus = contact.status;
                     const prevAlias = contact.alias || '';
                     const keys = [normalizeAlias(contact.alias || ''), normalizeAlias(extractPrimaryAlias(contact.name || '')), normalizeAlias(contact.name || '')].filter(Boolean);
-                    const foundKey = keys.find(k => profiles[k]);
+                    let foundKey = keys.find(k => profiles[k]);
+                    if (!foundKey) {
+                        const cleanName = normalizeAlias(contact.name || '');
+                        if (cleanName.length >= 4) {
+                            for (let pi = 0; pi < profileKeysList.length; pi++) {
+                                const pk = profileKeysList[pi];
+                                if (matchedAliases.has(pk) || pk.length < 4) continue;
+                                if (cleanName.includes(pk) || pk.includes(cleanName)) { foundKey = pk; break; }
+                            }
+                        }
+                    }
                     contact.ops = foundKey ? profiles[foundKey] : null;
                     if (foundKey) {
                         contact.alias = contact.alias || extractPrimaryAlias(contact.name || '') || profiles[foundKey].aliasLabel;
@@ -846,26 +824,103 @@
             saveOpsData();
         }
 
-        function saveOpsData() {
-            try {
-                const pid = AppState.activeProfileId || 'default';
-                localStorage.setItem(`opsProfilesData:${pid}`, JSON.stringify(AppState.opsProfiles || {}));
-                localStorage.setItem(`opsLastImportedAt:${pid}`, AppState.opsLastImportedAt || '');
-            } catch (e) {
-                console.error('Error guardando operaciones:', e);
+        // Campos que se omiten del localStorage por peso (se recomputan o son prescindibles)
+        const _OPS_STRIP_FIELDS = new Set(['hourHist', 'heat', 'cargasVals', 'weeks30', 'months90']);
+
+        function _stripOpsForStorage(profiles) {
+            const out = {};
+            const keys = Object.keys(profiles);
+            for (let i = 0; i < keys.length; i++) {
+                const k = keys[i];
+                const p = profiles[k];
+                if (!p) continue;
+                const entry = {};
+                const pKeys = Object.keys(p);
+                for (let j = 0; j < pKeys.length; j++) {
+                    if (!_OPS_STRIP_FIELDS.has(pKeys[j])) entry[pKeys[j]] = p[pKeys[j]];
+                }
+                out[k] = entry;
             }
+            return out;
+        }
+
+        // saveOpsData: SIEMPRE a disco vía IPC — localStorage NO se usa para ops (cuota limitada).
+        // localStorage queda exclusivamente para datos de sesión/turno (rápidos, livianos).
+        function saveOpsData() {
+            const pid = AppState.activeProfileId || 'default';
+            const slim = _stripOpsForStorage(AppState.opsProfiles || {});
+            if (window.nexoStore?.patch) {
+                window.nexoStore.patch({
+                    [`opsProfilesData_${pid}`]: slim,
+                    [`opsLastImportedAt_${pid}`]: AppState.opsLastImportedAt || ''
+                }).catch(err => console.warn('[saveOpsData] IPC fallo:', err));
+            }
+            // Limpiar restos de ops en localStorage (migración desde versiones anteriores)
+            try { localStorage.removeItem(`opsProfilesData:${pid}`); } catch (_) {}
         }
 
         function loadOpsData() {
-            try {
-                const _pid = AppState.activeProfileId || 'default';
-                AppState.opsProfiles = JSON.parse(localStorage.getItem(`opsProfilesData:${_pid}`) || localStorage.getItem('opsProfilesData') || '{}');
-                AppState.opsLastImportedAt = localStorage.getItem(`opsLastImportedAt:${_pid}`) || localStorage.getItem('opsLastImportedAt') || null;
-            } catch (e) {
-                AppState.opsProfiles = {};
-                AppState.opsLastImportedAt = null;
+            const _pid = AppState.activeProfileId || 'default';
+            if (!AppState.opsProfiles) AppState.opsProfiles = {};
+            if (!AppState.opsLastImportedAt) AppState.opsLastImportedAt = null;
+            // Fuente de verdad: disco vía IPC
+            if (window.nexoStore?.getAll) {
+                window.nexoStore.getAll().then(db => {
+                    if (db && db[`opsProfilesData_${_pid}`]) {
+                        AppState.opsProfiles = db[`opsProfilesData_${_pid}`] || {};
+                        AppState.opsLastImportedAt = db[`opsLastImportedAt_${_pid}`] || null;
+                        return;
+                    }
+                    // Migración: datos legacy en localStorage → migrar a disco y limpiar
+                    try {
+                        const raw = localStorage.getItem(`opsProfilesData:${_pid}`) || localStorage.getItem('opsProfilesData');
+                        if (raw) {
+                            AppState.opsProfiles = JSON.parse(raw);
+                            AppState.opsLastImportedAt = localStorage.getItem(`opsLastImportedAt:${_pid}`) || localStorage.getItem('opsLastImportedAt') || null;
+                            saveOpsData(); // migrar al disco
+                            try { localStorage.removeItem(`opsProfilesData:${_pid}`); localStorage.removeItem('opsProfilesData'); } catch(_) {}
+                        }
+                    } catch (_) {}
+                }).catch(() => {
+                    // IPC no disponible — fallback de emergencia a localStorage
+                    try {
+                        const raw = localStorage.getItem(`opsProfilesData:${_pid}`);
+                        if (raw) {
+                            AppState.opsProfiles = JSON.parse(raw);
+                            AppState.opsLastImportedAt = localStorage.getItem(`opsLastImportedAt:${_pid}`) || null;
+                        }
+                    } catch(_) {}
+                });
+            } else {
+                // Sin IPC (dev/test) — usar localStorage como emergencia
+                try {
+                    const raw = localStorage.getItem(`opsProfilesData:${_pid}`);
+                    if (raw) {
+                        AppState.opsProfiles = JSON.parse(raw);
+                        AppState.opsLastImportedAt = localStorage.getItem(`opsLastImportedAt:${_pid}`) || null;
+                    }
+                } catch(_) {}
             }
         }
+
+        // scheduleIdleFlush: cuando el usuario está inactivo N segundos, flushea TODO al disco
+        // sin trabar el DOM durante la interacción activa. Aplica a contactos, ops, y datos de turno.
+        let _idleFlushTimer = null;
+        function scheduleIdleFlush(delayMs = 30000) {
+            clearTimeout(_idleFlushTimer);
+            _idleFlushTimer = setTimeout(() => {
+                // 1. Ops CSV → disco
+                try { saveOpsData(); } catch(_) {}
+                // 2. Contactos pendientes → disco (si hay cola sucia)
+                try { if (typeof flushSaveQueue === 'function') flushSaveQueue('idle'); } catch(_) {}
+                // 3. Datos ligeros de turno → localStorage (metricEvents, history, transitions)
+                try { if (typeof saveLightweightData === 'function') saveLightweightData(); } catch(_) {}
+            }, delayMs);
+        }
+        // Reiniciar contador idle en cualquier interacción del usuario
+        ['mousemove','keydown','click','touchstart'].forEach(ev => {
+            document.addEventListener(ev, () => scheduleIdleFlush(30000), { passive: true });
+        });
 
         function updateOpsUploadReminder() {
             if (!elements.importOpsBtn) return;
@@ -880,34 +935,7 @@
             elements.importOpsBtn.title = `Última importación: ${new Date(AppState.opsLastImportedAt).toLocaleString('es-ES')}`;
         }
 
-        function getOpsMiniHtml(contact) {
-            if (!contact.ops) return '';
-            const o = contact.ops;
-            const heat = o.heat || getOpsHeatLabel(o.lastCargaAt);
-            const last = o.lastCargaAt ? new Date(o.lastCargaAt).toLocaleString('es-ES') : '-';
-            const topHours = (o.topHours || []).join(' / ') || '-';
-            return `
-                <div class="ops-chip-row">
-                    <span class="ops-chip ${heat.cls}">${heat.text}</span>
-                    <span class="ops-chip">↑${o.cargasCount || 0} ↓${o.descargasCount || 0}</span>
-                    <span class="ops-chip">Σ $${Math.round(o.netoTotal || 0)}</span>
-                    <span class="ops-chip">Score ${o.score || 0}</span>
-                    <div class="ops-info-wrap">
-                        <button class="ops-info-btn" type="button" onclick="event.stopPropagation()">ℹ️</button>
-                        <div class="ops-tooltip" onclick="event.stopPropagation()">
-                            <div class="line"><span>Última actividad</span><strong>${last}</strong></div>
-                            <div class="line"><span>Promedio / Mediana</span><strong>$${Math.round(o.avgCarga || 0)} / $${Math.round(o.medianCarga || 0)}</strong></div>
-                            <div class="line"><span>Cargado 30d / 90d</span><strong>$${Math.round(o.cargado30d || 0)} / $${Math.round(o.cargado90d || 0)}</strong></div>
-                            <div class="line"><span>Horas top</span><strong>${topHours}</strong></div>
-                            <div class="line"><span>Lealtad</span><strong>${o.loyalty || 0}/4</strong></div>
-                            <div style="display:flex; gap:6px; margin-top:8px;">
-                                <button class="btn" style="padding:4px 8px;font-size:.72rem;" onclick="applyOpsSuggestion(${contact.id}, event)">Aplicar ${o.suggestedStatus || 'sin revisar'}</button>
-                                <button class="btn" style="padding:4px 8px;font-size:.72rem;" onclick="pinContact(${contact.id}, event)">${contact.pinned ? 'Desfijar' : 'Pin'}</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>`;
-        }
+        // getOpsMiniHtml → extraída a nexo-ui.js, disponible como alias al inicio de esta IIFE.
 
         function addContactTimeline(contactId, action, details) {
             const contact = AppState.contacts.find(c => c.id === contactId);
@@ -1071,8 +1099,10 @@
         function detectDuplicates() {
             const nameMap = new Map();
             const phoneMap = new Map();
+            const aliasMap = new Map();
             const duplicateGroups = [];
             const duplicateIds = new Set();
+            const reportedPairs = new Set(); // evitar doble-reporte del mismo par
             const activeProfileId = AppState.activeProfileId || 'default';
             const contactsInProfile = (AppState.contacts || []).filter((c) => (c.profileId || 'default') === activeProfileId);
 
@@ -1085,26 +1115,50 @@
                 nameMap.get(normalizedName).push(contact);
             });
 
-            // Agrupar por teléfono
+            // Agrupar por teléfono — normaliza números argentinos con/sin prefijo 54
+            // para que 1122334455 y 541122334455 caigan en el mismo bucket
+            const _argPhoneKey = (phone) => {
+                const d = normalizePhoneNumber(phone);
+                if (!d) return '';
+                // Quitar prefijo 54 para clave canónica (mantener el original en el contacto)
+                if (d.startsWith('54') && d.length >= 12) return d.slice(2);
+                return d;
+            };
             contactsInProfile.forEach(contact => {
                 if (contact.phone) {
-                    const normalizedPhone = normalizePhoneNumber(contact.phone);
-                    if (!phoneMap.has(normalizedPhone)) {
-                        phoneMap.set(normalizedPhone, []);
+                    const key = _argPhoneKey(contact.phone);
+                    if (!key) return;
+                    if (!phoneMap.has(key)) phoneMap.set(key, []);
+                    phoneMap.get(key).push(contact);
+                }
+            });
+
+            // Agrupar por alias primario (maneja formato alias//NombreReal y similares)
+            contactsInProfile.forEach(contact => {
+                const primaryAlias = NexoEngine.normalizeAlias(NexoEngine.extractPrimaryAlias(contact.name || ''));
+                // Solo considerar aliases que parezcan usernames (contienen dígitos) para evitar
+                // falsos positivos en primeros nombres como "Juan" o "Maria"
+                if (primaryAlias && /\d/.test(primaryAlias) && primaryAlias.length >= 4) {
+                    if (!aliasMap.has(primaryAlias)) {
+                        aliasMap.set(primaryAlias, []);
                     }
-                    phoneMap.get(normalizedPhone).push(contact);
+                    aliasMap.get(primaryAlias).push(contact);
                 }
             });
 
             // Detectar duplicados por nombre
             nameMap.forEach((contacts, name) => {
                 if (contacts.length > 1) {
-                    duplicateGroups.push({
-                        type: 'nombre',
-                        name: contacts[0].name,
-                        contacts: contacts
-                    });
-                    contacts.forEach(c => duplicateIds.add(c.id));
+                    const pairKey = contacts.map(c => c.id).sort().join('|');
+                    if (!reportedPairs.has(pairKey)) {
+                        reportedPairs.add(pairKey);
+                        duplicateGroups.push({
+                            type: 'nombre',
+                            name: contacts[0].name,
+                            contacts: contacts
+                        });
+                        contacts.forEach(c => duplicateIds.add(c.id));
+                    }
                 }
             });
 
@@ -1113,12 +1167,36 @@
                 if (contacts.length > 1) {
                     const uniqueNames = new Set(contacts.map(c => normalizeUsername(c.name)));
                     if (uniqueNames.size > 1) {
-                        duplicateGroups.push({
-                            type: 'teléfono',
-                            name: `Teléfono: ${contacts[0].phone}`,
-                            contacts: contacts
-                        });
-                        contacts.forEach(c => duplicateIds.add(c.id));
+                        const pairKey = contacts.map(c => c.id).sort().join('|');
+                        if (!reportedPairs.has(pairKey)) {
+                            reportedPairs.add(pairKey);
+                            duplicateGroups.push({
+                                type: 'teléfono',
+                                name: `Teléfono: ${contacts[0].phone}`,
+                                contacts: contacts
+                            });
+                            contacts.forEach(c => duplicateIds.add(c.id));
+                        }
+                    }
+                }
+            });
+
+            // Detectar duplicados por alias (cubre formato bichi8009//Saul Rodriguez vs bichi8009)
+            aliasMap.forEach((contacts, alias) => {
+                if (contacts.length > 1) {
+                    // Verificar que no sean todos el mismo nombre normalizado (ya cubiertos por nameMap)
+                    const uniqueNormNames = new Set(contacts.map(c => normalizeUsername(c.name)));
+                    if (uniqueNormNames.size > 1) {
+                        const pairKey = contacts.map(c => c.id).sort().join('|');
+                        if (!reportedPairs.has(pairKey)) {
+                            reportedPairs.add(pairKey);
+                            duplicateGroups.push({
+                                type: 'alias',
+                                name: `Alias: ${contacts[0].name.split(/\/+/)[0].trim()}`,
+                                contacts: contacts
+                            });
+                            contacts.forEach(c => duplicateIds.add(c.id));
+                        }
                     }
                 }
             });
@@ -1501,6 +1579,8 @@
                             });
                             setLoadingState(true, 'Fusionando perfiles…', 62, true);
                             mergeOpsProfiles(opsResult.byAlias || {});
+                            // Persistir meses importados — Verde de por vida en Inteligencia 12M
+                            (function() { try { const _p = AppState.activeProfileId || 'default', _k = `opsImportedMonths:${_p}`, _m = new Set(JSON.parse(localStorage.getItem(_k) || '[]')); const _vals = Object.values(opsResult.byAlias || {}); let _minTs = Infinity, _maxTs = -Infinity; _vals.forEach(p => { const d = p.lastCargaAt || p.lastAt; if (d) { const t = new Date(d).getTime(); if (!isNaN(t)) { if (t < _minTs) _minTs = t; if (t > _maxTs) _maxTs = t; } } }); if (_minTs !== Infinity) { let _cur = new Date(_minTs); _cur.setDate(1); const _end = new Date(_maxTs); while (_cur <= _end) { _m.add(`${_cur.getFullYear()}-${String(_cur.getMonth()+1).padStart(2,'0')}`); _cur.setMonth(_cur.getMonth()+1); } } localStorage.setItem(_k, JSON.stringify([..._m])); } catch(_) {} })();
                             setLoadingState(true, 'Sincronizando contactos…', 66, true);
                             const syncResult = await syncOpsToContacts({ createNewUsers: true, onProgress: ({ processed, total }) => {
                                 const pct = 66 + (total > 0 ? Math.min(24, Math.round((processed / total) * 24)) : 0);
@@ -1696,6 +1776,8 @@
                     });
                     setLoadingState(true, 'Fusionando perfiles…', 50, false);
                     mergeOpsProfiles(byAlias);
+                    // Persistir meses importados — Verde de por vida en Inteligencia 12M
+                    (function() { try { const _p = AppState.activeProfileId || 'default', _k = `opsImportedMonths:${_p}`, _m = new Set(JSON.parse(localStorage.getItem(_k) || '[]')); const _vals = Object.values(byAlias || {}); let _minTs = Infinity, _maxTs = -Infinity; _vals.forEach(p => { const d = p.lastCargaAt || p.lastAt; if (d) { const t = new Date(d).getTime(); if (!isNaN(t)) { if (t < _minTs) _minTs = t; if (t > _maxTs) _maxTs = t; } } }); if (_minTs !== Infinity) { let _cur = new Date(_minTs); _cur.setDate(1); const _end = new Date(_maxTs); while (_cur <= _end) { _m.add(`${_cur.getFullYear()}-${String(_cur.getMonth()+1).padStart(2,'0')}`); _cur.setMonth(_cur.getMonth()+1); } } localStorage.setItem(_k, JSON.stringify([..._m])); } catch(_) {} })();
                     setLoadingState(true, 'Sincronizando contactos…', 55, false);
                     const syncResult = await syncOpsToContacts({ createNewUsers: true, onProgress: ({ processed, total }) => {
                         const pct = 55 + (total > 0 ? Math.min(35, Math.round((processed / total) * 35)) : 0);
@@ -1862,7 +1944,9 @@
             if (signature === AppState.lastAutoBackupSignature && reason !== 'manual-force') return;
 
             const stamp = new Date(now).toISOString().replace(/[:T]/g, '-').slice(0, 16);
-            const fileName = `nexo_backup_auto_${stamp}.json`;
+            const _abPid = AppState.activeProfileId || 'default';
+            const _abName = ((AppState.profiles || []).find(p => p.id === _abPid)?.name || _abPid).replace(/[^a-z0-9_-]/gi, '_').slice(0, 20);
+            const fileName = `nexo_backup_auto_${_abName}_${stamp}.json`;
             const payload = {
                 exportedAt: new Date(now).toISOString(),
                 reason,
@@ -2169,6 +2253,41 @@
                         addToHistory('Compactación automática', `Se removieron ${removedByCompaction} duplicados exactos al iniciar`);
                         showNotification(`Compactación: ${removedByCompaction} duplicados exactos removidos`, 'warning');
                     }
+
+                    // ═══════════════════════════════════════════════════════════════════
+                    // PURGA MÁGICA: Matamos a todos los "muertos vivos" del Excel
+                    // (Gente con números por nombre sin historia útil)
+                    // ═══════════════════════════════════════════════════════════════════
+                    const cantidadOriginal = AppState.contacts.length;
+                    AppState.contacts = AppState.contacts.filter(c => {
+                        // Es el regex para verificar que haya una puta LETRA en el nombre
+                        // o al menos no sea un tildado de "Sólo Números basura"
+                        const hasMissingUsername = (() => {
+                            const rawName = String(c?.name || '').trim();
+                            const nameDigits = rawName.replace(/\D/g, '');
+                            const phoneDigits = (c?.phone || '').toString().replace(/\D/g, '');
+                            if (!rawName || /^\d+$/.test(rawName)) return true;
+                            if (nameDigits && phoneDigits && nameDigits === phoneDigits) return true;
+                            return false;
+                        })();
+
+                        // Si el nombre no sirve PARA NADA y además no tiene plata cruzada
+                        // de operaciones en meses... FUERA!
+                        const sinPeso = !c.ops?.volumenTotal && !c.ops?.lastCargaDate;
+
+                        if (hasMissingUsername && sinPeso) {
+                            return false; // LO MATA de la Lista (Basura)
+                        }
+                        return true; // LO SALVA
+                    });
+
+                    const borradosBasura = cantidadOriginal - AppState.contacts.length;
+                    if (borradosBasura > 0) {
+                        console.log(`[LIMPIEZA AUTOMÁTICA] Purge masiva: Se evaporaron ${borradosBasura} fantasmas telefónicos inútiles al boot.`);
+                        showNotification(`[SYSTEMA] ${borradosBasura} clientes rotos / 'Muertos-Vivos' filtrados.`, 'info');
+                        saveData(false, { deltaOnly: true }); // Salva
+                    }
+
                     for (let i = 0; i < AppState.contacts.length; i++) {
                         const contact = AppState.contacts[i];
                         if (!contact.lastEditedAt) contact.lastEditedAt = contact.lastUpdated || new Date().toISOString();
@@ -2356,67 +2475,8 @@
             }, timeoutMs);
         }
 
-        function normalizeSearchText(value) {
-            return (value || '')
-                .toString()
-                .toLowerCase()
-                .normalize('NFD')
-                .replace(/[̀-ͯ]/g, '')
-                .trim();
-        }
-
-        function parseSearchQuery(rawQuery) {
-            const normalized = normalizeSearchText(rawQuery);
-            const tokens = normalized.split(/\s+/).filter(Boolean);
-            const parsed = { terms: [], status: '', origin: '', shift: '' };
-
-            tokens.forEach(token => {
-                if (token.startsWith('estado:') || token.startsWith('status:')) {
-                    parsed.status = token.split(':').slice(1).join(' ').trim();
-                    return;
-                }
-                if (token.startsWith('origen:') || token.startsWith('origin:')) {
-                    parsed.origin = token.split(':').slice(1).join(' ').trim();
-                    return;
-                }
-                if (token.startsWith('turno:') || token.startsWith('shift:')) {
-                    parsed.shift = token.split(':').slice(1).join(' ').trim();
-                    return;
-                }
-                parsed.terms.push(token);
-            });
-
-            return parsed;
-        }
-
-        function buildContactDerivedFields(contact) {
-            if (!contact) return;
-            const source = [
-                contact.name,
-                contact.phone,
-                contact.origin,
-                contact.status,
-                contact.alias,
-                contact.assignedShift,
-                contact.ops?.heat,
-                contact.ops?.suggestedStatus
-            ].map(v => v || '').join('|');
-
-            if (contact._derivedSource === source) return;
-
-            contact._nameKey = normalizeSearchText(contact.name || '');
-            contact._searchKey = normalizeSearchText([
-                contact.name,
-                contact.phone,
-                contact.origin,
-                contact.status,
-                contact.alias,
-                contact.assignedShift,
-                contact.ops?.heat,
-                contact.ops?.suggestedStatus
-            ].filter(Boolean).join(' | '));
-            contact._derivedSource = source;
-        }
+        // normalizeSearchText, parseSearchQuery, buildContactDerivedFields
+        // → extraídas a nexo-engine.js, disponibles como alias al inicio de esta IIFE.
 
         function getIsoDay(value) {
             if (!value) return '';
@@ -2448,23 +2508,7 @@
             contact.lastUpdated = nowIso;
         }
 
-        function getStatusRank(status) {
-            const map = {
-                'sin revisar': 0,
-                'contactado': 1,
-                'revisado': 2,
-                'jugando': 3,
-                'no interesado': 1,
-                'sin wsp': 0
-            };
-            return map[status] ?? 0;
-        }
-
-        function getHigherPriorityStatus(currentStatus, suggestedStatus) {
-            if (!suggestedStatus) return currentStatus;
-            if (currentStatus === 'sin wsp') return currentStatus;
-            return getStatusRank(suggestedStatus) > getStatusRank(currentStatus) ? suggestedStatus : currentStatus;
-        }
+        // getStatusRank, getHigherPriorityStatus → nexo-engine.js
 
         function applyRecontactAutopolicy(contact, requestedStatus) {
             const finalStatus = requestedStatus;
@@ -2578,21 +2622,31 @@
             for (const token of searchTokens) mapPush(idx.bySearchToken, token, id);
         }
 
-        function intersectIds(baseIds, allowedSet) {
-            if (!allowedSet) return baseIds;
-            return baseIds.filter((id) => allowedSet.has(id));
-        }
+        // intersectIds → nexo-engine.js
 
         function applyFiltersIndexed() {
             const t0 = performance.now();
             AppState.currentPerfStage = 'filter';
             const parsedQuery = parseSearchQuery(AppState.searchTerm);
-            const selectedStatus = AppState.statusFilter || parsedQuery.status;
-            const selectedOrigin = AppState.originFilter || parsedQuery.origin;
-            const selectedShift = AppState.shiftFilter || parsedQuery.shift;
+            // REGLA SUPREMA: Si hay búsqueda de 2+ caracteres, IGNORA TODOS los dropdowns
+            // La caja de búsqueda es la autoridad máxima cuando está activa
+            const hasActiveSearch = (AppState.searchTerm || '').trim().length >= 2;
+            const selectedStatus = hasActiveSearch ? '' : (AppState.statusFilter || parsedQuery.status);
+            const selectedOrigin = hasActiveSearch ? '' : (AppState.originFilter || parsedQuery.origin);
+            const selectedShift = hasActiveSearch ? '' : (AppState.shiftFilter || parsedQuery.shift);
             const activeProfile = AppState.activeProfileId || 'default';
             const editStats = getEditDayStats();
             let ids = (AppState.searchIndex.byProfile.get(activeProfile) || []).slice();
+            let bypassBadge = document.getElementById('filterBypassBadge');
+            if (!bypassBadge) {
+                bypassBadge = document.createElement('div');
+                bypassBadge.id = 'filterBypassBadge';
+                bypassBadge.style.cssText = 'display:none;position:absolute;right:5px;top:50%;transform:translateY(-50%);background:#ef4444;color:#fff;font-size:11px;font-weight:700;padding:2px 10px;border-radius:4px;pointer-events:none;z-index:99;white-space:nowrap;';
+                bypassBadge.textContent = 'Solo búsqueda activa';
+                const searchBar = document.querySelector('.search-bar');
+                if (searchBar) searchBar.appendChild(bypassBadge);
+            }
+            bypassBadge.style.display = hasActiveSearch ? 'block' : 'none';
 
             if (selectedStatus) ids = intersectIds(ids, new Set(AppState.searchIndex.byStatus.get(selectedStatus) || []));
             // "Jugando" filter = only active (<48h ops). Cold/frozen contacts hidden from this filter.
@@ -2957,9 +3011,7 @@
             else setTimeout(paintRender, 0);
         }
 
-        function getStatusOption(status) {
-            return STATUS_OPTIONS.find(s => s.id === status) || STATUS_OPTIONS[0];
-        }
+        // getStatusOption → nexo-engine.js
 
         function setReviewMetadata(contact, status) {
             if (!contact) return;
@@ -2991,27 +3043,7 @@
             return shift;
         }
 
-        function getLocalCompetitionShift(date = new Date()) {
-            const hour = date.getHours();
-            if (hour >= 6 && hour < 14) return 'tm';
-            if (hour >= 14 && hour < 22) return 'tt';
-            return 'tn';
-        }
-
-        // Returns { from: Date, to: Date } for the requested shift on a reference date.
-        // TN (22:00-06:00) spans midnight: it starts the previous evening.
-        function getShiftDateRange(shiftKey, referenceDate = new Date()) {
-            const d = new Date(referenceDate);
-            const y = d.getFullYear(), mo = d.getMonth(), day = d.getDate();
-            if (shiftKey === 'tm') return { from: new Date(y, mo, day, 6, 0, 0), to: new Date(y, mo, day, 13, 59, 59, 999) };
-            if (shiftKey === 'tt') return { from: new Date(y, mo, day, 14, 0, 0), to: new Date(y, mo, day, 21, 59, 59, 999) };
-            // TN: 22:00 of previous calendar day → 05:59:59 of referenceDate
-            const prevDay = new Date(y, mo, day - 1);
-            return {
-                from: new Date(prevDay.getFullYear(), prevDay.getMonth(), prevDay.getDate(), 22, 0, 0),
-                to: new Date(y, mo, day, 5, 59, 59, 999)
-            };
-        }
+        // getLocalCompetitionShift, getShiftDateRange → nexo-engine.js
 
         // Daily log: archive buttonPressEvents + metricEvents into a per-shift log key at rotation time
         function archiveShiftDailyLog(shiftKey) {
@@ -3045,12 +3077,7 @@
             } catch (e) { console.warn('archiveShiftDailyLog error', e); }
         }
 
-        function inferShiftFromIso(isoString) {
-            if (!isoString) return '';
-            const dt = new Date(isoString);
-            if (Number.isNaN(dt.getTime())) return '';
-            return getLocalCompetitionShift(dt);
-        }
+        // inferShiftFromIso → nexo-engine.js
 
         function updateCompetitionCredit(contact, newStatus, source = 'common', { forceTransfer = false, shiftOverride = '', atOverride = '' } = {}) {
             if (!contact) return false;
@@ -3088,6 +3115,11 @@
             const pct = total ? Math.min(100, Math.round((revisados / total) * 100)) : 0;
             return { total, revisados, pendientes, pct };
         }
+
+        // RE-CONTACTOS: Usuarios en estado revisado hace más de 48hs deben volver a flujo
+        // isRecontactDue → nexo-engine.js
+
+        // RENDIMIENTO EN TIEMPO REAL - Sin workers, sin giladas. Solo array loop.
 
         function renderShiftsView() {
             assignShifts();
@@ -3141,349 +3173,14 @@
             }).join('');
 
             elements.shiftsView.innerHTML = overviewCard + cards;
-            elements.shiftsView.style.display = 'grid';
         }
 
-        function getContactUrgency(contact) {
-            if (contact.status !== 'revisado') return null;
-            const base = contact.reviewedAt || contact.lastUpdated;
-            if (!base) return null;
-            const elapsedH = (Date.now() - new Date(base).getTime()) / 36e5;
-            if (elapsedH < 16) return null;
-            if (elapsedH < 24) return { level: 1, label: '16h', title: 'Revisado hace más de 16 horas' };
-            if (elapsedH < 48) return { level: 2, label: '1 día', title: 'Revisado hace más de 1 día' };
-            if (elapsedH < 72) return { level: 3, label: '2 días', title: 'Revisado hace más de 2 días' };
-            return { level: 4, label: '3+ días', title: 'Revisado hace más de 3 días' };
-        }
+        // getContactUrgency, getExportUrgency, updateExportUrgencyBadge, getMessageSentBadge
+        // → extraídas a nexo-engine.js / nexo-ui.js, disponibles como alias.
 
-        function getExportUrgency() {
-            const now = new Date();
-            const slots = [5, 13, 21];
-            let lastScheduled = null;
-            for (let i = slots.length - 1; i >= 0; i--) {
-                const d = new Date(now);
-                d.setHours(slots[i], 0, 0, 0);
-                if (d <= now) { lastScheduled = d; break; }
-            }
-            if (!lastScheduled) {
-                lastScheduled = new Date(now);
-                lastScheduled.setDate(now.getDate() - 1);
-                lastScheduled.setHours(21, 0, 0, 0);
-            }
-            const lastExport = localStorage.getItem('lastExportAt');
-            if (lastExport && new Date(lastExport) >= lastScheduled) return null;
-            const overdueH = (now - lastScheduled) / 36e5;
-            if (overdueH < 0.01) return null;
-            if (overdueH < 8) return { level: 1, text: 'Pendiente', next: lastScheduled };
-            if (overdueH < 16) return { level: 2, text: 'Atrasado', next: lastScheduled };
-            return { level: 3, text: 'Urgente', next: lastScheduled };
-        }
+        // createCard, createListItem → extraídas a nexo-ui.js, disponibles como alias.
 
-        function updateExportUrgencyBadge() {
-            const btn = elements.exportBtn;
-            if (!btn) return;
-            btn.classList.remove('export-urgency-1', 'export-urgency-2', 'export-urgency-3');
-            const urgency = getExportUrgency();
-            const icon = '<i class="fas fa-download"></i>';
-            if (!urgency) {
-                btn.innerHTML = `${icon} Exportar`;
-                btn.title = 'Exportar';
-                return;
-            }
-            btn.classList.add(`export-urgency-${urgency.level}`);
-            btn.innerHTML = `${icon} Exportar <span class="urgency-badge urgency-l${urgency.level}">${urgency.text}</span>`;
-            btn.title = `Recordatorio de exportación (${urgency.next.toLocaleString('es-ES')})`;
-        }
-
-
-        function getMessageSentBadge(contact) {
-            if (!contact?.lastMessageSentAt) return '';
-            const sentAt = new Date(contact.lastMessageSentAt);
-            const title = `Mensaje enviado: ${sentAt.toLocaleString('es-ES')}`;
-            return `<span class="message-sent-tick" title="${title}"><i class="fas fa-check-double"></i></span>`;
-        }
-
-        function createCard(contact) {
-            const statusOption = getStatusOption(contact.status);
-            const escapedName = (contact.name || '').replace(/'/g, "\\'");
-            const escapedPhone = (contact.phone || '').replace(/'/g, "\\'");
-            const urgency = getContactUrgency(contact);
-            const sentBadge = getMessageSentBadge(contact);
-            const opsMini = getOpsMiniHtml(contact);
-            const editedAtLabel = contact.lastEditedAt ? new Date(contact.lastEditedAt).toLocaleString('es-ES') : '-';
-            
-            return `
-                <div class="contact-card ${AppState.selectedContacts.has(contact.id) ? 'selected' : ''} ${contact.isDuplicate ? 'duplicate' : ''}" style="--status-rgb: ${statusOption.rgb};" data-id="${contact.id}">
-                    ${contact.isDuplicate ? '<span class="duplicate-badge"><i class="fas fa-exclamation-triangle"></i> DUP</span>' : ''}${contact.phoneAlert ? '<span class="duplicate-badge" style="right:8px;left:auto;background:rgba(245,158,11,.22);border-color:rgba(245,158,11,.45);" title="Teléfono sospechoso"><i class="fas fa-exclamation-circle"></i> ALERTA</span>' : ''}
-                    <input type="checkbox" class="card-checkbox" ${AppState.selectedContacts.has(contact.id) ? 'checked' : ''}>
-                    <div class="card-header">
-                        <div class="card-icon" style="color: ${statusOption.color};">
-                            <i class="fas ${statusOption.icon}"></i>
-                        </div>
-                        <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
-                            <span class="card-name" onclick="copyToClipboard('${escapedName}', event)" style="cursor: pointer; flex: 1;" title="Click para copiar">${contact.pinned ? '📌 ' : ''}${contact.phoneAlert ? '⚠️ ' : ''}${contact.name}</span>${AppState.currentView === 'shifts' && contact.assignedShift ? `<span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}${urgency ? `<span class=\"urgency-badge urgency-l${urgency.level}\" title=\"${urgency.title}\"><i class=\"fas fa-clock\"></i>${urgency.label}</span>` : ''}
-                            <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="editContactField(${contact.id}, 'name', event)" title="Editar nombre">
-                                <i class="fas fa-pencil-alt"></i>
-                            </button>
-                            <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="openContactHistory(${contact.id}, event)" title="Historial del usuario">
-                                <i class="fas fa-id-card"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="card-details">
-                        ${contact.phone ? `
-                            <div class="detail-item">
-                                <i class="fas fa-phone"></i>
-                                <span onclick="copyToClipboard('${escapedPhone}', event)" style="cursor: pointer; flex: 1;" title="Click para copiar">${contact.phone}</span>
-                                <button class="btn" style="padding: 4px 8px; font-size: 0.7rem;" onclick="editContactField(${contact.id}, 'phone', event)" title="Editar">
-                                    <i class="fas fa-pencil-alt"></i>
-                                </button>
-                                <button class="btn btn-success" style="padding: 4px 8px; font-size: 0.7rem;" onclick="openWhatsApp('${escapedPhone}', event)" title="WhatsApp">
-                                    <i class="fab fa-whatsapp"></i>
-                                </button>
-                                ${sentBadge}
-                            </div>
-                        ` : `<div class="detail-item"><i class="fas fa-phone"></i><span style="color: var(--text-secondary); flex:1;">Sin teléfono</span><button class="btn" style="padding: 4px 8px; font-size: 0.7rem;" onclick="editContactField(${contact.id}, 'phone', event)" title="Agregar teléfono"><i class="fas fa-pencil-alt"></i></button></div>`}
-                        <div class="detail-item"><i class="fas fa-tag"></i><span>${contact.origin}</span></div>
-                        <div class="detail-item">
-                            <i class="fas fa-circle-notch"></i>
-                            <span class="card-status-inline" id="cardStatusInline-${contact.id}"><span class="card-status-trigger" onclick="openCardStatusMenu(${contact.id}, event)"><span class="status-badge status-${contact.status.replace(/ /g, '-')}">${statusOption.label}</span><i class="fas fa-chevron-down"></i></span></span>
-                        </div>
-                    </div>
-                    ${opsMini}
-                    <div class="card-footer">
-                        <span><i class="fas fa-calendar"></i> ${new Date(contact.lastUpdated).toLocaleDateString('es-ES')}</span><span title="Última edición"><i class="fas fa-pen"></i> ${editedAtLabel}</span>
-                        <button class="btn btn-danger" style="padding: 5px 10px; font-size: 0.75rem;" onclick="deleteContact(${contact.id}, event)"><i class="fas fa-trash"></i></button>
-                    </div>
-                </div>
-            `;
-        }
-
-        function createListItem(contact) {
-            const statusOption = getStatusOption(contact.status);
-            const escapedName = (contact.name || '').replace(/'/g, "\\'");
-            const escapedPhone = (contact.phone || '').replace(/'/g, "\\'");
-            const sentBadge = getMessageSentBadge(contact);
-            const opsMini = getOpsMiniHtml(contact);
-            const editedAtLabel = contact.lastEditedAt ? new Date(contact.lastEditedAt).toLocaleString('es-ES') : '-';
-            
-            return `
-                <div class="list-item ${AppState.selectedContacts.has(contact.id) ? 'selected' : ''} ${contact.isDuplicate ? 'duplicate' : ''}" style="--status-rgb: ${statusOption.rgb};" data-id="${contact.id}">
-                    <div><input type="checkbox" ${AppState.selectedContacts.has(contact.id) ? 'checked' : ''}></div>
-                    <div class="list-item-name list-item-main" style="--status-color: ${statusOption.color}; --status-rgb: ${statusOption.rgb};">
-                        <i class="fas ${statusOption.icon} list-status-bg-icon"></i>
-                        <div class="list-name-row">
-                            <span onclick="copyToClipboard('${escapedName}', event)" style="flex: 1; cursor: pointer;" title="Click para copiar">
-                                ${contact.isDuplicate ? '<i class=\"fas fa-exclamation-triangle\" style=\"color: var(--accent-warning);\"></i> ' : ''}${contact.phoneAlert ? '<i class=\"fas fa-exclamation-circle\" style=\"color: var(--accent-warning);\" title=\"Teléfono sospechoso\"></i> ' : ''}${contact.name}${AppState.currentView === 'shifts' && contact.assignedShift ? ` <span class=\"shift-tag\">${contact.assignedShift.toUpperCase()}</span>` : ''}
-                            </span>
-                            <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="editContactField(${contact.id}, 'name', event)" title="Editar">
-                                <i class="fas fa-pencil-alt"></i>
-                            </button>
-                        </div>
-                        <span class="list-status-chip"><i class="fas ${statusOption.icon}"></i>${statusOption.label}</span>${opsMini}
-                    </div>
-                    <div class="list-item-phone">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span onclick="copyToClipboard('${escapedPhone}', event)" style="flex: 1; font-family: monospace; cursor: pointer;" title="Click para copiar">${contact.phone || 'Sin teléfono'}</span>
-                            <button class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="editContactField(${contact.id}, 'phone', event)" title="${contact.phone ? 'Editar' : 'Agregar teléfono'}">
-                                <i class="fas fa-pencil-alt"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="list-item-origin">${contact.origin}</div>
-                    <div class="list-item-date" title="Última edición: ${editedAtLabel}">${new Date(contact.lastUpdated).toLocaleDateString('es-ES')}<br><small style="color:var(--text-secondary);">✎ ${editedAtLabel.split(',')[0] || editedAtLabel}</small></div>
-                    <div class="whatsapp-cell">
-                        ${contact.phone ? `
-                            <button class="btn whatsapp-btn" onclick="openWhatsApp('${escapedPhone}', event)" title="Abrir WhatsApp">
-                                <i class="fab fa-whatsapp"></i>
-                            </button>
-                            ${sentBadge}
-                        ` : '<span style="color: var(--text-secondary); font-size: 0.8rem;">-</span>'}
-                    </div>
-                    <div class="status-buttons">
-                        <button class="status-btn sin-revisar ${contact.status === 'sin revisar' ? 'active' : ''}" 
-                                onclick="changeContactStatus(${contact.id}, 'sin revisar', event)" 
-                                title="Sin Revisar">
-                            <i class="fas fa-circle"></i>
-                        </button>
-                        <button class="status-btn contactado ${contact.status === 'contactado' ? 'active' : ''}" 
-                                onclick="changeContactStatus(${contact.id}, 'contactado', event)" 
-                                title="Contactado">
-                            <i class="fas fa-check"></i>
-                        </button>
-                        <button class="status-btn revisado ${contact.status === 'revisado' ? 'active' : ''}" 
-                                onclick="changeContactStatus(${contact.id}, 'revisado', event)" 
-                                title="Revisado">
-                            <i class="fas fa-user-check"></i>
-                        </button>
-                        <button class="status-btn jugando ${contact.status === 'jugando' ? 'active' : ''}" 
-                                onclick="changeContactStatus(${contact.id}, 'jugando', event)" 
-                                title="Jugando">
-                            <i class="fas fa-gamepad"></i>
-                        </button>
-                        <button class="status-btn sin-wsp ${contact.status === 'sin wsp' ? 'active' : ''}" 
-                                onclick="changeContactStatus(${contact.id}, 'sin wsp', event)" 
-                                title="Sin WhatsApp">
-                            <i class="fas fa-ban"></i>
-                        </button>
-                        <button class="status-btn no-interesado ${contact.status === 'no interesado' ? 'active' : ''}" 
-                                onclick="changeContactStatus(${contact.id}, 'no interesado', event)" 
-                                title="No Interesado">
-                            <i class="fas fa-times"></i>
-                        </button>
-                        <button class="btn" style="padding: 0; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;" onclick="openContactHistory(${contact.id}, event)" title="Historial por usuario"><i class="fas fa-id-card"></i></button>
-                        <button class="btn btn-danger" style="padding: 0; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;" onclick="deleteContact(${contact.id}, event)" title="Eliminar">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderPaginatedView(renderFunc) {
-            const start = (AppState.currentPage - 1) * AppState.itemsPerPage;
-            const end = start + AppState.itemsPerPage;
-            const pageContacts = AppState.filteredContacts.slice(start, end);
-            if (pageContacts.length === 0 && AppState.filteredContacts.length > 0 && AppState.currentPage > 1) {
-                const totalPages = Math.max(1, Math.ceil(AppState.filteredContacts.length / AppState.itemsPerPage));
-                AppState.currentPage = Math.min(AppState.currentPage, totalPages);
-                renderPaginatedView(renderFunc);
-                return;
-            }
-
-            const renderContactsStartedAt = performance.now();
-            const MAX_DOM_NODES = 120;
-            if (AppState.currentView === 'cards') {
-                elements.cardsView.classList.add('virtual-scroll');
-                const scroller = elements.cardsView;
-                const cardWidth = 320;
-                const cols = Math.max(1, Math.floor((scroller.clientWidth || window.innerWidth || 1200) / cardWidth));
-                const rowHeight = AppState.virtualization.cards.itemHeight;
-                const bufferRows = AppState.virtualization.cards.bufferRows;
-                const totalRows = Math.ceil(pageContacts.length / cols);
-                const viewRows = Math.max(1, Math.ceil((scroller.clientHeight || 680) / rowHeight));
-                const firstRow = Math.max(0, Math.floor((AppState.virtualization.cards.scrollTop || 0) / rowHeight) - bufferRows);
-                const rowWindow = Math.max(1, Math.min(totalRows, viewRows + bufferRows * 2));
-                const startIndex = firstRow * cols;
-                const endIndex = Math.min(pageContacts.length, Math.min(startIndex + (rowWindow * cols), startIndex + MAX_DOM_NODES));
-                const renderContacts = pageContacts.slice(startIndex, endIndex);
-                const topPad = firstRow * rowHeight;
-                const bottomPad = Math.max(0, (totalRows - Math.ceil(endIndex / cols)) * rowHeight);
-                AppState.perfStats.domItems = renderContacts.length;
-                scroller.innerHTML = renderContacts.length > 0
-                    ? `<div class="virtual-spacer" style="height:${topPad}px"></div>${renderContacts.map(renderFunc).join('')}<div class="virtual-spacer" style="height:${bottomPad}px"></div>`
-                    : '<div style="text-align: center; padding: 50px; color: var(--text-secondary); grid-column: 1 / -1;">No se encontraron contactos</div>';
-
-                if (!scroller.dataset.virtualBound) {
-                    scroller.dataset.virtualBound = '1';
-                    let ticking = false;
-                    scroller.addEventListener('scroll', () => {
-                        AppState.virtualization.cards.scrollTop = scroller.scrollTop || 0;
-                        if (ticking) return;
-                        ticking = true;
-                        requestAnimationFrame(() => {
-                            ticking = false;
-                            if (AppState.currentView === 'cards') renderPaginatedView(createCard);
-                        });
-                    }, { passive: true });
-                }
-            } else {
-                elements.listView.classList.add('virtual-scroll');
-                const scroller = elements.listView;
-                const rowHeight = AppState.virtualization.list.itemHeight;
-                const bufferRows = AppState.virtualization.list.bufferRows;
-                const viewRows = Math.max(1, Math.ceil((scroller.clientHeight || 680) / rowHeight));
-                const firstRow = Math.max(0, Math.floor((AppState.virtualization.list.scrollTop || 0) / rowHeight) - bufferRows);
-                const visibleRows = Math.max(1, Math.min(pageContacts.length, viewRows + bufferRows * 2));
-                const startIndex = firstRow;
-                const endIndex = Math.min(pageContacts.length, Math.min(startIndex + visibleRows, startIndex + MAX_DOM_NODES));
-                const renderContacts = pageContacts.slice(startIndex, endIndex);
-                const topPad = startIndex * rowHeight;
-                const bottomPad = Math.max(0, (pageContacts.length - endIndex) * rowHeight);
-                AppState.perfStats.domItems = renderContacts.length;
-                const listItems = renderContacts.map(renderFunc).join('');
-                scroller.innerHTML = `
-                    <div class="list-header">
-                        <div><input type="checkbox" id="selectAllCheckbox"></div>
-                        <div>Nombre</div>
-                        <div>Teléfono</div>
-                        <div>Origen</div>
-                        <div>Fecha</div>
-                        <div>WhatsApp</div>
-                        <div>Acciones</div>
-                    </div>
-                    <div class="virtual-spacer" style="height:${topPad}px"></div>
-                    ${listItems || '<div style="text-align: center; padding: 50px; color: var(--text-secondary); grid-column: 1 / -1;">No se encontraron contactos</div>'}
-                    <div class="virtual-spacer" style="height:${bottomPad}px"></div>
-                `;
-                const selectAllCheckbox = $('#selectAllCheckbox');
-                if (selectAllCheckbox) {
-                    const areAllOnPageSelected = renderContacts.length > 0 && renderContacts.every(c => AppState.selectedContacts.has(c.id));
-                    selectAllCheckbox.checked = areAllOnPageSelected;
-                    selectAllCheckbox.onchange = (e) => {
-                        renderContacts.forEach(c => {
-                            if (e.target.checked) AppState.selectedContacts.add(c.id);
-                            else AppState.selectedContacts.delete(c.id);
-                        });
-                        renderPaginatedView(createListItem);
-                        updateBulkActionsBar();
-                    };
-                }
-                if (!scroller.dataset.virtualBound) {
-                    scroller.dataset.virtualBound = '1';
-                    let ticking = false;
-                    scroller.addEventListener('scroll', () => {
-                        AppState.virtualization.list.scrollTop = scroller.scrollTop || 0;
-                        if (ticking) return;
-                        ticking = true;
-                        requestAnimationFrame(() => {
-                            ticking = false;
-                            if (AppState.currentView === 'list') renderPaginatedView(createListItem);
-                        });
-                    }, { passive: true });
-                }
-            }
-            AppState.perfStats.renderContactsMs = Math.round(performance.now() - renderContactsStartedAt);
-            recordStageCost('renderContacts', AppState.perfStats.renderContactsMs);
-            renderPagination();
-        }
-
-        function renderPagination() {
-            const totalPages = Math.ceil(AppState.filteredContacts.length / AppState.itemsPerPage);
-            if (totalPages <= 1) {
-                elements.pagination.innerHTML = '';
-                return;
-            }
-            let html = '';
-            
-            html += `<button ${AppState.currentPage === 1 ? 'disabled' : ''} onclick="changePage(${AppState.currentPage - 1})"><i class="fas fa-chevron-left"></i></button>`;
-            
-            const pagesToShow = [];
-            pagesToShow.push(1);
-            if (AppState.currentPage > 4) pagesToShow.push('...');
-            for (let i = Math.max(2, AppState.currentPage - 2); i <= Math.min(totalPages - 1, AppState.currentPage + 2); i++) {
-                pagesToShow.push(i);
-            }
-            if (AppState.currentPage < totalPages - 3) pagesToShow.push('...');
-            if(totalPages > 1) pagesToShow.push(totalPages);
-
-            const uniquePages = [...new Set(pagesToShow)];
-
-            uniquePages.forEach(p => {
-                if (p === '...') {
-                    html += '<span class="page-info">...</span>';
-                } else {
-                    html += `<button class="${p === AppState.currentPage ? 'active' : ''}" onclick="changePage(${p})">${p}</button>`;
-                }
-            });
-
-            html += `<button ${AppState.currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${AppState.currentPage + 1})"><i class="fas fa-chevron-right"></i></button>`;
-            html += `<span class="page-info">Página ${AppState.currentPage} de ${totalPages} (${AppState.filteredContacts.length} contactos)</span>`;
-            html += `<input id="pageJumpInput" class="origin-input" style="margin-top:0;width:90px;" type="number" min="1" max="${totalPages}" value="${AppState.currentPage}" />`;
-            html += `<button onclick="jumpToPage()" title="Ir a página">Ir</button>`;
-            
-            elements.pagination.innerHTML = html;
-        }
+        // renderPaginatedView, renderPagination → extraídas a nexo-ui.js, disponibles como alias.
 
         window.jumpToPage = () => {
             const input = document.getElementById('pageJumpInput');
@@ -4275,9 +3972,16 @@
 
             container.appendChild(menu);
 
+            // Registrar en AppState para que renderNow no limpie el menú abierto
+            AppState._openStatusMenuId = id;
+            menu.addEventListener('remove', () => { if (AppState._openStatusMenuId === id) AppState._openStatusMenuId = null; }, { once: true });
+
             setTimeout(() => {
                 const closeMenu = (evt) => {
-                    if (!container.contains(evt.target)) menu.remove();
+                    // Solo cerrar si el click fue FUERA del contenedor; ignorar clicks internos
+                    if (container.contains(evt.target)) return;
+                    menu.remove();
+                    AppState._openStatusMenuId = null;
                     document.removeEventListener('click', closeMenu, true);
                 };
                 document.addEventListener('click', closeMenu, true);
@@ -4292,6 +3996,8 @@
                 elements.bulkActionsBar.classList.remove('active');
             }
         }
+        // Expuesto para nexo-ui.js (renderPaginatedView lo necesita desde fuera del closure)
+        window.updateBulkActionsBar = updateBulkActionsBar;
 
         function renderNow() {
             const renderStartAt = performance.now();
@@ -5086,14 +4792,18 @@
                 if (window.electronAPI?.buildExport) {
                     window.electronAPI.buildExport({ type: 'full', state: payload.state }).then((result) => {
                         if (result?.ok && result?.jsonText) {
-                            downloadFile(result.jsonText, `nexo_full_snapshot_${new Date().toISOString().slice(0,10)}.json`, 'application/json;charset=utf-8;');
+                            const _fsPid = AppState.activeProfileId || 'default';
+                            const _fsName = ((AppState.profiles || []).find(p => p.id === _fsPid)?.name || _fsPid).replace(/[^a-z0-9_-]/gi, '_').slice(0, 20);
+                            downloadFile(result.jsonText, `nexo_full_snapshot_${_fsName}_${new Date().toISOString().slice(0,10)}.json`, 'application/json;charset=utf-8;');
                             showNotification('Snapshot completo exportado', 'success');
                         } else {
                             throw new Error(result?.message || 'No se pudo generar export completo');
                         }
                     }).catch((err) => showNotification(`Error exportando snapshot: ${err?.message || err}`, 'error'));
                 } else {
-                    downloadFile(JSON.stringify(payload, null, 2), `nexo_full_snapshot_${new Date().toISOString().slice(0,10)}.json`, 'application/json;charset=utf-8;');
+                    const _fsPid2 = AppState.activeProfileId || 'default';
+                    const _fsName2 = ((AppState.profiles || []).find(p => p.id === _fsPid2)?.name || _fsPid2).replace(/[^a-z0-9_-]/gi, '_').slice(0, 20);
+                    downloadFile(JSON.stringify(payload, null, 2), `nexo_full_snapshot_${_fsName2}_${new Date().toISOString().slice(0,10)}.json`, 'application/json;charset=utf-8;');
                     showNotification('Snapshot completo exportado', 'success');
                 }
             };
@@ -5217,7 +4927,9 @@
             const exportControlFile = (reason = 'manual') => {
                 const payload = createControlExportPayload();
                 const stamp = new Date().toISOString().replace(/[:]/g, '-').slice(0, 19);
-                downloadFile(JSON.stringify(payload, null, 2), `nexo_control_${stamp}.json`, 'application/json;charset=utf-8;');
+                const _ecPid = AppState.activeProfileId || 'default';
+                const _ecName = ((AppState.profiles || []).find(p => p.id === _ecPid)?.name || _ecPid).replace(/[^a-z0-9_-]/gi, '_').slice(0, 20);
+                downloadFile(JSON.stringify(payload, null, 2), `nexo_control_${_ecName}_${stamp}.json`, 'application/json;charset=utf-8;');
                 AppState.midnightExportPending = false;
                 AppState.lastMidnightExportDate = new Date().toISOString().slice(0, 10);
                 localStorage.setItem('midnightExportPending', '0');
@@ -5457,72 +5169,27 @@
                 });
             };
 
-            const renderMetricChartsFromEvents = async () => {
+            const renderMetricChartsFromEvents = () => {
                 const events = getFilteredMetricEvents();
-                const workerScript = `
-                    self.onmessage = (ev) => {
-                        const events = Array.isArray(ev.data?.events) ? ev.data.events : [];
-                        const status = Object.create(null);
-                        const selection = Object.create(null);
-                        const transitions = Object.create(null);
-                        for (const e of events) {
-                            const st = String(e.status || e.to || '').toLowerCase();
-                            if (st) status[st] = (status[st] || 0) + 1;
-                            const sel = String(e.selectionType || e.type || 'unknown').toLowerCase();
-                            selection[sel] = (selection[sel] || 0) + 1;
-                            if (e.from && e.to) {
-                                const k = String(e.from || '') + '→' + String(e.to || '');
-                                transitions[k] = (transitions[k] || 0) + 1;
-                            }
-                        }
-                        const toEntries = (obj) => Object.entries(obj).map(([label, value]) => ({ label, value })).sort((a,b)=>b.value-a.value);
-                        self.postMessage({
-                            statusEntries: toEntries(status),
-                            selEntries: toEntries(selection),
-                            transEntries: toEntries(transitions).slice(0, 12)
-                        });
-                    };
-                `;
-                try {
-                    const started = performance.now();
-                    const blob = new Blob([workerScript], { type: 'application/javascript' });
-                    const workerUrl = URL.createObjectURL(blob);
-                    const worker = new Worker(workerUrl);
-                    const result = await new Promise((resolve, reject) => {
-                        worker.onmessage = (ev) => resolve(ev.data || {});
-                        worker.onerror = (err) => reject(err);
-                        worker.postMessage({ events });
-                    });
-                    worker.terminate();
-                    URL.revokeObjectURL(workerUrl);
-                    const statusEntries = Array.isArray(result.statusEntries) ? result.statusEntries : [];
-                    const selEntries = Array.isArray(result.selEntries) ? result.selEntries : [];
-                    const transEntries = Array.isArray(result.transEntries) ? result.transEntries : [];
-                    drawDonut(elements.statusDonutChart, statusEntries, ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#ef4444','#22d3ee']);
-                    drawDonut(elements.selectionDonutChart, selEntries, ['#14b8a6','#3b82f6','#f97316','#8b5cf6','#ef4444']);
-                    drawBars(elements.transitionBarChart, transEntries, '#22c55e');
-                    console.log('[perf] metrics worker ms', Math.round(performance.now() - started), 'events', events.length);
-                } catch (error) {
-                    console.warn('metrics worker fallback', error);
-                    const statusMap = new Map();
-                    const selMap = new Map();
-                    const transMap = new Map();
-                    events.forEach((ev) => {
-                        if (ev.status || ev.to) {
-                            const st = String(ev.status || ev.to || '').toLowerCase();
-                            statusMap.set(st, (statusMap.get(st) || 0) + 1);
-                        }
-                        const sel = normalizeSelectionType(ev.selectionType || ev.type);
-                        selMap.set(sel, (selMap.get(sel) || 0) + 1);
-                        if (ev.from && ev.to) {
-                            const key = `${ev.from}→${ev.to}`;
-                            transMap.set(key, (transMap.get(key) || 0) + 1);
-                        }
-                    });
-                    drawDonut(elements.statusDonutChart, Array.from(statusMap.entries()).map(([label, value]) => ({ label, value })), ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#ef4444','#22d3ee']);
-                    drawDonut(elements.selectionDonutChart, Array.from(selMap.entries()).map(([label, value]) => ({ label, value })), ['#14b8a6','#3b82f6','#f97316','#8b5cf6','#ef4444']);
-                    drawBars(elements.transitionBarChart, Array.from(transMap.entries()).map(([label, value]) => ({ label, value })).slice(0,12), '#22c55e');
+                const started = performance.now();
+                const statusMap = new Map();
+                const selMap = new Map();
+                const transMap = new Map();
+                for (const ev of events) {
+                    const st = String(ev.status || ev.to || '').toLowerCase();
+                    if (st) statusMap.set(st, (statusMap.get(st) || 0) + 1);
+                    const sel = normalizeSelectionType(ev.selectionType || ev.type);
+                    selMap.set(sel, (selMap.get(sel) || 0) + 1);
+                    if (ev.from && ev.to) {
+                        const key = `${ev.from}→${ev.to}`;
+                        transMap.set(key, (transMap.get(key) || 0) + 1);
+                    }
                 }
+                const toArr = (m) => Array.from(m.entries()).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+                drawDonut(elements.statusDonutChart, toArr(statusMap), ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#ef4444','#22d3ee']);
+                drawDonut(elements.selectionDonutChart, toArr(selMap), ['#14b8a6','#3b82f6','#f97316','#8b5cf6','#ef4444']);
+                drawBars(elements.transitionBarChart, toArr(transMap).slice(0, 12), '#22c55e');
+                console.log('[perf] metrics sync ms', Math.round(performance.now() - started), 'events', events.length);
             };
 
             const syncMetricsFilters = () => {
@@ -5565,7 +5232,7 @@
                     const currentShift = getLocalCompetitionShift(now);
                     const shiftRange = getShiftDateRange(currentShift, now);
 
-                    // Set date pickers to match the real calendar dates covered by this shift
+                    // Prefija fechas al rango del turno actual para que los KPIs muestren "hoy"
                     const fromDate = shiftRange.from.toISOString().slice(0, 10);
                     const toDate = shiftRange.to.toISOString().slice(0, 10);
                     if (elements.metricsFromDate) elements.metricsFromDate.value = fromDate;
@@ -5731,61 +5398,128 @@
                     updateMetricsProfileBadge();
                     if (elements.metricsModal) elements.metricsModal.classList.add('active');
 
-                    // Poblar "Mi Turno" con datos del shadow log (async, no bloquea)
-                    setTimeout(() => {
-                        if (typeof window.populateMiTurnoFromShadowLog === 'function') {
-                            window.populateMiTurnoFromShadowLog().catch(() => {});
-                        }
-                    }, 0);
+                    // Poblar "Mi Turno" desde memoria real — cero IPC
+                    setTimeout(() => { if (typeof window.calcularRendimientoHoyo === 'function') window.calcularRendimientoHoyo(); }, 0);
                 };
             }
 
             // ── Centro de Mando: tabs y comparación de perfiles ─────────────
             window.switchMetricsTab = (tab) => {
-                ['operator','supervisor','compare','export'].forEach(t => {
+                ['operator','supervisor','compare','export','intel'].forEach(t => {
                     const btn = document.getElementById(`metricsTab${t.charAt(0).toUpperCase()+t.slice(1)}`);
                     const content = document.getElementById(`metricsTabContent${t.charAt(0).toUpperCase()+t.slice(1)}`);
                     if (btn) btn.classList.toggle('active', t === tab);
                     if (content) content.classList.toggle('active', t === tab);
                 });
-                if (tab === 'compare') renderProfileCompare();
-                if (tab === 'supervisor') window.renderShiftDailyLogs();
-                if (tab === 'operator' && typeof window.populateMiTurnoFromShadowLog === 'function') {
-                    window.populateMiTurnoFromShadowLog().catch(() => {});
+                if (tab === 'compare') {
+                    const _cmpContainer = document.getElementById('metricsProfileCompare');
+                    if (_cmpContainer) _cmpContainer.innerHTML = '<div style="color:var(--text-secondary);padding:12px;font-size:12px;">Cargando perfiles…</div>';
+                    renderProfileCompare().catch(e => {
+                        console.error('[compare-tab]', e);
+                        const c = document.getElementById('metricsProfileCompare');
+                        if (c) c.innerHTML = '<div style="color:#ef4444;padding:12px;font-size:12px;">Error al cargar comparativa: ' + (e?.message || e) + '</div>';
+                    });
+                }
+                if (tab === 'supervisor') {
+                    try { window.renderShiftDailyLogs(); } catch (e) { console.error('[supervisor-tab]', e); }
+                }
+                if (tab === 'intel') {
+                    try {
+                        if (window.TemperatureDashboard) window.TemperatureDashboard.render();
+                    } catch (e) {
+                        console.error('[intel-tab] TemperatureDashboard crash:', e);
+                        const c = document.getElementById('tempDashboardContainer');
+                        if (c) c.innerHTML = '<div style="color:#ef4444;padding:12px;font-size:12px;">Error dashboard temperatura: ' + (e?.message || e) + '</div>';
+                    }
+                }
+                if (tab === 'operator') {
+                    try { window.calcularRendimientoHoyo(); } catch (e) { console.error('[operator-tab]', e); }
                 }
             };
 
             // ── Shadow Log: poblar "Mi Turno" desde el Main Process ──────────
-            window.populateMiTurnoFromShadowLog = async () => {
+            // calcularRendimientoHoyo: métricas en memoria real, cero IPC, cero phantom logs
+            window.calcularRendimientoHoyo = () => {
                 const safeSet = (id, val) => {
-                    try {
-                        const el = document.getElementById(id);
-                        if (el) el.textContent = String(val ?? 0);
-                    } catch (_) {}
+                    try { const el = document.getElementById(id); if (el) el.textContent = String(val ?? 0); } catch (_) {}
                 };
                 try {
-                    const profileId = AppState.activeProfileId || 'default';
-                    if (!window.electronAPI?.metricsSummary24h) {
-                        console.warn('[SHADOW-LOG] metricsSummary24h not available');
-                        return;
-                    }
-                    const res = await window.electronAPI.metricsSummary24h({ profileId });
-                    if (!res?.ok) return;
-                    const s = res.summary || {};
+                    const now = new Date();
+                    const pid = AppState.activeProfileId || 'default';
+                    const contacts = AppState.contacts.filter(c => (c.profileId || 'default') === pid);
+                    const midnight = new Date(now); midnight.setHours(0, 0, 0, 0);
+                    const midnightMs = midnight.getTime();
+                    const oneMonthAgo = now.getTime() - 30 * 86400000;
+                    const h24ago = now.getTime() - 86400000;
+                    const currentShift = getLocalCompetitionShift(now);
 
-                    safeSet('metricEditedToday', s.total || 0);
-                    safeSet('metricTransitions24h', s.cambios || 0);
-                    safeSet('metricTopShift', s.topShift || '-');
-                    const hoursToday = Math.max(0.5, new Date().getHours() + new Date().getMinutes() / 60);
-                    safeSet('metricButtonsPerHour', Math.round((s.total || 0) / hoursToday));
-                    safeSet('metricShiftTm', s.tm || 0);
-                    safeSet('metricShiftTt', s.tt || 0);
-                    safeSet('metricShiftTn', s.tn || 0);
-                    console.log('[SHADOW-LOG] Mi Turno OK:', JSON.stringify(s));
+                    let editedToday = 0;
+                    let coldCount = 0;
+                    // shift → { total, byTo: {status→count} }
+                    const shiftRich = { tm: { shift:'tm', total:0, byTo:{} }, tt: { shift:'tt', total:0, byTo:{} }, tn: { shift:'tn', total:0, byTo:{} } };
+
+                    for (let i = 0; i < contacts.length; i++) {
+                        const c = contacts[i];
+                        if (c.lastEditedAt && new Date(c.lastEditedAt).getTime() >= midnightMs) {
+                            editedToday++;
+                            // Shift en que fue revisado HOY — calculado desde la hora de edición
+                            const editShift = getLocalCompetitionShift(new Date(c.lastEditedAt));
+                            if (shiftRich[editShift]) {
+                                shiftRich[editShift].total++;
+                                const st = c.status || 'sin revisar';
+                                shiftRich[editShift].byTo[st] = (shiftRich[editShift].byTo[st] || 0) + 1;
+                            }
+                        }
+                        if (c.ops?.lastCargaAt && new Date(c.ops.lastCargaAt).getTime() < oneMonthAgo) coldCount++;
+                    }
+
+                    const transitions24h = (AppState.statusTransitions || []).filter(t => t.at && new Date(t.at).getTime() >= h24ago).length;
+                    const sorted = Object.values(shiftRich).sort((a, b) => {
+                        if (a.shift === currentShift) return -1;
+                        if (b.shift === currentShift) return 1;
+                        return b.total - a.total;
+                    });
+                    const topEntry = sorted[0];
+                    const topShift = topEntry && topEntry.total > 0 ? topEntry.shift.toUpperCase() : '-';
+
+                    safeSet('metricEditedToday', editedToday);
+                    safeSet('metricTransitions24h', transitions24h);
+                    safeSet('metricTopShift', topShift);
+                    safeSet('metricButtonsPerHour', coldCount);
+
+                    // Renderizar cards de turnos
+                    const bdEl = document.getElementById('metricShiftBreakdown');
+                    const rkEl = document.getElementById('metricShiftRanking');
+                    if (bdEl) {
+                        const cards = sorted.map(row => {
+                            const topStates = Object.entries(row.byTo).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([st,n])=>`${st}: ${n}`).join(' · ');
+                            const isCurrent = row.shift === currentShift;
+                            return `<div class="metrics-card${isCurrent ? ' metrics-card-active' : ''}">` +
+                                `<div class="k">${row.shift.toUpperCase()}${isCurrent ? ' ★' : ''} · ${row.total} contactos</div>` +
+                                `<div class="v">${row.total}</div>` +
+                                `<div class="k">${topStates || 'Sin actividad hoy'}</div></div>`;
+                        });
+                        bdEl.innerHTML = cards.join('') || '<div style="color:var(--text-secondary)">Sin actividad registrada hoy.</div>';
+                    }
+                    if (rkEl) {
+                        if (!sorted.some(r => r.total > 0)) {
+                            rkEl.innerHTML = '<div style="color:var(--text-secondary)">Sin ranking de turnos hoy.</div>';
+                        } else {
+                            const lines = sorted.map((r, idx) => {
+                                const topStates = Object.entries(r.byTo).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([st,n])=>`${st} ${n}`).join(', ');
+                                return `${idx+1}º ${r.shift.toUpperCase()} ${r.total} contactos${topStates ? ` — ${topStates}` : ''}${r.shift === currentShift ? ' ← actual' : ''}`;
+                            });
+                            rkEl.innerHTML = `<div><strong>${sorted[0].shift.toUpperCase()} 1er puesto:</strong> ${sorted[0].total} contactos</div>` +
+                                `<div style="margin-top:6px">${lines.join('<br>')}</div>`;
+                        }
+                    }
                 } catch (err) {
-                    console.warn('[SHADOW-LOG] Error:', err?.message || err);
+                    console.warn('[RENDIMIENTO] Error calculando métricas:', err?.message || err);
                 }
             };
+
+            // Mantenemos referencia legacy por compatibilidad pero ya no hace IPC
+            window.populateMiTurnoFromShadowLog = async () => { window.calcularRendimientoHoyo(); };
 
             let currentMetricsFilter = 'today';
             
@@ -5837,19 +5571,20 @@
                     if (toEl?.value) toDate = new Date(toEl.value + 'T23:59:59');
                 }
 
-                // Filter events by date range (guard against invalid dates)
+                // Filter events by date range — usar 'at' (campo real del evento) con fallback a 'timestamp'
                 const filtered = events.filter(e => {
-                    if (!e.timestamp) return false;
-                    const eventDate = new Date(e.timestamp);
+                    const ts = e.at || e.timestamp;
+                    if (!ts) return false;
+                    const eventDate = new Date(ts);
                     if (Number.isNaN(eventDate.getTime())) return false;
                     return (!fromDate || eventDate >= fromDate) && (!toDate || eventDate <= toDate);
                 });
 
-                // Group by day (safe: skip events with un-parseable dates)
+                // Group by day
                 const byDay = {};
                 filtered.forEach(e => {
                     try {
-                        const dt = new Date(e.timestamp);
+                        const dt = new Date(e.at || e.timestamp);
                         if (Number.isNaN(dt.getTime())) return;
                         const day = dt.toISOString().split('T')[0];
                         if (!byDay[day]) byDay[day] = [];
@@ -5928,38 +5663,51 @@
             async function renderProfileCompare() {
                 const container = document.getElementById('metricsProfileCompare');
                 if (!container) return;
-                container.innerHTML = '<div style="color:var(--text-secondary);font-size:.85rem;padding:12px;">Cargando perfiles desde disco…</div>';
+                container.innerHTML = '<div style="color:var(--text-secondary);padding:12px;font-size:12px;">Escaneando perfiles desde disco…</div>';
 
                 const activePid = AppState.activeProfileId || 'default';
 
-                // SIEMPRE leer desde DISCO vía IPC — data fresca, sin ensuciar la RAM
+                // Usar comparatorScan: el proceso principal lee TODOS los perfiles desde disco
                 let profileMetrics = [];
                 try {
-                    const res = await window.electronAPI?.comparatorScan?.();
-                    if (res?.ok && Array.isArray(res.profiles)) {
-                        profileMetrics = res.profiles;
+                    if (window.electronAPI?.comparatorScan) {
+                        const scanResult = await window.electronAPI.comparatorScan();
+                        if (scanResult?.ok && Array.isArray(scanResult.profiles)) {
+                            profileMetrics = scanResult.profiles;
+                        }
                     }
-                } catch (_) {}
-
-                // Fallback: si no hay IPC, mostrar solo el perfil activo en memoria
-                if (!profileMetrics.length) {
-                    const total = AppState.contacts.length;
-                    const reviewed = AppState.contacts.filter(c => c.status !== 'sin revisar').length;
-                    profileMetrics = [{ id: activePid, name: 'Perfil activo', total, reviewed, activos: reviewed, jugando: 0, frios: 0, sinWsp: 0, noInteresado: 0, accionesAyer: 0, accionesHoy: 0 }];
+                } catch (_scanErr) {
+                    console.error('[compare] comparatorScan error:', _scanErr);
                 }
 
-                // Sort by total contacts (largest first)
+                // Fallback: si no hay IPC o falló, al menos mostrar el perfil activo
+                if (!profileMetrics.length) {
+                    const _ac = AppState.contacts.filter(c => (c.profileId || 'default') === activePid);
+                    const today = new Date().toISOString().slice(0, 10);
+                    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+                    const reviewed = _ac.filter(c => c.status !== 'sin revisar').length;
+                    profileMetrics = [{ id: activePid, name: 'Base principal', total: _ac.length, reviewed,
+                        activos: _ac.filter(c => c.status === 'contactado').length,
+                        jugando: _ac.filter(c => c.status === 'jugando').length,
+                        frios: 0, sinWsp: _ac.filter(c => c.status === 'sin wsp').length,
+                        noInteresado: _ac.filter(c => c.status === 'no interesado').length,
+                        accionesHoy: _ac.filter(c => (c.lastEditedAt||'').slice(0,10) === today).length,
+                        accionesAyer: _ac.filter(c => (c.lastEditedAt||'').slice(0,10) === yesterday).length
+                    }];
+                }
+
                 profileMetrics.sort((a, b) => (b.total || 0) - (a.total || 0));
 
                 const cards = profileMetrics.map(m => {
                     const pct = m.total ? Math.round(((m.reviewed || 0) / m.total) * 100) : 0;
                     const isActive = m.id === activePid;
-
-                    return `<div class="metrics-compare-card ${isActive ? 'active-profile' : ''}" onclick="window.switchToProfile('${m.id}')">
+                    const safeName = String(m.name || m.id || '?').replace(/[<>"]/g, '');
+                    const safeId = String(m.id || '').replace(/['"<>]/g, '');
+                    return `<div class="metrics-compare-card ${isActive ? 'active-profile' : ''}" onclick="window.switchToProfile('${safeId}')">
                         <div class="metrics-compare-header">
                             <div class="metrics-compare-name">
                                 ${isActive ? '<i class="fas fa-circle" style="color:var(--accent);font-size:.7rem;"></i>' : '<i class="fas fa-circle" style="color:rgba(148,163,184,.4);font-size:.7rem;"></i>'}
-                                <span style="font-weight:700;">${m.name}</span>
+                                <span style="font-weight:700;">${safeName}</span>
                                 ${isActive ? '<span class="active-badge">ACTIVO</span>' : '<span class="switch-hint">clic para activar</span>'}
                             </div>
                             <div class="metrics-compare-progress">
@@ -5969,8 +5717,8 @@
                                 <span style="font-weight:700;font-size:.85rem;">${pct}% revisado</span>
                             </div>
                         </div>
-                        <div class="metrics-compare-grid">
-                            <div class="metrics-compare-stat primary"><span class="stat-label">Total</span><span class="stat-value">${Number(m.total).toLocaleString('es-ES')}</span></div>
+                        <div class="metrics-compare-stats">
+                            <div class="metrics-compare-stat primary"><span class="stat-label">Total</span><span class="stat-value">${Number(m.total || 0).toLocaleString('es-ES')}</span></div>
                             <div class="metrics-compare-stat"><span class="stat-label">Activos</span><span class="stat-value" style="color:#10b981;">${m.activos || 0}</span></div>
                             <div class="metrics-compare-stat"><span class="stat-label">Jugando</span><span class="stat-value" style="color:#8b5cf6;">${m.jugando || 0}</span></div>
                             <div class="metrics-compare-stat"><span class="stat-label">Fríos 🧊</span><span class="stat-value" style="color:${(m.frios || 0) > 0 ? '#f59e0b' : 'inherit'};">${m.frios || 0}</span></div>
@@ -5984,7 +5732,10 @@
                     </div>`;
                 });
 
-                container.innerHTML = cards.join('') || '<div style="color:var(--text-secondary);padding:12px;">No se encontraron perfiles.</div>';
+                // Outer wrapper con el grid de cards
+                container.innerHTML = cards.length
+                    ? `<div class="metrics-compare-grid">${cards.join('')}</div>`
+                    : '<div style="color:var(--text-secondary);padding:12px;">No se encontraron perfiles.</div>';
             }
             
             // Helper function to switch profiles from comparison
@@ -6349,11 +6100,8 @@
             if (elements.selectFilteredBtn) {
                 elements.selectFilteredBtn.onclick = () => {
                     applyFilters();
-                    const start = (AppState.currentPage - 1) * AppState.itemsPerPage;
-                    const end = start + AppState.itemsPerPage;
-                    const visibleContacts = AppState.filteredContacts.slice(start, end);
-                    visibleContacts.forEach(c => AppState.selectedContacts.add(c.id));
-                    showNotification(`Seleccionados ${visibleContacts.length} contactos visibles`, 'success');
+                    AppState.filteredContacts.forEach(c => AppState.selectedContacts.add(c.id));
+                    showNotification(`¡Seleccionados los ${AppState.filteredContacts.length.toLocaleString()} filtrados!`, 'success');
                     updateBulkActionsBar();
                     render();
                 };
@@ -6576,6 +6324,30 @@
                 $('#exportFilteredCount').textContent = `${AppState.filteredContacts.length} contactos`;
                 $('#exportAllCount').textContent = `${profileContacts.length} contactos (${profileName})`;
                 $('#exportModal').classList.add('active');
+            };
+
+            $('#cancelExport').onclick = () => $('#exportModal').classList.remove('active');
+
+            $('#deleteLastUpload').onclick = () => {
+                if (!AppState.lastImportBatchId) {
+                    showNotification('No hay subidas anteriores para eliminar', 'warning');
+                    return;
+                }
+                if (confirm(`¿Eliminar todos los contactos de la última subida (${AppState.lastImportBatchId})?`)) {
+                    const batchId = AppState.lastImportBatchId;
+                    const beforeCount = AppState.contacts.length;
+                    AppState.contacts = AppState.contacts.filter(c => getContactBatchId(c) !== batchId);
+                    const deletedCount = beforeCount - AppState.contacts.length;
+                    if (deletedCount > 0) {
+                        AppState.previousImportBatchId = batchId;
+                        addToHistory('Subida eliminada', `Borrados ${deletedCount} contactos de la batch ${batchId}`);
+                        saveData();
+                        render();
+                        showNotification(`✓ ${deletedCount} contactos de la última subida eliminados`, 'success');
+                    } else {
+                        showNotification('No se encontraron contactos de esa subida', 'warning');
+                    }
+                }
             };
 
             $('#cancelExport').onclick = () => $('#exportModal').classList.remove('active');
@@ -6950,7 +6722,9 @@
                 csvContent += `META_LOG,origen_${formatCsvField(originName)},${qty}\n`;
             });
 
-            downloadFile(csvContent, `planilla_exportada_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv;charset=utf-8;');
+            const _plPid = AppState.activeProfileId || 'default';
+            const _plName = ((AppState.profiles || []).find(p => p.id === _plPid)?.name || _plPid).replace(/[^a-z0-9_-]/gi, '_').slice(0, 20);
+            downloadFile(csvContent, `planilla_exportada_${_plName}_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv;charset=utf-8;');
             showNotification('Exportación completada con teléfonos', 'success');
         }
 
@@ -6966,8 +6740,12 @@
         }
 
         async function init() {
+            const _INIT_STEPS = 17;
+            const _step = (n, label) => console.log(`[NEXO-BOOT] ${n}/${_INIT_STEPS} — ${label}`);
             try {
+                _step(1, 'Esperando nexoStore…');
                 await (window.__nexoStoreReady || Promise.resolve());
+                _step(2, 'Versión de la app…');
                 try {
                     const version = await window.electronAPI?.getAppVersion?.();
                     if (version) {
@@ -6979,7 +6757,9 @@
                 } catch (e) {
                     reportError('init:getAppVersion', e);
                 }
+                _step(3, 'Construyendo selectores de estado…');
                 elements.bulkStatusSelect.innerHTML = `<option value="" disabled selected>Cambiar estado</option>` + STATUS_OPTIONS.map(opt => `<option value="${opt.id}">${opt.label}</option>`).join('');
+                _step(4, 'Registrando event listeners…');
                 setupEventListeners();
                 if (window.electronAPI?.onDeepLinkImport) {
                     window.electronAPI.onDeepLinkImport((payload) => {
@@ -6994,26 +6774,39 @@
                     console.table(diag || {});
                     return diag || {};
                 };
+                _step(5, 'Cargando historial de acciones…');
                 loadHistory();
+                _step(6, 'Cargando preferencias y estado…');
                 loadPreferences();
+                _step(7, 'Sincronizando perfiles desde disco…');
                 await syncProfilesFromMain();
+                _step(8, 'Restaurando paginación…');
                 AppState.currentPage = Math.max(1, Number(AppState.profilePageMap?.[AppState.activeProfileId || 'default'] || AppState.currentPage || 1));
+                _step(9, 'Aplicando tema visual…');
                 AppState.themeCatalog = { ...getDefaultThemes(), ...(AppState.themeCatalog || {}) };
                 if (!AppState.themeCatalog[AppState.activeThemeId]) AppState.activeThemeId = 'whaticket-blue';
                 applyTheme(AppState.activeThemeId);
+                _step(10, 'Verificando perfil activo…');
                 ensureActiveProfile();
                 try {
                     if (typeof refreshProfilesUI === 'function') refreshProfilesUI();
                 } catch (refreshError) {
                     reportError('init:refreshProfilesUI', refreshError);
                 }
+                _step(11, 'Cargando datos de operaciones (opsProfiles)…');
                 loadOpsData();
+                _step(12, 'Hidratando contactos desde disco…');
                 setLoadingState(true, 'Hidratando datos…', 8, false);
                 await perfMark('init/hidratacion', async () => loadData());
+                _step(13, 'Restaurando modo de turno…');
                 window.restoreShiftModeMemory?.();
+                _step(14, 'Iniciando módulo de perfiles…');
                 window.initProfilesLogic?.();
+                _step(15, 'Iniciando módulo de sincronización…');
                 window.initSyncManager?.();
+                _step(16, 'Verificando hitos de revisión…');
                 ensureReviewMilestonesState();
+                _step(17, 'Diagnósticos de almacenamiento y render inicial…');
                 if (Date.now() - lastStorageDiagAt > 15000) {
                     lastStorageDiagAt = Date.now();
                     refreshStorageDiagnostics();
