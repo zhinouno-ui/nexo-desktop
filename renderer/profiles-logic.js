@@ -259,6 +259,18 @@
       }
       // ───────────────────────────────────────────────────────────────────
 
+      // ── Limpiar caché de historial del perfil anterior y cargar el nuevo ──
+      if (appState._opsHistoryCache) {
+        delete appState._opsHistoryCache[previousProfileId];
+      }
+      // WARM BOOT para el nuevo perfil (no bloquea el render)
+      setTimeout(() => {
+        if (typeof window.syncDashboardWithDisk === 'function') {
+          window.syncDashboardWithDisk(pid)
+                .catch(e => console.warn('[WARM-BOOT switchProfile]', e?.message));
+        }
+      }, 50);
+
       refreshProfilesUI();
       helpers.remountDashboardState?.('profile-switch');
       helpers.setLoadingState?.(false, 'Listo', 100, false);

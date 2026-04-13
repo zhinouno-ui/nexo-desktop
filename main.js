@@ -59,69 +59,52 @@ function getProfileDbPath(profileId = 'default') {
 
 async function readProfileDb(profileId = 'default') {
   const profilePath = getProfileDbPath(profileId);
-  try {
-    const raw = await fs.readFile(profilePath, 'utf8');
-    const parsed = JSON.parse(raw);
-    const shardContacts = Array.isArray(parsed.contactsData) ? parsed.contactsData : [];
-
-    // SAFETY NET: solo para 'default', si el shard tiene MENOS contactos que el legacy,
-    // re-migrar UNA VEZ. Esto cubre el caso donde una versión anterior guardó un shard
-    // parcial o vacío mientras el legacy completo seguía existiendo.
-    if (profileId === 'default' && !parsed._legacyChecked) {
+  // ██ REGLA ABSOLUTA: si el shard EXISTE en disco, leerlo y retornar. PUNTO. ██
+  // Nunca tocar el legacy si el shard ya existe.
+  if (fssync.existsSync(profilePath)) {
+    try {
+      const raw = await fs.readFile(profilePath, 'utf8');
+      const parsed = JSON.parse(raw);
+      const n = Array.isArray(parsed.contactsData) ? parsed.contactsData.length : 0;
+      console.log(`[readProfileDb] Shard ${profileId}: ${n} contactos`);
+      return { ...DEFAULT_DB, ...parsed, profileId };
+    } catch (parseErr) {
+      await appendErrorLog('readProfileDb:parse', parseErr, { profileId });
+      // Shard corrupto: hacer backup y devolver vacío
       try {
-        const legacyPath = getDbPath();
-        if (fssync.existsSync(legacyPath)) {
-          const legacyRaw = await fs.readFile(legacyPath, 'utf8');
-          const legacyDb = JSON.parse(legacyRaw);
-          const legacyContacts = Array.isArray(legacyDb.contactsData) ? legacyDb.contactsData : [];
-          if (legacyContacts.length > shardContacts.length) {
-            console.log(`[PROFILE] ⚡ Legacy tiene ${legacyContacts.length} vs shard ${shardContacts.length} — re-migrando default`);
-            const merged = { ...DEFAULT_DB, ...parsed, profileId: 'default',
-              contactsData: legacyContacts.map(c => ({ ...c, profileId: 'default' })),
-              _legacyChecked: true
-            };
-            await writeProfileDb('default', merged);
-            return merged;
-          }
-        }
-      } catch (_) { /* legacy read failed — not critical */ }
-      // Mark as checked so we don't re-scan every load
-      parsed._legacyChecked = true;
+        fssync.copyFileSync(profilePath, `${profilePath}.corrupt.${Date.now()}`);
+        console.error(`[readProfileDb] ⚠️ Shard corrupto, backup creado`);
+      } catch (_) {}
+      return { ...DEFAULT_DB, profileId, contactsData: [] };
     }
-
-    // Return the shard AS-IS — no auto-migration for non-default profiles.
-    // A profile with 0 contacts is a VALID state.
-    return { ...DEFAULT_DB, ...parsed, profileId };
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      // File doesn't exist: one-time legacy migration only for 'default'
-      if (profileId === 'default') {
-        try {
-          const legacyPath = getDbPath();
-          if (fssync.existsSync(legacyPath)) {
-            const legacyRaw = await fs.readFile(legacyPath, 'utf8');
-            const legacyDb = JSON.parse(legacyRaw);
-            const legacyContacts = Array.isArray(legacyDb.contactsData) ? legacyDb.contactsData : [];
-            if (legacyContacts.length > 0) {
-              console.log(`[PROFILE] Migración ONE-TIME: ${legacyContacts.length} contactos → default`);
-              const migratedDb = { ...DEFAULT_DB, profileId: 'default',
-                contactsData: legacyContacts.map(c => ({ ...c, profileId: 'default' })),
-                _legacyChecked: true
-              };
-              await writeProfileDb('default', migratedDb);
-              return migratedDb;
-            }
-          }
-        } catch (_) { /* legacy read failed — not critical */ }
-      }
-      // Create empty profile (valid state)
-      const newDb = { ...DEFAULT_DB, profileId, contactsData: [], _legacyChecked: true };
-      await writeProfileDb(profileId, newDb);
-      return newDb;
-    }
-    await appendErrorLog('readProfileDb', error, { profileId });
-    throw error;
   }
+
+  // Shard NO EXISTE → intentar migración ONE-TIME desde legacy
+  console.log(`[readProfileDb] Shard ${profileId} no existe, buscando legacy...`);
+  try {
+    const legacyPath = getDbPath();
+    if (fssync.existsSync(legacyPath)) {
+      const legacyRaw = await fs.readFile(legacyPath, 'utf8');
+      const legacyDb = JSON.parse(legacyRaw);
+      let legacyContacts = Array.isArray(legacyDb.contactsData) ? legacyDb.contactsData : [];
+      if (profileId !== 'default') {
+        legacyContacts = legacyContacts.filter(c => c.profileId === profileId);
+      }
+      if (legacyContacts.length > 0) {
+        console.log(`[readProfileDb] Migración ONE-TIME: ${legacyContacts.length} → ${profileId}`);
+        const migratedDb = { ...DEFAULT_DB, profileId,
+          contactsData: legacyContacts.map(c => ({ ...c, profileId }))
+        };
+        await writeProfileDb(profileId, migratedDb);
+        return migratedDb;
+      }
+    }
+  } catch (_) { /* legacy read failed — not critical */ }
+
+  // Sin legacy: crear shard vacío
+  const newDb = { ...DEFAULT_DB, profileId, contactsData: [] };
+  await writeProfileDb(profileId, newDb);
+  return newDb;
 }
 
 async function writeProfileDb(profileId, data) {
@@ -1268,6 +1251,167 @@ ipcMain.handle('metrics:tail', async (_event, payload) => {
 
 // ─── END SHADOW LOGGING ───────────────────────────────────────────────────────
 
+// ─── OPS MONTHLY HISTORY ──────────────────────────────────────────────────────
+// Stores aggregated monthly summaries for the "Calendario Operativo" feature.
+// Path: userData/metrics/history-{profileId}.json
+// Structure: { profileId, months: { "YYYY-MM": { ... } }, knownAliases: [], updatedAt }
+
+function getMetricsDir() {
+  return path.join(app.getPath('userData'), 'metrics');
+}
+
+function getOpsHistoryPath(profileId) {
+  const safe = String(profileId || 'default').replace(/[^a-z0-9_-]/gi, '_');
+  return path.join(getMetricsDir(), `history-${safe}.json`);
+}
+
+async function readOpsHistory(profileId) {
+  const histPath = getOpsHistoryPath(profileId);
+  if (!fssync.existsSync(histPath)) {
+    return { profileId, months: {}, knownAliases: [], updatedAt: null };
+  }
+  try {
+    const raw = await fs.readFile(histPath, 'utf8');
+    return JSON.parse(raw);
+  } catch (_) {
+    return { profileId, months: {}, knownAliases: [], updatedAt: null };
+  }
+}
+
+async function writeOpsHistory(profileId, data) {
+  const dir = getMetricsDir();
+  if (!fssync.existsSync(dir)) fssync.mkdirSync(dir, { recursive: true });
+  const histPath = getOpsHistoryPath(profileId);
+  await fs.writeFile(histPath, JSON.stringify(data, null, 2), 'utf8');
+}
+
+// Merge new monthly data coming from a CSV import into the persistent history.
+// monthlyData: { "YYYY-MM": { month, uniqueAliasCount, aliases[], volumenCargas, volumenRetiros, cargas, retiros } }
+async function mergeOpsMonthlyHistory(profileId, monthlyData) {
+  const history = await readOpsHistory(profileId);
+  const knownSet = new Set(history.knownAliases || []);
+
+  for (const [monthKey, incoming] of Object.entries(monthlyData || {})) {
+    const existing = history.months[monthKey] || {
+      month: monthKey,
+      label: formatMonthLabel(monthKey),
+      volumenCargas: 0,
+      volumenRetiros: 0,
+      cargas: 0,
+      retiros: 0,
+      uniqueAliasCount: 0,
+      newAliasCount: 0,
+      aliases: []
+    };
+
+    // Merge values (accumulate across multiple CSVs for same month)
+    existing.volumenCargas += incoming.volumenCargas || 0;
+    existing.volumenRetiros += incoming.volumenRetiros || 0;
+    existing.cargas += incoming.cargas || 0;
+    existing.retiros += incoming.retiros || 0;
+
+    // Merge alias sets
+    const mergedAliases = new Set([...(existing.aliases || []), ...(incoming.aliases || [])]);
+    existing.aliases = Array.from(mergedAliases);
+    existing.uniqueAliasCount = mergedAliases.size;
+
+    // Count "new" aliases (not seen in any previous month)
+    let newCount = 0;
+    for (const alias of mergedAliases) {
+      if (!knownSet.has(alias)) { newCount++; knownSet.add(alias); }
+    }
+    existing.newAliasCount = (existing.newAliasCount || 0) + newCount;
+    existing.label = existing.label || formatMonthLabel(monthKey);
+
+    history.months[monthKey] = existing;
+  }
+
+  history.knownAliases = Array.from(knownSet);
+  history.updatedAt = new Date().toISOString();
+  history.profileId = profileId;
+  await writeOpsHistory(profileId, history);
+  return history;
+}
+
+function formatMonthLabel(monthKey) {
+  const MONTHS_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  try {
+    const [y, m] = monthKey.split('-');
+    return `${MONTHS_ES[parseInt(m, 10) - 1]} ${y}`;
+  } catch (_) { return monthKey; }
+}
+
+ipcMain.handle('ops:saveMonthlyHistory', async (_event, payload) => {
+  try {
+    const profileId = String(payload?.profileId || 'default');
+    const monthlyData = payload?.monthlyData || {};
+    const history = await mergeOpsMonthlyHistory(profileId, monthlyData);
+    return { ok: true, months: Object.keys(history.months).length };
+  } catch (err) {
+    await appendErrorLog('ops:saveMonthlyHistory', err, {});
+    return { ok: false, message: err.message };
+  }
+});
+
+ipcMain.handle('ops:getMonthlyHistory', async (_event, payload) => {
+  try {
+    const profileId = String(payload?.profileId || 'default');
+    const history = await readOpsHistory(profileId);
+    return { ok: true, history };
+  } catch (err) {
+    return { ok: false, history: { profileId: payload?.profileId || 'default', months: {}, knownAliases: [], updatedAt: null }, message: err.message };
+  }
+});
+// ─── END OPS MONTHLY HISTORY ──────────────────────────────────────────────────
+
+// ─── COMPLETE HISTORY: unified read of shadow log + ops monthly history ───────
+// Returns a single object with both data sources so the renderer can populate
+// AppState.metricEvents (timeline) and the Ops Calendar in a single round-trip.
+ipcMain.handle('metrics:getCompleteHistory', async (_event, payload) => {
+  const profileId = String(payload?.profileId || 'default');
+  const logLimit  = Math.min(5000, Math.max(1, Number(payload?.logLimit) || 1000));
+
+  const result = {
+    ok:         true,
+    profileId,
+    shadowLog:  [],   // last logLimit events from activity-{profileId}.log
+    opsHistory: null, // full history-{profileId}.json content
+    errors:     []
+  };
+
+  // 1 ─ Shadow log (activity events)
+  try {
+    const logPath  = getActivityLogPath(profileId);
+    const allLines = readJsonlSafe(logPath);
+    // Validate timestamps: parse & normalize each event so the renderer
+    // never receives an "Invalid Date" string.
+    const validated = [];
+    for (const ev of allLines) {
+      try {
+        const ts = new Date(ev.timestamp);
+        if (Number.isNaN(ts.getTime())) continue; // discard corrupt lines
+        validated.push({ ...ev, timestamp: ts.toISOString() });
+      } catch (_) { /* skip unparse-able lines */ }
+    }
+    // Return the last logLimit events (most recent first for the timeline)
+    result.shadowLog = validated.slice(-logLimit).reverse();
+  } catch (logErr) {
+    result.errors.push({ source: 'shadowLog', message: logErr?.message || String(logErr) });
+  }
+
+  // 2 ─ Ops Monthly History (calendar)
+  try {
+    result.opsHistory = await readOpsHistory(profileId);
+  } catch (histErr) {
+    result.errors.push({ source: 'opsHistory', message: histErr?.message || String(histErr) });
+    result.opsHistory = { profileId, months: {}, knownAliases: [], updatedAt: null };
+  }
+
+  if (result.errors.length > 0) result.ok = false;
+  return result;
+});
+// ─── END COMPLETE HISTORY ─────────────────────────────────────────────────────
+
 ipcMain.handle('store:getAll', async () => readDb());
 
 ipcMain.handle('profile:list', async () => ({ profiles: await readProfilesMeta() }));
@@ -1383,6 +1527,43 @@ ipcMain.handle('profile:save', async (_event, payload) => {
     return { ok: false, message: err?.message || String(err) };
   }
 });
+// ── BACKUP TO DISK ────────────────────────────────────────────────────────────
+// Guarda backups de contactos en userData/backups/ en lugar de localStorage.
+// Esto evita el QuotaExceededError con bases de 46k+ contactos.
+function getBackupsDir() {
+  return path.join(app.getPath('userData'), 'backups');
+}
+
+ipcMain.handle('backup:writeToDisk', async (_event, payload) => {
+  const profileId = String(payload?.profileId || 'default');
+  const contacts   = Array.isArray(payload?.contacts) ? payload.contacts : [];
+  const label      = String(payload?.label || 'auto').replace(/[^a-z0-9_\-]/gi, '_').slice(0, 40);
+  try {
+    const dir = getBackupsDir();
+    await fs.mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `bk_${profileId}_${label}_${stamp}.json`;
+    const filePath = path.join(dir, fileName);
+    fssync.writeFileSync(filePath, JSON.stringify({ profileId, label, stamp, contactsCount: contacts.length, contacts }, null, 0), 'utf8');
+    console.log(`[backup:writeToDisk] ${fileName} · ${contacts.length} contactos`);
+
+    // Limpieza: mantener solo los 5 backups más recientes por perfil+label
+    const prefix = `bk_${profileId}_${label}_`;
+    const allFiles = fssync.readdirSync(dir)
+      .filter(f => f.startsWith(prefix) && f.endsWith('.json'))
+      .sort();
+    while (allFiles.length > 5) {
+      const oldest = allFiles.shift();
+      try { fssync.unlinkSync(path.join(dir, oldest)); } catch (_) {}
+    }
+
+    return { ok: true, fileName };
+  } catch (err) {
+    await appendErrorLog('backup:writeToDisk', err, { profileId, label });
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
 ipcMain.handle('profile:create', async (_event, payload) => {
   const name = String(payload?.name || '').trim().slice(0, 60);
   if (!name) return { ok: false, message: 'Nombre inválido' };
