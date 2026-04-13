@@ -5717,8 +5717,30 @@
                 const container = document.getElementById('metricsHistoryContainer');
                 const summaryBar = document.getElementById('metricsHistorySummary');
                 if (!container) return;
-                
-                const events = AppState.metricEvents || [];
+
+                // Construir eventos desde opsGranular (datos reales del CSV)
+                const pid = AppState.activeProfileId || 'default';
+                const opsProfiles = AppState.opsProfiles || {};
+                const builtEvents = [];
+
+                for (const alias in opsProfiles) {
+                    const profile = opsProfiles[alias];
+                    if ((profile.profileId || 'default') !== pid) continue;
+                    const granular = profile.opsGranular || [];
+                    for (const op of granular) {
+                        builtEvents.push({
+                            type: 'operation',
+                            at: op.ts,
+                            alias: alias,
+                            amount: op.amount,
+                            shift: op.shift
+                        });
+                    }
+                }
+
+                // Fallback a metricEvents si no hay opsGranular
+                const events = builtEvents.length ? builtEvents : (AppState.metricEvents || []);
+
                 if (!events.length) {
                     container.innerHTML = '<div style="color:var(--text-secondary);font-size:.85rem;">No hay actividad registrada aún.</div>';
                     if (summaryBar) summaryBar.style.display = 'none';
