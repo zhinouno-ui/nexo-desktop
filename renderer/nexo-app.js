@@ -860,7 +860,8 @@
                     score: Math.max(prev.score || 0, n.score || 0),
                     suggestedStatus: n.suggestedStatus || prev.suggestedStatus,
                     heat: n.heat || prev.heat,
-                    topHours: n.topHours?.length ? n.topHours : (prev.topHours || [])
+                    topHours: n.topHours?.length ? n.topHours : (prev.topHours || []),
+                    opsGranular: n.opsGranular || prev.opsGranular || []
                 };
             });
             AppState.opsProfiles = merged;
@@ -869,7 +870,7 @@
         }
 
         // Campos que se omiten del localStorage por peso (se recomputan o son prescindibles)
-        const _OPS_STRIP_FIELDS = new Set(['hourHist', 'heat', 'cargasVals', 'weeks30', 'months90']);
+        const _OPS_STRIP_FIELDS = new Set(['hourHist', 'heat', 'cargasVals', 'weeks30', 'months90', 'shiftBreakdown']);
 
         function _stripOpsForStorage(profiles) {
             const out = {};
