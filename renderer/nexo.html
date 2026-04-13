@@ -138,19 +138,26 @@
                     <option value="no interesado">No Interesado</option>
                 </select>
                 <select id="originFilter" class="filter-select"><option value="">Todos los orígenes</option></select>
-                <select id="opsSegmentFilter" class="filter-select">
-                    <option value="all">Todos</option>
-                    <option value="top50">Top 50</option>
-                    <option value="top100">Top 100</option>
-                    <option value="matched">Con movimiento</option>
-                    <option value="nomatch">Sin movimiento</option>
-                </select>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <select id="opsSegmentFilter" class="filter-select" style="flex:1;">
+                        <option value="all">Operaciones: todos</option>
+                        <option value="matched">Con movimiento</option>
+                        <option value="nomatch">Sin movimiento</option>
+                    </select>
+                    <button id="opsSortBtn" class="btn" title="Ordenar por cantidad de operaciones" style="padding:6px 12px;font-size:.85rem;">↓ Más</button>
+                </div>
                 <select id="shiftFilter" class="filter-select">
                     <option value="">Todos los turnos</option>
                     <option value="tm">Turno TM</option>
                     <option value="tt">Turno TT</option>
                     <option value="tn">Turno TN</option>
                 </select>
+                <div style="display:flex;gap:4px;align-items:center;padding:0 4px;">
+                    <span style="font-size:.85rem;color:var(--text-secondary);">Turno dominante:</span>
+                    <button id="dominantShiftTM" class="shift-chip" data-shift="tm" title="Filtrar por turno dominante TM" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(251,191,36,.4);background:rgba(251,191,36,.1);color:var(--text-secondary);font-size:.8rem;cursor:pointer;">🌅 TM</button>
+                    <button id="dominantShiftTT" class="shift-chip" data-shift="tt" title="Filtrar por turno dominante TT" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(249,115,22,.4);background:rgba(249,115,22,.1);color:var(--text-secondary);font-size:.8rem;cursor:pointer;">☀️ TT</button>
+                    <button id="dominantShiftTN" class="shift-chip" data-shift="tn" title="Filtrar por turno dominante TN" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(167,139,250,.4);background:rgba(167,139,250,.1);color:var(--text-secondary);font-size:.8rem;cursor:pointer;">🌙 TN</button>
+                </div>
                 <select id="phoneFilter" class="filter-select">
                     <option value="all">Teléfono: todos</option>
                     <option value="with">Con teléfono</option>

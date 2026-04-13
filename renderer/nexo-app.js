@@ -50,6 +50,8 @@
             opsProfiles: {},
             opsLastImportedAt: null,
             opsFilter: 'all',
+            opsSortOrder: 'desc', // 'asc' = menos ops primero, 'desc' = más ops primero
+            dominantShiftFilter: new Set(), // Filtros por turno dominante seleccionados
             shiftFilter: '',
             phoneFilter: 'all',
             editActivityFilter: 'all',
@@ -148,6 +150,10 @@
             statusFilter: $('#statusFilter'),
             originFilter: $('#originFilter'),
             opsSegmentFilter: $('#opsSegmentFilter'),
+            opsSortBtn: $('#opsSortBtn'),
+            dominantShiftTM: $('#dominantShiftTM'),
+            dominantShiftTT: $('#dominantShiftTT'),
+            dominantShiftTN: $('#dominantShiftTN'),
             shiftFilter: $('#shiftFilter'),
             phoneFilter: $('#phoneFilter'),
             editActivityFilter: $('#editActivityFilter'),
@@ -2694,6 +2700,13 @@
             }
             if (AppState.opsFilter === 'matched') ids = ids.filter((id) => !!AppState.searchIndex.byId.get(id)?.ops);
             else if (AppState.opsFilter === 'nomatch') ids = ids.filter((id) => !AppState.searchIndex.byId.get(id)?.ops);
+            // Filtrar por turno dominante si hay seleccionados
+            if (AppState.dominantShiftFilter.size > 0) {
+                ids = ids.filter((id) => {
+                    const c = AppState.searchIndex.byId.get(id);
+                    return c?.ops?.dominantShift && AppState.dominantShiftFilter.has(c.ops.dominantShift);
+                });
+            }
             if (parsedQuery.terms.length) {
                 for (const term of parsedQuery.terms) {
                     ids = intersectIds(ids, new Set(AppState.searchIndex.bySearchToken.get(term) || []));
@@ -2713,9 +2726,11 @@
                 });
             }
             let contacts = ids.map((id) => AppState.searchIndex.byId.get(id)).filter(Boolean);
-            if (AppState.opsFilter === 'top50' || AppState.opsFilter === 'top100') {
-                const limit = AppState.opsFilter === 'top50' ? 50 : 100;
-                contacts = contacts.filter(c => c.ops).sort((a,b)=>(b.ops?.score||0)-(a.ops?.score||0)).slice(0, limit);
+            // Ordenar por cantidad de operaciones si está activo
+            if (AppState.opsSortOrder === 'desc') {
+                contacts.sort((a, b) => (b.ops?.cargasCount || 0) - (a.ops?.cargasCount || 0));
+            } else if (AppState.opsSortOrder === 'asc') {
+                contacts.sort((a, b) => (a.ops?.cargasCount || 0) - (b.ops?.cargasCount || 0));
             }
             AppState.filteredContacts = contacts;
             AppState.perfStats.filterMs = Math.round(performance.now() - t0);
@@ -4151,7 +4166,13 @@
             AppState.filteredContacts.sort((a, b) => {
                 if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
                 if (!!a.phoneAlert !== !!b.phoneAlert) return a.phoneAlert ? 1 : -1;
-                if (AppState.opsFilter === 'top50' || AppState.opsFilter === 'top100') return (b.ops?.score || 0) - (a.ops?.score || 0);
+                // Ordenar por cantidad de operaciones si está activo
+                if (AppState.opsSortOrder && AppState.opsSortOrder !== 'none') {
+                    const opsA = a.ops?.cargasCount || 0;
+                    const opsB = b.ops?.cargasCount || 0;
+                    if (AppState.opsSortOrder === 'desc') return opsB - opsA;
+                    if (AppState.opsSortOrder === 'asc') return opsA - opsB;
+                }
                 buildContactDerivedFields(a);
                 buildContactDerivedFields(b);
                 return (a._nameKey || '').localeCompare(b._nameKey || '');
@@ -6193,6 +6214,49 @@
                     render();
                 };
             }
+            if (elements.opsSortBtn) {
+                elements.opsSortBtn.onclick = () => {
+                    // Alternar entre desc → asc → none
+                    if (AppState.opsSortOrder === 'desc') {
+                        AppState.opsSortOrder = 'asc';
+                        elements.opsSortBtn.textContent = '↑ Menos';
+                    } else if (AppState.opsSortOrder === 'asc') {
+                        AppState.opsSortOrder = 'none';
+                        elements.opsSortBtn.textContent = '⟷ Ordenar';
+                        elements.opsSortBtn.style.opacity = '0.6';
+                    } else {
+                        AppState.opsSortOrder = 'desc';
+                        elements.opsSortBtn.textContent = '↓ Más';
+                        elements.opsSortBtn.style.opacity = '1';
+                    }
+                    AppState.currentPage = 1;
+                    render();
+                };
+            }
+            // Filtros por turno dominante
+            ['dominantShiftTM', 'dominantShiftTT', 'dominantShiftTN'].forEach(btnId => {
+                const btn = elements[btnId];
+                if (btn) {
+                    btn.onclick = () => {
+                        const shift = btn.dataset.shift;
+                        if (AppState.dominantShiftFilter.has(shift)) {
+                            AppState.dominantShiftFilter.delete(shift);
+                            btn.style.borderColor = `rgba(${shift === 'tm' ? '251,191,36' : shift === 'tt' ? '249,115,22' : '167,139,250'}, .4)`;
+                            btn.style.background = `rgba(${shift === 'tm' ? '251,191,36' : shift === 'tt' ? '249,115,22' : '167,139,250'}, .1)`;
+                            btn.style.color = 'var(--text-secondary)';
+                        } else {
+                            AppState.dominantShiftFilter.add(shift);
+                            const color = shift === 'tm' ? '#fbbf24' : shift === 'tt' ? '#f97316' : '#a78bfa';
+                            btn.style.borderColor = color;
+                            btn.style.background = color + '22';
+                            btn.style.color = color;
+                            btn.style.fontWeight = '700';
+                        }
+                        AppState.currentPage = 1;
+                        render();
+                    };
+                }
+            });
             if (elements.shiftFilter) {
                 elements.shiftFilter.onchange = (e) => {
                     AppState.shiftFilter = e.target.value;
@@ -6222,6 +6286,8 @@
                     AppState.statusFilter = '';
                     AppState.originFilter = '';
                     AppState.opsFilter = 'all';
+                    AppState.opsSortOrder = 'desc';
+                    AppState.dominantShiftFilter.clear();
                     AppState.shiftFilter = '';
                     AppState.phoneFilter = 'all';
                     AppState.editActivityFilter = 'all';
@@ -6230,6 +6296,21 @@
                     elements.statusFilter.value = '';
                     elements.originFilter.value = '';
                     if (elements.opsSegmentFilter) elements.opsSegmentFilter.value = 'all';
+                    if (elements.opsSortBtn) {
+                        elements.opsSortBtn.textContent = '↓ Más';
+                        elements.opsSortBtn.style.opacity = '1';
+                    }
+                    // Reset dominantShift buttons
+                    ['dominantShiftTM', 'dominantShiftTT', 'dominantShiftTN'].forEach(btnId => {
+                        const btn = elements[btnId];
+                        if (btn) {
+                            const shift = btn.dataset.shift;
+                            btn.style.borderColor = `rgba(${shift === 'tm' ? '251,191,36' : shift === 'tt' ? '249,115,22' : '167,139,250'}, .4)`;
+                            btn.style.background = `rgba(${shift === 'tm' ? '251,191,36' : shift === 'tt' ? '249,115,22' : '167,139,250'}, .1)`;
+                            btn.style.color = 'var(--text-secondary)';
+                            btn.style.fontWeight = '400';
+                        }
+                    });
                     if (elements.shiftFilter) elements.shiftFilter.value = '';
                     if (elements.phoneFilter) elements.phoneFilter.value = 'all';
                     if (elements.editActivityFilter) elements.editActivityFilter.value = 'all';
