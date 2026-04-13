@@ -5372,26 +5372,25 @@
 
             const getOpsSummaryForMetrics = () => {
                 const profileId = AppState.activeProfileId || 'default';
-                const bucket = AppState.opsProfiles?.[profileId] || AppState.opsProfiles || {};
-                const rows = Array.isArray(bucket?.rows) ? bucket.rows
-                    : Array.isArray(bucket?.operations) ? bucket.operations
-                    : Array.isArray(bucket) ? bucket
-                    : [];
+                const opsProfiles = AppState.opsProfiles || {};
                 const now = new Date();
                 const today = now.toISOString().slice(0, 10);
                 const shiftNow = getLocalCompetitionShift(now);
                 let day = 0;
                 let shift = 0;
-                rows.forEach((r) => {
-                    const ts = r?.at || r?.date || r?.createdAt || r?.timestamp;
-                    const d = ts ? new Date(ts) : null;
-                    if (!d || Number.isNaN(d.getTime())) return;
-                    const iso = d.toISOString().slice(0, 10);
-                    if (iso === today) {
-                        day += 1;
-                        if (getLocalCompetitionShift(d) === shiftNow) shift += 1;
+
+                // Iterar sobre todos los usuarios y sus opsGranular
+                for (const alias in opsProfiles) {
+                    const profile = opsProfiles[alias];
+                    const granular = profile.opsGranular || [];
+                    for (const op of granular) {
+                        const dateStr = op.date || '';
+                        if (dateStr === today) {
+                            day++;
+                            if (op.shift === shiftNow) shift++;
+                        }
                     }
-                });
+                }
                 return { day, shift, shiftNow };
             };
 
