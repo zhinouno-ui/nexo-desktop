@@ -3184,7 +3184,133 @@
                 </div>`;
             }).join('');
 
-            elements.shiftsView.innerHTML = overviewCard + cards;
+            // ── Bloque de operaciones diarias por turno ──
+            const opsBlock = _buildOpsProgressBlock();
+
+            elements.shiftsView.innerHTML = overviewCard + cards + opsBlock;
+        }
+
+        // Progreso diario de operaciones — se muestra abajo de las tarjetas de turno
+        function _buildOpsProgressBlock() {
+            const profiles = AppState.opsProfiles || {};
+            const contacts = AppState.contacts || [];
+            const pid = AppState.activeProfileId || 'default';
+            const now = new Date();
+            const todayStr = now.toISOString().slice(0, 10);
+            const yesterdayStr = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
+            const currentShift = getLocalCompetitionShift(now);
+
+            // Shifts anteriores al actual + el actual, en orden cronológico
+            const shiftOrder = ['tm', 'tt', 'tn'];
+            const currentIdx = shiftOrder.indexOf(currentShift);
+            // Turnos que ya pasaron hoy + el actual
+            const visibleShifts = shiftOrder.slice(0, currentIdx + 1);
+
+            // Contar cargas por turno hoy (desde opsProfiles + contacts)
+            const opsToday = { tm: 0, tt: 0, tn: 0, total: 0 };
+            const opsYesterday = { tm: 0, tt: 0, tn: 0, total: 0 };
+            const newUsersFromOps = [];
+
+            // Escanear contactos con ops cuyos lastCargaAt coincida con hoy/ayer
+            const allSources = [];
+            for (let i = 0; i < contacts.length; i++) {
+                const c = contacts[i];
+                if ((c.profileId || 'default') !== pid) continue;
+                if (!c.ops) continue;
+                allSources.push(c.ops);
+                // Detectar usuarios nuevos (isNewFromOps)
+                if (c.isNewFromOps && !c.phone) {
+                    newUsersFromOps.push({ name: c.name || c.alias || '?', id: c.id });
+                }
+            }
+            // También opsProfiles sin contacto
+            Object.values(profiles).forEach(p => allSources.push(p));
+
+            for (const op of allSources) {
+                const d = op.lastCargaAt || op.lastAt;
+                if (!d) continue;
+                const dayStr = d.slice(0, 10);
+                const sb = op.shiftBreakdown;
+                if (!sb) continue;
+                if (dayStr === todayStr) {
+                    opsToday.tm += (sb.tm || 0);
+                    opsToday.tt += (sb.tt || 0);
+                    opsToday.tn += (sb.tn || 0);
+                    opsToday.total += (sb.tm || 0) + (sb.tt || 0) + (sb.tn || 0);
+                } else if (dayStr === yesterdayStr) {
+                    opsYesterday.tm += (sb.tm || 0);
+                    opsYesterday.tt += (sb.tt || 0);
+                    opsYesterday.tn += (sb.tn || 0);
+                    opsYesterday.total += (sb.tm || 0) + (sb.tt || 0) + (sb.tn || 0);
+                }
+            }
+
+            // Si no hay ops hoy ni ayer, no mostrar el bloque
+            if (opsToday.total === 0 && opsYesterday.total === 0) return '';
+
+            const shiftMeta = {
+                tm: { emoji: '🌅', label: 'TM', color: '#fbbf24' },
+                tt: { emoji: '☀️', label: 'TT', color: '#f97316' },
+                tn: { emoji: '🌙', label: 'TN', color: '#a78bfa' }
+            };
+
+            const maxOps = Math.max(opsToday.total, opsYesterday.total, 1);
+
+            function renderBars(data, shiftsToShow, label) {
+                let html = `<div style="margin-bottom:6px;font-size:.78rem;color:var(--text-secondary);">${label} — <strong>${data.total}</strong> ops totales</div>`;
+                for (const s of shiftsToShow) {
+                    const m = shiftMeta[s];
+                    const val = data[s] || 0;
+                    const pct = maxOps > 0 ? Math.round((val / maxOps) * 100) : 0;
+                    const isCurrent = s === currentShift;
+                    html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                        <span style="min-width:50px;font-size:.78rem;font-weight:${isCurrent ? '700' : '400'};">${m.emoji} ${m.label}</span>
+                        <div style="flex:1;background:rgba(148,163,184,.12);border-radius:6px;height:18px;overflow:hidden;">
+                            <div style="background:${m.color};height:100%;width:${pct}%;border-radius:6px;transition:width .4s;"></div>
+                        </div>
+                        <span style="min-width:45px;text-align:right;font-size:.78rem;font-weight:700;color:${m.color};">${val}</span>
+                    </div>`;
+                }
+                return html;
+            }
+
+            let html = `<div id="opsProgressBlock" style="margin-top:14px;background:var(--card-bg,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <div style="font-weight:700;font-size:.9rem;">📊 Operaciones del día</div>
+                    <div style="display:flex;gap:4px;">
+                        <button class="btn" style="padding:3px 10px;font-size:.75rem;" onclick="window._opsProgressDay='today';renderShiftsView();" id="_opsDayToday">Hoy</button>
+                        <button class="btn" style="padding:3px 10px;font-size:.75rem;opacity:.6;" onclick="window._opsProgressDay='yesterday';renderShiftsView();" id="_opsDayYesterday">Ayer</button>
+                    </div>
+                </div>`;
+
+            const showDay = window._opsProgressDay || 'today';
+            if (showDay === 'today') {
+                html += renderBars(opsToday, visibleShifts, 'Hoy hasta ahora');
+            } else {
+                html += renderBars(opsYesterday, shiftOrder, 'Ayer');
+            }
+
+            // Alertas de usuarios nuevos sin teléfono
+            if (newUsersFromOps.length > 0) {
+                html += `<div style="margin-top:10px;padding:8px 10px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);border-radius:8px;">
+                    <div style="font-weight:700;font-size:.78rem;color:#60a5fa;margin-bottom:4px;">🆕 ${newUsersFromOps.length} usuario${newUsersFromOps.length > 1 ? 's' : ''} nuevo${newUsersFromOps.length > 1 ? 's' : ''} sin confirmar</div>`;
+                const showMax = Math.min(newUsersFromOps.length, 5);
+                for (let i = 0; i < showMax; i++) {
+                    const u = newUsersFromOps[i];
+                    const safeName = String(u.name).replace(/[<>"]/g, '');
+                    html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;font-size:.78rem;">
+                        <span style="color:#93c5fd;">→ ${safeName}</span>
+                        <span style="color:var(--text-secondary);font-size:.72rem;">Necesita teléfono</span>
+                    </div>`;
+                }
+                if (newUsersFromOps.length > 5) {
+                    html += `<div style="font-size:.72rem;color:#93c5fd;margin-top:2px;">...y ${newUsersFromOps.length - 5} más</div>`;
+                }
+                html += '</div>';
+            }
+
+            html += '</div>';
+            return html;
         }
 
         // getContactUrgency, getExportUrgency, updateExportUrgencyBadge, getMessageSentBadge
