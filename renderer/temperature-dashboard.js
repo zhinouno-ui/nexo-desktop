@@ -29,51 +29,68 @@
         var pid = appState.activeProfileId || 'default';
         var stats = {};
 
-        // Pass 1: contactos en RAM con ops ya sincronizadas
-        var contacts = appState.contacts || [];
+        // Pass 1: Contar desde opsGranular (operaciones CSV reales)
+        var opsProfiles = appState.opsProfiles || {};
         var countedAliases = new Set();
+
+        for (var alias in opsProfiles) {
+            if (!opsProfiles.hasOwnProperty(alias)) continue;
+            var profile = opsProfiles[alias];
+            var granular = profile.opsGranular || [];
+
+            for (var g = 0; g < granular.length; g++) {
+                var op = granular[g];
+                var dateStr = op.date; // formato: YYYY-MM-DD
+                var key = getMonthKey(dateStr);
+                if (!key) continue;
+
+                if (!stats[key]) {
+                    stats[key] = { cargasTotal: 0, newUsers: 0, depositadoTotal: 0, jugandoCount: 0, userCount: new Set() };
+                }
+
+                // Contar operación
+                if (op.amount > 0) {
+                    stats[key].cargasTotal++;
+                    stats[key].depositadoTotal += op.amount;
+                }
+
+                // Registrar usuario único por mes
+                stats[key].userCount.add(alias);
+            }
+
+            countedAliases.add(alias);
+        }
+
+        // Pass 2: Datos adicionales de contactos (nuevos, jugando)
+        var contacts = appState.contacts || [];
         for (var i = 0; i < contacts.length; i++) {
             var c = contacts[i];
             if ((c.profileId || 'default') !== pid) continue;
             if (!c.ops) continue;
-            var dateStr = c.ops.lastCargaAt || c.ops.lastAt;
-            var key = getMonthKey(dateStr);
-            if (!key) continue;
-            if (!stats[key]) stats[key] = { cargasTotal: 0, newUsers: 0, depositadoTotal: 0, jugandoCount: 0, userCount: 0 };
-            stats[key].userCount++;  // siempre contar presencia, aunque cargasCount sea 0
-            // NOTA: NO acumulamos cargasCount ni cargadoTotal (son ALL-TIME totales por usuario, no mensuales)
-            // stats[key].cargasTotal += (c.ops.cargasCount || 0);
-            // stats[key].depositadoTotal += (c.ops.cargadoTotal || 0);
-            if (c.isNewFromOps) stats[key].newUsers++;
-            if (c.status === 'jugando') stats[key].jugandoCount++;
-            // Registrar alias para no doble-contar en pass 2
-            var alias = String(c.ops.alias || c.alias || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (alias) countedAliases.add(alias);
+
+            var dateStr2 = c.ops.lastCargaAt || c.ops.lastAt;
+            var key2 = getMonthKey(dateStr2);
+            if (!key2) continue;
+
+            if (!stats[key2]) {
+                stats[key2] = { cargasTotal: 0, newUsers: 0, depositadoTotal: 0, jugandoCount: 0, userCount: new Set() };
+            }
+
+            if (c.isNewFromOps) stats[key2].newUsers++;
+            if (c.status === 'jugando') stats[key2].jugandoCount++;
+
+            var alias2 = String(c.ops.alias || c.alias || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (alias2) stats[key2].userCount.add(alias2);
         }
 
-        // Pass 2: opsProfiles — aliases del CSV que aún no matchearon a ningún contacto
-        try {
-            var opsProfiles = appState.opsProfiles || {};
-            var rawProfiles = opsProfiles[pid] || opsProfiles;
-            if (rawProfiles && typeof rawProfiles === 'object' && !Array.isArray(rawProfiles)) {
-                var aliases = Object.keys(rawProfiles);
-                for (var j = 0; j < aliases.length; j++) {
-                    var al = aliases[j];
-                    var normAl = al.toLowerCase().replace(/[^a-z0-9]/g, '');
-                    if (countedAliases.has(normAl)) continue;
-                    var p = rawProfiles[al] || {};
-                    var dateStr2 = p.lastCargaAt || p.lastAt;
-                    var key2 = getMonthKey(dateStr2);
-                    if (!key2) continue;
-                    if (!stats[key2]) stats[key2] = { cargasTotal: 0, newUsers: 0, depositadoTotal: 0, jugandoCount: 0, userCount: 0 };
-                    stats[key2].userCount++;
-                    // NOTA: NO acumulamos cargasCount ni cargadoTotal (son ALL-TIME totales, no mensuales)
-                    // stats[key2].cargasTotal += (p.cargasCount || 0);
-                    // stats[key2].depositadoTotal += (p.cargadoTotal || 0);
-                    if (p.isNewFromOps) stats[key2].newUsers++;
-                }
+        // Convertir Sets a números
+        for (var k in stats) {
+            if (stats[k].userCount && typeof stats[k].userCount.size !== 'undefined') {
+                stats[k].userCount = stats[k].userCount.size;
+            } else {
+                stats[k].userCount = 0;
             }
-        } catch (_) { /* sin crashear si opsProfiles tiene formato inesperado */ }
+        }
 
         return stats;
     }
