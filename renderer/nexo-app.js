@@ -386,7 +386,8 @@
                                 cargado90d: 0,
                                 weeks30: new Set(),
                                 months90: new Set(),
-                                shiftBreakdown: { tm: 0, tt: 0, tn: 0 }
+                                shiftBreakdown: { tm: 0, tt: 0, tn: 0 },
+                                opsGranular: []
                             });
                         }
                         const st = stats.get(alias);
@@ -396,13 +397,19 @@
                         if (!st.lastAt || ts > st.lastAt) st.lastAt = ts;
 
                         const ageDays = (now - ts) / 86400000;
+                        // Guardar operación granular
+                        const _hr = new Date(ts).getHours();
+                        const _sk = _hr >= 6 && _hr < 14 ? 'tm' : _hr >= 14 && _hr < 22 ? 'tt' : 'tn';
+                        const _dateStr = new Date(ts).toISOString().slice(0, 10);
+                        st.opsGranular.push({ ts, amount, shift: _sk, date: _dateStr });
+
                         if (amount > 0) {
                             st.cargasCount++;
                             st.cargadoTotal += amount;
                             st.cargasVals.push(amount);
                             if (!st.lastCargaAt || ts > st.lastCargaAt) st.lastCargaAt = ts;
                             // Contar carga por turno horario
-                            { const _hr = new Date(ts).getHours(); const _sk = _hr >= 6 && _hr < 14 ? 'tm' : _hr >= 14 && _hr < 22 ? 'tt' : 'tn'; st.shiftBreakdown[_sk]++; }
+                            st.shiftBreakdown[_sk]++;
                             if (ageDays <= 30) {
                                 st.cargas30d++;
                                 st.cargado30d += amount;
@@ -3190,62 +3197,50 @@
             elements.shiftsView.innerHTML = overviewCard + cards + opsBlock;
         }
 
-        // Progreso diario de operaciones — se muestra abajo de las tarjetas de turno
+        // Progreso diario de operaciones — cuenta desde opsGranular del CSV parse
         function _buildOpsProgressBlock() {
-            const profiles = AppState.opsProfiles || {};
-            const contacts = AppState.contacts || [];
             const pid = AppState.activeProfileId || 'default';
             const now = new Date();
+            const currentShift = getLocalCompetitionShift(now);
+            const opsProfiles = AppState.opsProfiles || {};
+
+            // Rangos de hoy y ayer (día calendario completo)
             const todayStr = now.toISOString().slice(0, 10);
             const yesterdayStr = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
-            const currentShift = getLocalCompetitionShift(now);
 
-            // Shifts anteriores al actual + el actual, en orden cronológico
             const shiftOrder = ['tm', 'tt', 'tn'];
             const currentIdx = shiftOrder.indexOf(currentShift);
-            // Turnos que ya pasaron hoy + el actual
             const visibleShifts = shiftOrder.slice(0, currentIdx + 1);
 
-            // Contar cargas por turno hoy (desde opsProfiles + contacts)
             const opsToday = { tm: 0, tt: 0, tn: 0, total: 0 };
             const opsYesterday = { tm: 0, tt: 0, tn: 0, total: 0 };
-            const newUsersFromOps = [];
+            const newUsersCreatedLastDay = new Set();
 
-            // Escanear contactos con ops cuyos lastCargaAt coincida con hoy/ayer
-            const allSources = [];
-            for (let i = 0; i < contacts.length; i++) {
-                const c = contacts[i];
-                if ((c.profileId || 'default') !== pid) continue;
-                if (!c.ops) continue;
-                allSources.push(c.ops);
-                // Detectar usuarios nuevos (isNewFromOps)
-                if (c.isNewFromOps && !c.phone) {
-                    newUsersFromOps.push({ name: c.name || c.alias || '?', id: c.id });
-                }
-            }
-            // También opsProfiles sin contacto
-            Object.values(profiles).forEach(p => allSources.push(p));
-
-            for (const op of allSources) {
-                const d = op.lastCargaAt || op.lastAt;
-                if (!d) continue;
-                const dayStr = d.slice(0, 10);
-                const sb = op.shiftBreakdown;
-                if (!sb) continue;
-                if (dayStr === todayStr) {
-                    opsToday.tm += (sb.tm || 0);
-                    opsToday.tt += (sb.tt || 0);
-                    opsToday.tn += (sb.tn || 0);
-                    opsToday.total += (sb.tm || 0) + (sb.tt || 0) + (sb.tn || 0);
-                } else if (dayStr === yesterdayStr) {
-                    opsYesterday.tm += (sb.tm || 0);
-                    opsYesterday.tt += (sb.tt || 0);
-                    opsYesterday.tn += (sb.tn || 0);
-                    opsYesterday.total += (sb.tm || 0) + (sb.tt || 0) + (sb.tn || 0);
+            // Contar desde opsGranular (datos del CSV parse)
+            for (const alias in opsProfiles) {
+                const p = opsProfiles[alias];
+                const granular = p.opsGranular || [];
+                for (const op of granular) {
+                    const dateStr = op.date || '';
+                    const shift = op.shift || '';
+                    if (dateStr === todayStr && opsToday[shift] !== undefined) {
+                        opsToday[shift]++;
+                        opsToday.total++;
+                        newUsersCreatedLastDay.add(alias);
+                    } else if (dateStr === yesterdayStr && opsYesterday[shift] !== undefined) {
+                        opsYesterday[shift]++;
+                        opsYesterday.total++;
+                    }
                 }
             }
 
-            // Si no hay ops hoy ni ayer, no mostrar el bloque
+            // Detectar usuarios nuevos: sin teléfono que tuvieron operaciones ayer o hoy
+            const newUsersNoPhone = (AppState.contacts || []).filter(c => {
+                if ((c.profileId || 'default') !== pid || c.phone) return false;
+                const alias = String(c.ops?.alias || c.alias || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                return newUsersCreatedLastDay.has(alias);
+            });
+
             if (opsToday.total === 0 && opsYesterday.total === 0) return '';
 
             const shiftMeta = {
@@ -3278,8 +3273,9 @@
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                     <div style="font-weight:700;font-size:.9rem;">📊 Operaciones del día</div>
                     <div style="display:flex;gap:4px;">
-                        <button class="btn" style="padding:3px 10px;font-size:.75rem;" onclick="window._opsProgressDay='today';renderShiftsView();" id="_opsDayToday">Hoy</button>
-                        <button class="btn" style="padding:3px 10px;font-size:.75rem;opacity:.6;" onclick="window._opsProgressDay='yesterday';renderShiftsView();" id="_opsDayYesterday">Ayer</button>
+                        <button class="btn" style="padding:3px 10px;font-size:.75rem;" onclick="window._opsProgressDay='today';window.NexoActions.renderShiftsView();">Hoy</button>
+                        <button class="btn" style="padding:3px 10px;font-size:.75rem;opacity:.6;" onclick="window._opsProgressDay='yesterday';window.NexoActions.renderShiftsView();">Ayer</button>
+                        <button class="btn" style="padding:3px 10px;font-size:.72rem;opacity:.5;" onclick="window._opsProgressDay='today';window.NexoActions.renderShiftsView();" title="Refrescar">🔄</button>
                     </div>
                 </div>`;
 
@@ -3290,21 +3286,16 @@
                 html += renderBars(opsYesterday, shiftOrder, 'Ayer');
             }
 
-            // Alertas de usuarios nuevos sin teléfono
-            if (newUsersFromOps.length > 0) {
+            if (newUsersNoPhone.length > 0) {
                 html += `<div style="margin-top:10px;padding:8px 10px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);border-radius:8px;">
-                    <div style="font-weight:700;font-size:.78rem;color:#60a5fa;margin-bottom:4px;">🆕 ${newUsersFromOps.length} usuario${newUsersFromOps.length > 1 ? 's' : ''} nuevo${newUsersFromOps.length > 1 ? 's' : ''} sin confirmar</div>`;
-                const showMax = Math.min(newUsersFromOps.length, 5);
+                    <div style="font-weight:700;font-size:.78rem;color:#60a5fa;margin-bottom:4px;">🆕 ${newUsersNoPhone.length} usuario${newUsersNoPhone.length > 1 ? 's' : ''} nuevo${newUsersNoPhone.length > 1 ? 's' : ''} (últimas 48h) sin teléfono</div>`;
+                const showMax = Math.min(newUsersNoPhone.length, 5);
                 for (let i = 0; i < showMax; i++) {
-                    const u = newUsersFromOps[i];
-                    const safeName = String(u.name).replace(/[<>"]/g, '');
-                    html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;font-size:.78rem;">
-                        <span style="color:#93c5fd;">→ ${safeName}</span>
-                        <span style="color:var(--text-secondary);font-size:.72rem;">Necesita teléfono</span>
-                    </div>`;
+                    const safeName = String(newUsersNoPhone[i].name || newUsersNoPhone[i].alias || '?').replace(/[<>"]/g, '');
+                    html += `<div style="font-size:.78rem;color:#93c5fd;margin-bottom:2px;">→ ${safeName}</div>`;
                 }
-                if (newUsersFromOps.length > 5) {
-                    html += `<div style="font-size:.72rem;color:#93c5fd;margin-top:2px;">...y ${newUsersFromOps.length - 5} más</div>`;
+                if (newUsersNoPhone.length > 5) {
+                    html += `<div style="font-size:.72rem;color:#93c5fd;margin-top:2px;">...y ${newUsersNoPhone.length - 5} más</div>`;
                 }
                 html += '</div>';
             }
