@@ -371,12 +371,17 @@
                         const amount = parseInt((row[amountIdx] || '0').replace(/[^\d-]/g, ''), 10);
                         if (Number.isNaN(amount)) continue;
                         const dateRaw = row[dateIdx] || '';
-                        // Parse DD-MM-YYYY HH:MM:SS format
+                        // Parse multiple date formats: DD-MM-YYYY HH:MM:SS, DD/MM/YYYY HH:MM, etc.
                         let ts = Date.now();
-                        if (dateRaw.includes('-') && dateRaw.includes(':')) {
+                        if (dateRaw.includes(':')) {
                             const parts = dateRaw.split(' ');
-                            const dateParts = parts[0].split('-'); // DD-MM-YYYY
+                            const dateStr = parts[0];
                             const timeParts = parts[1] ? parts[1].split(':') : ['0','0','0'];
+
+                            let dateParts = [];
+                            if (dateStr.includes('-')) dateParts = dateStr.split('-'); // DD-MM-YYYY
+                            else if (dateStr.includes('/')) dateParts = dateStr.split('/'); // DD/MM/YYYY
+
                             if (dateParts.length === 3 && !isNaN(dateParts[0]) && !isNaN(dateParts[1]) && !isNaN(dateParts[2])) {
                                 const d = new Date(parseInt(dateParts[2]), parseInt(dateParts[1])-1, parseInt(dateParts[0]),
                                                    parseInt(timeParts[0]) || 0, parseInt(timeParts[1]) || 0, parseInt(timeParts[2]) || 0);
