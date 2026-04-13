@@ -385,7 +385,8 @@
                                 cargado30d: 0,
                                 cargado90d: 0,
                                 weeks30: new Set(),
-                                months90: new Set()
+                                months90: new Set(),
+                                shiftBreakdown: { tm: 0, tt: 0, tn: 0 }
                             });
                         }
                         const st = stats.get(alias);
@@ -400,6 +401,8 @@
                             st.cargadoTotal += amount;
                             st.cargasVals.push(amount);
                             if (!st.lastCargaAt || ts > st.lastCargaAt) st.lastCargaAt = ts;
+                            // Contar carga por turno horario
+                            { const _hr = new Date(ts).getHours(); const _sk = _hr >= 6 && _hr < 14 ? 'tm' : _hr >= 14 && _hr < 22 ? 'tt' : 'tn'; st.shiftBreakdown[_sk]++; }
                             if (ageDays <= 30) {
                                 st.cargas30d++;
                                 st.cargado30d += amount;
@@ -436,6 +439,11 @@
                         const _sugStatus = getOpsSuggestedStatus(st.lastCargaAt);
                         const _heatObj = getOpsHeatLabel(st.lastCargaAt);
                         const _isFrozen = _heatObj.tier === 'frozen';
+                        const _sb = st.shiftBreakdown || { tm: 0, tt: 0, tn: 0 };
+                        const _sbTotal = (_sb.tm || 0) + (_sb.tt || 0) + (_sb.tn || 0);
+                        const _domEntry = Object.entries(_sb).sort((a, b) => b[1] - a[1])[0];
+                        const _dominantShift = _domEntry ? _domEntry[0] : null;
+                        const _dominantPct = _sbTotal > 0 && _domEntry ? Math.round((_domEntry[1] / _sbTotal) * 100) : 0;
                         byAlias[alias] = {
                             ...st,
                             lastAt: st.lastAt ? new Date(st.lastAt).toISOString() : null,
@@ -447,7 +455,9 @@
                             score: Math.round(score),
                             suggestedStatus: _sugStatus,
                             heat: _heatObj,
-                            isFrozen: _isFrozen
+                            isFrozen: _isFrozen,
+                            dominantShift: _dominantShift,
+                            dominantShiftPct: _dominantPct
                         };
                         delete byAlias[alias].cargasVals;
                         delete byAlias[alias].weeks30;
@@ -692,6 +702,8 @@
                 : Infinity;
             const isFrozen = daysSince > 30;
             if (contact.ops) contact.ops.isFrozen = isFrozen;
+            // Propagar turno dominante desde ops al contacto
+            if (contact.ops?.dominantShift) contact.assignedShift = contact.ops.dominantShift;
             // Cualquier 'jugando' cuya última carga fue > 7 días → forzar 'revisado'
             // (getHigherPriorityStatus rank 3 > 2 nunca lo bajaría solo)
             const needsDowngrade = contact.status === 'jugando' && daysSince > 7;
@@ -5259,7 +5271,7 @@
                         if (byShift[shiftKey] !== undefined && day === today) byShift[shiftKey]++;
                     });
 
-                    // Compute shift-aware 24h window for transitions/buttons
+                    // Compute shift-aware window for transitions/buttons
                     const shiftFromTs = shiftRange.from.getTime();
                     const shiftToTs = shiftRange.to.getTime();
                     const pid = AppState.activeProfileId || 'default';
@@ -5272,8 +5284,17 @@
                         const ts = new Date(t.at || 0).getTime();
                         return ts >= shiftFromTs && ts <= shiftToTs && (t.profileId || 'default') === pid;
                     });
-                    const transitions24h = (AppState.statusTransitions || []).filter((t) => withinLastHours(t.at, 24) && (t.profileId || 'default') === pid);
-                    const buttons24h = (AppState.buttonPressEvents || []).filter((t) => withinLastHours(t.at, 24) && (t.profileId || 'default') === pid);
+                    // "3 turnos anteriores completos" — anclado a límites TM/TT/TN, no a hora exacta
+                    // TM inicia en 06h, TT en 14h, TN en 22h → cada uno 8h → 3 turnos = inicio del turno actual - 16h
+                    const _threeShiftsFrom = shiftRange.from.getTime() - 2 * 8 * 3600000;
+                    const transitions24h = (AppState.statusTransitions || []).filter((t) => {
+                        const ts = new Date(t.at || 0).getTime();
+                        return ts >= _threeShiftsFrom && ts <= Date.now() && (t.profileId || 'default') === pid;
+                    });
+                    const buttons24h = (AppState.buttonPressEvents || []).filter((t) => {
+                        const ts = new Date(t.at || 0).getTime();
+                        return ts >= _threeShiftsFrom && ts <= Date.now() && (t.profileId || 'default') === pid;
+                    });
 
                     const shiftTotals = {};
                     transitions24h.forEach((t) => {
@@ -5397,6 +5418,8 @@
 
                     updateMetricsProfileBadge();
                     if (elements.metricsModal) elements.metricsModal.classList.add('active');
+                    // Pre-cargar comparador en background al abrir el modal
+                    renderProfileCompare().catch(e => console.error('[compare-preload]', e));
 
                     // Poblar "Mi Turno" desde memoria real — cero IPC
                     setTimeout(() => { if (typeof window.calcularRendimientoHoyo === 'function') window.calcularRendimientoHoyo(); }, 0);
@@ -6867,3 +6890,5 @@
         })();
 
     })(); // cierre IIFE exterior
+
+

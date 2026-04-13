@@ -45,11 +45,15 @@
         const last = o.lastCargaAt ? new Date(o.lastCargaAt).toLocaleString('es-ES') : '-';
         const topHours = (o.topHours || []).join(' / ') || '-';
 
-        // Turno dominante calculado en tiempo de render desde hourHist
-        const ds = _calcDominantShift(o.hourHist);
+        // Turno dominante: usar datos persistidos (dominantShift/Pct) o calcular desde hourHist si existe
+        const _dsPersisted = o.dominantShift
+            ? { shift: o.dominantShift, pct: o.dominantShiftPct || 0,
+                detail: o.shiftBreakdown ? (function(sb){ var t=(sb.tm||0)+(sb.tt||0)+(sb.tn||0); return t ? {tm:Math.round((sb.tm||0)/t*100),tt:Math.round((sb.tt||0)/t*100),tn:Math.round((sb.tn||0)/t*100)} : {tm:0,tt:0,tn:0}; })(o.shiftBreakdown) : {tm:0,tt:0,tn:0} }
+            : null;
+        const ds = _dsPersisted || _calcDominantShift(o.hourHist);
         const shiftMeta = ds ? _SHIFT_META[ds.shift] : null;
         const shiftChip = shiftMeta
-            ? `<span class="ops-chip ${shiftMeta.cls}" title="${shiftMeta.title}">${shiftMeta.emoji} Líder: ${shiftMeta.label} ${ds.pct}%</span>`
+            ? `<span class="ops-chip dominant-shift" title="Turno dominante en operaciones">${shiftMeta.emoji} Líder: ${shiftMeta.label} ${ds.pct}%</span>`
             : '';
         const shiftTooltipLine = ds && shiftMeta
             ? `<div class="line"><span>Distribución turnos</span><strong>${_SHIFT_META.tm.emoji}${ds.detail.tm}% ${_SHIFT_META.tt.emoji}${ds.detail.tt}% ${_SHIFT_META.tn.emoji}${ds.detail.tn}%</strong></div>`
