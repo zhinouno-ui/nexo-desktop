@@ -371,7 +371,21 @@
                         const amount = parseInt((row[amountIdx] || '0').replace(/[^\d-]/g, ''), 10);
                         if (Number.isNaN(amount)) continue;
                         const dateRaw = row[dateIdx] || '';
-                        const ts = Date.parse(dateRaw.replace(' ', 'T')) || Date.now();
+                        // Parse DD-MM-YYYY HH:MM:SS format
+                        let ts = Date.now();
+                        if (dateRaw.includes('-') && dateRaw.includes(':')) {
+                            const parts = dateRaw.split(' ');
+                            const dateParts = parts[0].split('-'); // DD-MM-YYYY
+                            const timeParts = parts[1] ? parts[1].split(':') : ['0','0','0'];
+                            if (dateParts.length === 3 && !isNaN(dateParts[0]) && !isNaN(dateParts[1]) && !isNaN(dateParts[2])) {
+                                const d = new Date(parseInt(dateParts[2]), parseInt(dateParts[1])-1, parseInt(dateParts[0]),
+                                                   parseInt(timeParts[0]) || 0, parseInt(timeParts[1]) || 0, parseInt(timeParts[2]) || 0);
+                                if (!isNaN(d.getTime())) ts = d.getTime();
+                            }
+                        } else {
+                            const fallback = Date.parse(dateRaw.replace(' ', 'T'));
+                            if (!isNaN(fallback)) ts = fallback;
+                        }
                         const hour = new Date(ts).getHours();
 
                         if (!stats.has(alias)) {
