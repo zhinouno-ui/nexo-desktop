@@ -655,16 +655,17 @@
         .card-status-trigger:hover { background: rgba(148,163,184,.12); }
 
         .card-status-menu {
-            position: absolute;
-            bottom: calc(100% + 8px);
-            left: 0;
+            position: fixed;
             min-width: 190px;
             background: #1e293b;
             border: 1px solid rgba(148, 163, 184, 0.35);
             border-radius: 12px;
             box-shadow: 0 14px 28px rgba(2, 6, 23, 0.55);
             padding: 6px;
-            z-index: 1000;
+            z-index: 99999;
+            pointer-events: auto;
+            max-height: 80vh;
+            overflow-y: auto;
         }
         .card-status-option {
             width: 100%;
@@ -1277,6 +1278,23 @@
             flex-wrap: wrap;
         }
         .ops-tooltip .line strong { color: var(--text-primary); flex-shrink: 0; }
+        /* Tooltip OPS real se renderiza en portal fijo para evitar clipping */
+        .ops-info-wrap:hover .ops-tooltip,
+        .ops-info-wrap.tt-open .ops-tooltip { display: none !important; }
+        .ops-tooltip-portal {
+            position: fixed;
+            z-index: 99999;
+            background: #0f172a;
+            border: 1px solid rgba(148,163,184,.35);
+            border-radius: 10px;
+            padding: 11px 12px;
+            box-shadow: 0 16px 32px rgba(2,6,23,.65);
+            font-size: .78rem;
+            color: var(--text-secondary);
+            pointer-events: auto;
+            max-height: min(80vh, 520px);
+            overflow: auto;
+        }
         /* Turno dominante badge */
         .ops-chip.shift-tm { background: rgba(251,191,36,.18); border-color: rgba(251,191,36,.4); color: #fde68a; }
         .ops-chip.shift-tt { background: rgba(249,115,22,.18); border-color: rgba(249,115,22,.4); color: #fed7aa; }
@@ -1440,6 +1458,53 @@
         .template-actions { display: flex; gap: 8px; flex-wrap: wrap; }
         .template-help { color: var(--text-secondary); font-size: 0.82rem; }
 
+        /* WhatsApp Message Input Styles */
+        .message-box { 
+            display: flex; 
+            gap: 8px; 
+            align-items: flex-start; 
+            padding: 10px; 
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+        .message-box input[type="checkbox"] {
+            flex-shrink: 0;
+            margin-top: 8px;
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+        }
+        .message-box textarea {
+            flex: 1;
+            min-height: 80px;
+            resize: vertical;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 6px;
+            padding: 8px;
+            font-family: inherit;
+            font-size: 0.9rem;
+        }
+        .message-box textarea:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+        }
+        .message-box-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+        .message-box-actions button {
+            padding: 6px 10px;
+            font-size: 0.75rem;
+            white-space: nowrap;
+        }
+
+
 
         .failsafe-downgrade-btn {
             position: fixed;
@@ -1514,13 +1579,16 @@
         .shifts-view { gap: 12px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); padding: 16px; }
         .shifts-overview-card { grid-column: 1 / -1; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; padding: 14px; }
         .shifts-overview-stats { display: flex; gap: 10px; flex-wrap: wrap; }
-        .shift-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; padding: 14px; }
-        .shift-card h3 { margin: 0 0 8px 0; display: flex; justify-content: space-between; align-items: center; font-size: 1.05rem; }
+        .shift-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; }
+        .shift-card h3 { margin: 0 0 8px 0; display: flex; flex-direction: column; gap: 8px; font-size: 1.05rem; min-width: 0; }
+        .shift-card h3 > span { flex-shrink: 0; }
+        .shift-card h3 > input { width: 100%; min-width: 0; }
         .shift-card-sub { color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 8px; }
-        .shift-stats { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px; }
+        .shift-stats { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 8px; }
+        .shift-stats span { min-width: 0; flex-shrink: 1; }
         .shift-progress { height: 8px; background: rgba(148, 163, 184, 0.2); border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
         .shift-progress > span { display: block; height: 100%; background: linear-gradient(90deg, #34d399, #3b82f6); border-radius: 4px; }
-        .shift-controls { display: flex; gap: 8px; }
+        .shift-controls { display: flex; gap: 8px; flex-wrap: wrap; }
         .review-quick { margin-top:16px; background:linear-gradient(180deg, rgba(30,41,59,.98), rgba(15,23,42,.92)); border:1px solid rgba(148,163,184,.22); border-radius:16px; padding:18px; display:none; }
         .quick-layout { display:grid; grid-template-columns: minmax(260px, 340px) 1fr; gap:14px; }
         .quick-profile { background:rgba(15,23,42,.45); border:1px solid rgba(148,163,184,.25); border-radius:12px; padding:14px; }

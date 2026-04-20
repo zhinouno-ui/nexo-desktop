@@ -146,12 +146,6 @@
                     </select>
                     <button id="opsSortBtn" class="btn" title="Ordenar por cantidad de operaciones" style="padding:6px 12px;font-size:.85rem;">↓ Más</button>
                 </div>
-                <select id="shiftFilter" class="filter-select">
-                    <option value="">Todos los turnos</option>
-                    <option value="tm">Turno TM</option>
-                    <option value="tt">Turno TT</option>
-                    <option value="tn">Turno TN</option>
-                </select>
                 <div style="display:flex;gap:4px;align-items:center;padding:0 4px;">
                     <span style="font-size:.85rem;color:var(--text-secondary);">Turno dominante:</span>
                     <button id="dominantShiftTM" class="shift-chip" data-shift="tm" title="Filtrar por turno dominante TM" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(251,191,36,.4);background:rgba(251,191,36,.1);color:var(--text-secondary);font-size:.8rem;cursor:pointer;">🌅 TM</button>
@@ -210,6 +204,9 @@
         <!-- Paginación -->
         <div class="pagination" id="pagination"></div>
     </div>
+
+    <!-- Portal para dropdowns y menús flotantes (nunca clipeados) -->
+    <div id="dropdowns-portal" style="position: fixed; top: 0; left: 0; width: 0; height: 0; z-index: 5000; pointer-events: none;"></div>
 
     <!-- Modal de exportación -->
     <div class="modal" id="exportModal">
@@ -639,36 +636,24 @@
     </div>
 
 
+    <!-- whatsappMessageModal duplicado eliminado (el correcto está más abajo) -->
     <div class="modal" id="whatsappMessageModal">
-        <div class="modal-content" style="max-width: 640px;">
-            <div class="modal-header"><i class="fab fa-whatsapp"></i> Mensaje de WhatsApp</div>
-            <textarea id="whatsappTemplateInput" class="origin-input" style="min-height: 140px; margin-top: 0;" placeholder="Hola {usuario}, ..."></textarea>
-            <div class="template-actions" style="margin-top: 12px;">
-                <button id="insertUserTokenBtn" class="btn"><i class="fas fa-user"></i> Insertar usuario</button>
-                <button id="resetTemplateBtn" class="btn"><i class="fas fa-undo"></i> Restablecer</button>
+        <div class="modal-content" style="max-width: 720px;">
+            <div class="modal-header"><i class="fab fa-whatsapp"></i> Mensajes de WhatsApp</div>
+            
+            <div id="whatsappMessagesContainer" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px;">
+                <!-- Los mensajes se insertarán dinámicamente aquí -->
             </div>
-            <div class="modal-actions">
-                <button id="closeProfilesModal" class="btn"><i class="fas fa-times"></i> Cerrar</button>
-            </div>
-        </div>
-    </div>
-
-
-    
-
-
-    <div class="modal" id="whatsappMessageModal">
-        <div class="modal-content" style="max-width: 640px;">
-            <div class="modal-header"><i class="fab fa-whatsapp"></i> Mensaje de WhatsApp</div>
-            <textarea id="whatsappTemplateInput" class="origin-input" style="min-height: 140px; margin-top: 0;" placeholder="Hola {usuario}, ..."></textarea>
-            <div class="template-actions" style="margin-top: 12px;">
-                <button id="insertUserTokenBtn" class="btn"><i class="fas fa-user"></i> Insertar usuario</button>
-                <button id="resetTemplateBtn" class="btn"><i class="fas fa-undo"></i> Restablecer</button>
-            </div>
-            <p class="template-help" style="margin-top: 8px;">Usá <code>{usuario}</code> para completar el nombre automáticamente.</p>
+            
+            <button id="addMessageBtn" class="btn" style="width: 100%; margin-bottom: 12px;"><i class="fas fa-plus"></i> Agregar mensaje</button>
+            
+            <p class="template-help" style="margin-bottom: 12px;">
+                Usá <code>{usuario}</code> para completar el nombre automáticamente. Marcar los mensajes que quieras enviar. Si marcás uno solo, se enviará ese. Si marcás varios, rotarán en orden.
+            </p>
+            
             <div class="modal-actions">
                 <button id="closeWhatsappMessageModal" class="btn"><i class="fas fa-times"></i> Cancelar</button>
-                <button id="saveTemplateBtn" class="btn btn-success"><i class="fas fa-save"></i> Guardar mensaje</button>
+                <button id="saveTemplateBtn" class="btn btn-success"><i class="fas fa-save"></i> Guardar mensajes</button>
             </div>
         </div>
     </div>

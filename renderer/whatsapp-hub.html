@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WhatsApp Hub</title>
+    <style>
+      :root {
+        --bg: #0b1220;
+        --surface: #0f172a;
+        --border: #22304a;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --accent: #22c55e;
+        --danger: #ef4444;
+        --warning: #f59e0b;
+      }
+      html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+      .wrap { display: flex; height: 100%; width: 100%; overflow: hidden; }
+      /* debe matchear sidebarW en main.js */
+      .sidebar { width: 120px; min-width: 120px; background: rgba(15,23,42,.92); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 10px 8px; gap: 10px; box-sizing: border-box; }
+      .brand { width: 100%; text-align: center; font-weight: 800; letter-spacing: .5px; font-size: 11px; color: var(--muted); }
+      .sessions { width: 100%; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; overflow-x: hidden; padding-right: 2px; flex: 1; }
+      .sessions::-webkit-scrollbar { width: 6px; }
+      .sessions::-webkit-scrollbar-thumb { background: rgba(148,163,184,.25); border-radius: 6px; }
+      .pill {
+        width: 100%;
+        min-height: 56px;
+        border: 1px solid rgba(148,163,184,.18);
+        background: rgba(2,6,23,.35);
+        border-radius: 14px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 6px 4px;
+        cursor: pointer;
+        user-select: none;
+        transition: transform .08s ease, border-color .12s ease, background .12s ease;
+        box-sizing: border-box;
+        position: relative;
+      }
+      .pill.dragging { opacity: .55; transform: scale(.98); }
+      .pill.drop-target { outline: 2px dashed rgba(34,197,94,.55); outline-offset: 2px; }
+      .pill:hover { transform: translateY(-1px); border-color: rgba(34,197,94,.35); }
+      .pill.active { border-color: rgba(34,197,94,.7); background: rgba(34,197,94,.10); }
+      .pill.down { border-color: rgba(239,68,68,.5); background: rgba(239,68,68,.08); opacity: .7; }
+      .pill .id { font-weight: 900; font-size: 14px; }
+      .pill .sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+      .pill .pill-label { font-size: 9px; color: var(--muted); margin-top: 1px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .pill .status-dot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; }
+      .status-dot.active-dot { background: var(--accent); }
+      .status-dot.down-dot { background: var(--danger); }
+      .btn {
+        width: 100%;
+        height: 42px;
+        border-radius: 12px;
+        border: 1px solid rgba(148,163,184,.18);
+        background: rgba(2,6,23,.35);
+        color: var(--text);
+        cursor: pointer;
+        font-weight: 800;
+        font-size: 12px;
+      }
+      .btn:hover { border-color: rgba(34,197,94,.35); }
+      .btn.primary { background: rgba(34,197,94,.14); border-color: rgba(34,197,94,.45); }
+      .btn.danger { background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.35); color: #fca5a5; }
+      .content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        background: linear-gradient(180deg, rgba(15,23,42,.85), rgba(2,6,23,.92));
+      }
+      .topbar {
+        height: 56px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        box-sizing: border-box;
+        gap: 10px;
+      }
+      .title { font-weight: 900; font-size: 13px; color: var(--text); }
+      .hint { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .actions { display: flex; gap: 8px; align-items: center; }
+      .actions button {
+        height: 32px;
+        border-radius: 10px;
+        border: 1px solid rgba(148,163,184,.18);
+        background: rgba(2,6,23,.35);
+        color: var(--text);
+        cursor: pointer;
+        font-weight: 800;
+        padding: 0 10px;
+        font-size: 12px;
+      }
+      .actions button:hover { border-color: rgba(34,197,94,.35); }
+      .url-bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 12px 0 12px;
+        height: 36px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(2,6,23,.4);
+      }
+      .url-bar input {
+        flex: 1;
+        background: rgba(15,23,42,.6);
+        border: 1px solid rgba(148,163,184,.18);
+        border-radius: 8px;
+        color: var(--text);
+        padding: 4px 10px;
+        font-size: 12px;
+        font-family: monospace;
+        outline: none;
+      }
+      .url-bar input:focus { border-color: rgba(34,197,94,.45); }
+      .url-bar button {
+        height: 28px;
+        border-radius: 8px;
+        border: 1px solid rgba(148,163,184,.18);
+        background: rgba(2,6,23,.35);
+        color: var(--text);
+        cursor: pointer;
+        font-weight: 700;
+        padding: 0 10px;
+        font-size: 11px;
+      }
+      .url-bar button:hover { border-color: rgba(34,197,94,.35); }
+      /* El WhatsApp real vive en BrowserView debajo; acá dejamos un placeholder */
+      .view-placeholder { flex: 1; display: grid; place-items: center; color: var(--muted); font-weight: 700; }
+      /* Modal de configuración de perfil */
+      .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 9000; place-items: center; }
+      .modal-overlay.visible { display: grid; }
+      .modal {
+        background: #1e293b;
+        border: 1px solid rgba(148,163,184,.3);
+        border-radius: 16px;
+        padding: 20px;
+        min-width: 340px;
+        max-width: 420px;
+        box-shadow: 0 20px 40px rgba(0,0,0,.5);
+      }
+      .modal h3 { margin: 0 0 14px; font-size: 15px; }
+      .modal label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; margin-top: 10px; }
+      .modal input, .modal select {
+        width: 100%;
+        background: rgba(15,23,42,.6);
+        border: 1px solid rgba(148,163,184,.22);
+        border-radius: 8px;
+        color: var(--text);
+        padding: 8px 10px;
+        font-size: 13px;
+        outline: none;
+        box-sizing: border-box;
+      }
+      .modal input:focus { border-color: rgba(34,197,94,.45); }
+      .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+      .modal-actions button {
+        flex: 1;
+        height: 36px;
+        border-radius: 10px;
+        border: 1px solid rgba(148,163,184,.18);
+        background: rgba(2,6,23,.35);
+        color: var(--text);
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 12px;
+      }
+      .modal-actions button.save { background: rgba(34,197,94,.18); border-color: rgba(34,197,94,.45); }
+      .modal-actions button:hover { opacity: .85; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <aside class="sidebar">
+        <div class="brand">WHATSAPP</div>
+        <button id="addBtn" class="btn primary" title="Agregar sesión">+ Añadir</button>
+        <div id="sessions" class="sessions"></div>
+        <button id="closeBtn" class="btn" title="Cerrar sesión activa">Cerrar</button>
+        <button id="resetBtn" class="btn danger" title="Resetear (limpiar) sesión activa">Reset</button>
+      </aside>
+      <main class="content">
+        <div class="topbar">
+          <div style="min-width:0;">
+            <div class="title">WhatsApp Hub</div>
+            <div id="hint" class="hint">Cargá una sesión desde la izquierda.</div>
+          </div>
+          <div class="actions">
+            <button id="configBtn" title="Configurar perfil activo">⚙ Config</button>
+            <button id="backWsp" title="Atrás (en sesión activa)">← Atrás</button>
+            <button id="focusNexo" title="Volver a Nexo">Nexo</button>
+          </div>
+        </div>
+        <div class="url-bar">
+          <input id="urlInput" type="text" placeholder="https://web.whatsapp.com/" value="https://web.whatsapp.com/" />
+          <button id="urlGo">Ir</button>
+        </div>
+        <div class="view-placeholder">
+          La sesión seleccionada se muestra acá (BrowserView).
+        </div>
+      </main>
+    </div>
+
+    <!-- Modal de configuración de perfil -->
+    <div id="profileModal" class="modal-overlay">
+      <div class="modal">
+        <h3 id="modalTitle">Configurar Sesión</h3>
+        <label>Nombre / Etiqueta</label>
+        <input id="profileLabel" type="text" placeholder="Ej: Principal, Backup..." />
+        <label>Estado</label>
+        <select id="profileStatus">
+          <option value="active">Activo</option>
+          <option value="down">Caído</option>
+        </select>
+        <label>Proxy (opcional)</label>
+        <input id="profileProxy" type="text" placeholder="http://user:pass@host:port o socks5://host:port" />
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">Formatos: http://host:port, socks5://host:port, http://user:pass@host:port</div>
+        <div class="modal-actions">
+          <button id="modalCancel">Cancelar</button>
+          <button id="modalSave" class="save">Guardar</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./whatsapp-hub.js"></script>
+  </body>
+</html>

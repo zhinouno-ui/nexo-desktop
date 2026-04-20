@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, Notification } = require('electron');
+const { app, BrowserWindow, BrowserView, ipcMain, shell, dialog, Notification, session } = require('electron');
 const fs = require('fs/promises');
 const fssync = require('fs');
 const path = require('path');
@@ -31,6 +31,13 @@ const DEFAULT_DB = {
 };
 
 let mainWindow = null;
+let whatsappWindow = null; // legacy single window (kept for backward compat)
+const whatsappSessions = new Map(); // sessionId -> BrowserWindow
+let whatsappHubWindow = null;
+const whatsappHubViews = new Map(); // sessionId -> BrowserView
+let whatsappHubActiveSessionId = null;
+let whatsappHubAttachedView = null; // el BrowserView actualmente montado en la ventana hub
+let whatsappHubMeta = { order: [], lastActiveSessionId: null, updatedAt: null, routeLastAtBySession: {} };
 let currentZoomFactor = 1.0;
 let dbCache = null;
 let dbCacheLoadedAt = 0;
@@ -503,6 +510,450 @@ function showOrCreateMainWindow() {
   mainWindow.focus();
 }
 
+function normalizeWhatsAppUrl(url) {
+  const u = String(url || '').trim();
+  if (!u) return 'https://web.whatsapp.com/';
+  // Permitir wa.me / api.whatsapp.com, pero normalizar a web.whatsapp.com si es posible.
+  try {
+    const parsed = new URL(u);
+    const pickVariantText = (textRaw) => {
+      const text = String(textRaw || '');
+      // Permite "saludos ilimitados": múltiples variantes separadas por una línea "---"
+      // Se puede configurar desde Ajustes (plantilla), sin cambiar el renderer:
+      // Variante 1
+      // ---
+      // Variante 2
+      if (!text) return '';
+      const parts = text
+        .split(/\r?\n-{3,}\r?\n/)
+        .map((s) => String(s || '').trim())
+        .filter(Boolean);
+      if (parts.length <= 1) return text;
+      return parts[Math.floor(Math.random() * parts.length)];
+    };
+    if (/wa\.me$/i.test(parsed.hostname)) {
+      const phone = parsed.pathname.replace(/\//g, '');
+      const text = pickVariantText(parsed.searchParams.get('text') || '');
+      const q = new URL('https://web.whatsapp.com/send');
+      if (phone) q.searchParams.set('phone', phone);
+      if (text) q.searchParams.set('text', text);
+      return q.toString();
+    }
+    if (/api\.whatsapp\.com$/i.test(parsed.hostname) && parsed.pathname.startsWith('/send')) {
+      const phone = parsed.searchParams.get('phone') || '';
+      const text = pickVariantText(parsed.searchParams.get('text') || '');
+      const q = new URL('https://web.whatsapp.com/send');
+      if (phone) q.searchParams.set('phone', phone);
+      if (text) q.searchParams.set('text', text);
+      return q.toString();
+    }
+    if (/web\.whatsapp\.com$/i.test(parsed.hostname)) {
+      // Si viene ya en web.whatsapp.com y trae text con variantes, elegir una.
+      try {
+        if (parsed.searchParams.has('text')) {
+          const t = pickVariantText(parsed.searchParams.get('text') || '');
+          parsed.searchParams.set('text', t);
+        }
+      } catch (_) {}
+      return parsed.toString();
+    }
+  } catch (_) {}
+  return 'https://web.whatsapp.com/';
+}
+
+function getWhatsAppUserAgent() {
+  // UA dinámico: toma la versión de Chrome embebida en Electron para no quedar "viejo".
+  const chromeVer = process.versions.chrome || '136.0.0.0';
+  return `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVer} Safari/537.36`;
+}
+
+/** Stealth patches — inyecta scripts que ocultan huellas de Electron/webdriver */
+const STEALTH_JS = `
+(function stealthPatch() {
+  // 1. Borrar navigator.webdriver
+  Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+
+  // 2. Parchear window.chrome para simular un Chrome real
+  if (!window.chrome) {
+    window.chrome = {};
+  }
+  if (!window.chrome.runtime) {
+    window.chrome.runtime = { connect: function(){}, sendMessage: function(){} };
+  }
+
+  // 3. Parchear navigator.plugins (Chrome real tiene al menos 5)
+  Object.defineProperty(navigator, 'plugins', {
+    get: () => {
+      const fakePlugins = [
+        { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+        { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+        { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }
+      ];
+      fakePlugins.length = 3;
+      fakePlugins.item = (i) => fakePlugins[i] || null;
+      fakePlugins.namedItem = (n) => fakePlugins.find(p => p.name === n) || null;
+      fakePlugins.refresh = () => {};
+      return fakePlugins;
+    }
+  });
+
+  // 4. Parchear navigator.languages
+  Object.defineProperty(navigator, 'languages', { get: () => ['es-AR', 'es', 'en-US', 'en'] });
+
+  // 5. Ocultar que es un entorno automatizado (permissions query)
+  const origQuery = navigator.permissions?.query?.bind(navigator.permissions);
+  if (origQuery) {
+    navigator.permissions.query = (params) => {
+      if (params?.name === 'notifications') {
+        return Promise.resolve({ state: Notification.permission || 'prompt' });
+      }
+      return origQuery(params);
+    };
+  }
+
+  // 6. Parchear la huella de WebGL renderer para no mostrar SwiftShader
+  try {
+    const getParameter = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function(param) {
+      if (param === 37445) return 'Google Inc. (Intel)';
+      if (param === 37446) return 'ANGLE (Intel, Intel(R) UHD Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)';
+      return getParameter.call(this, param);
+    };
+  } catch(_) {}
+})();
+`;
+
+function applyStealthToWebContents(wc) {
+  // Inyectar stealth en cada frame cargado (incluye iframes de WhatsApp)
+  wc.on('dom-ready', () => {
+    wc.executeJavaScript(STEALTH_JS).catch(() => {});
+  });
+}
+
+function getWhatsAppPartition(sessionId = '1') {
+  const safe = String(sessionId || '1').replace(/[^a-z0-9_-]/gi, '_') || '1';
+  return `persist:whatsapp_${safe}`;
+}
+
+async function resetWhatsAppPartition(sessionId) {
+  const sid = String(sessionId || '').trim();
+  if (!sid) return { ok: false, message: 'sessionId inválido' };
+  const partition = getWhatsAppPartition(sid);
+  const ses = session.fromPartition(partition, { cache: true });
+  try {
+    // Best-effort: borrar todo lo posible para forzar logout / QR nuevo
+    await ses.clearCache().catch(() => {});
+    await ses.clearStorageData({
+      storages: [
+        'appcache',
+        'cookies',
+        'filesystem',
+        'indexdb',
+        'localstorage',
+        'shadercache',
+        'serviceworkers',
+        'cachestorage'
+      ],
+      quotas: ['temporary', 'persistent', 'syncable']
+    }).catch(() => {});
+    // También limpiar permisos y auth cache
+    try { ses.clearAuthCache(); } catch (_) {}
+    try { ses.flushStorageData(); } catch (_) {}
+    return { ok: true, partition };
+  } catch (err) {
+    appendErrorLog('whatsappHub:resetPartition', err, { sessionId: sid, partition }).catch(() => {});
+    return { ok: false, message: err?.message || String(err), partition };
+  }
+}
+
+function getWhatsAppHubMetaPath() {
+  return path.join(app.getPath('userData'), 'whatsapp-hub.json');
+}
+
+async function readWhatsAppHubMeta() {
+  try {
+    const raw = await fs.readFile(getWhatsAppHubMetaPath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    const order = Array.isArray(parsed?.order) ? parsed.order.map((x) => String(x)).filter(Boolean) : [];
+    const lastActiveSessionId = parsed?.lastActiveSessionId != null ? String(parsed.lastActiveSessionId) : null;
+    const routeLastAtBySession = (parsed?.routeLastAtBySession && typeof parsed.routeLastAtBySession === 'object') ? parsed.routeLastAtBySession : {};
+    const sessionProfiles = (parsed?.sessionProfiles && typeof parsed.sessionProfiles === 'object') ? parsed.sessionProfiles : {};
+    whatsappHubMeta = { order, lastActiveSessionId, updatedAt: parsed?.updatedAt || null, routeLastAtBySession, sessionProfiles };
+    return whatsappHubMeta;
+  } catch (_) {
+    whatsappHubMeta = { order: [], lastActiveSessionId: null, updatedAt: null, routeLastAtBySession: {}, sessionProfiles: {} };
+    return whatsappHubMeta;
+  }
+}
+
+async function writeWhatsAppHubMeta(next) {
+  try {
+    const safe = next && typeof next === 'object' ? next : {};
+    const order = Array.isArray(safe.order) ? safe.order.map((x) => String(x)).filter(Boolean) : [];
+    const lastActiveSessionId = safe.lastActiveSessionId != null ? String(safe.lastActiveSessionId) : null;
+    const routeLastAtBySession = (safe.routeLastAtBySession && typeof safe.routeLastAtBySession === 'object') ? safe.routeLastAtBySession : {};
+    const sessionProfiles = (safe.sessionProfiles && typeof safe.sessionProfiles === 'object') ? safe.sessionProfiles : {};
+    whatsappHubMeta = { order, lastActiveSessionId, updatedAt: new Date().toISOString(), routeLastAtBySession, sessionProfiles };
+    await fs.mkdir(path.dirname(getWhatsAppHubMetaPath()), { recursive: true });
+    await fs.writeFile(getWhatsAppHubMetaPath(), JSON.stringify(whatsappHubMeta, null, 2), 'utf8');
+    return whatsappHubMeta;
+  } catch (err) {
+    appendErrorLog('whatsappHub:writeMeta', err).catch(() => {});
+    return whatsappHubMeta;
+  }
+}
+
+function pickHubSessionForRouting({ cooldownMs = 2 * 60 * 1000 } = {}) {
+  const order = Array.isArray(whatsappHubMeta?.order) ? whatsappHubMeta.order : [];
+  const profiles = (whatsappHubMeta?.sessionProfiles && typeof whatsappHubMeta.sessionProfiles === 'object')
+    ? whatsappHubMeta.sessionProfiles : {};
+
+  // Solo sesiones que no estén marcadas como "caídas"
+  const activeSessions = (order.length ? order : ['1']).filter((sid) => {
+    const p = profiles[sid];
+    return !p || p.status !== 'down';
+  });
+  const sessions = activeSessions.length ? activeSessions : (order.length ? order : ['1']);
+
+  const lastMap = (whatsappHubMeta?.routeLastAtBySession && typeof whatsappHubMeta.routeLastAtBySession === 'object')
+    ? whatsappHubMeta.routeLastAtBySession
+    : {};
+  const now = Date.now();
+
+  const candidates = sessions.map((sid) => {
+    const t = Number(lastMap[sid] || 0) || 0;
+    return { sid, lastAt: t, age: now - t };
+  });
+
+  const eligible = candidates.filter((c) => c.age >= cooldownMs);
+  if (eligible.length) {
+    // Menos recientemente usado primero para rotar parejo
+    eligible.sort((a, b) => b.age - a.age);
+    return eligible[0].sid;
+  }
+
+  // Si ninguno cumple cooldown, el de menor uso reciente (no aleatorio)
+  candidates.sort((a, b) => b.age - a.age);
+  return candidates[0].sid;
+}
+
+function ensureHubOrderHas(id) {
+  const sid = String(id || '').trim();
+  if (!sid) return;
+  const set = new Set(whatsappHubMeta.order || []);
+  if (!set.has(sid)) whatsappHubMeta.order = [...(whatsappHubMeta.order || []), sid];
+}
+
+function nextNumericSessionId() {
+  const taken = new Set((whatsappHubMeta.order || []).map((x) => String(x)));
+  let n = 1;
+  while (taken.has(String(n))) n += 1;
+  return String(n);
+}
+
+function ensureWhatsAppHubWindow() {
+  if (whatsappHubWindow && !whatsappHubWindow.isDestroyed()) return whatsappHubWindow;
+  whatsappHubWindow = new BrowserWindow({
+    width: 1180,
+    height: 840,
+    title: 'WhatsApp Hub',
+    show: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.js')
+    }
+  });
+
+  whatsappHubWindow.loadFile(path.join(__dirname, 'renderer', 'whatsapp-hub.html')).catch(() => {});
+
+  // Nota: no abrimos DevTools automáticamente.
+
+  const applyBounds = () => {
+    try {
+      if (!whatsappHubWindow || whatsappHubWindow.isDestroyed()) return;
+      const [w, h] = whatsappHubWindow.getContentSize();
+      const sidebarW = 120; // debe matchear CSS del hub
+      const topbarH = 92;   // .topbar (56) + .url-bar (36)
+      const bounds = { x: sidebarW, y: topbarH, width: Math.max(300, w - sidebarW), height: Math.max(200, h - topbarH) };
+      if (whatsappHubActiveSessionId && whatsappHubViews.has(whatsappHubActiveSessionId)) {
+        const view = whatsappHubViews.get(whatsappHubActiveSessionId);
+        if (view) view.setBounds(bounds);
+      }
+    } catch (_) {}
+  };
+
+  whatsappHubWindow.on('resize', applyBounds);
+  whatsappHubWindow.on('maximize', applyBounds);
+  whatsappHubWindow.on('unmaximize', applyBounds);
+
+  whatsappHubWindow.once('ready-to-show', () => {
+    try { whatsappHubWindow.show(); whatsappHubWindow.focus(); } catch (_) {}
+    setTimeout(applyBounds, 0);
+  });
+
+  whatsappHubWindow.on('closed', () => {
+    // No destruimos views para preservar sesiones en memoria si vuelven a abrir el hub.
+    whatsappHubWindow = null;
+  });
+
+  return whatsappHubWindow;
+}
+
+function ensureHubSessionView(sessionId = '1', initialUrl = '') {
+  const sid = String(sessionId || '1');
+  ensureHubOrderHas(sid);
+  const existing = whatsappHubViews.get(sid);
+  if (existing && !existing.webContents.isDestroyed()) {
+    if (initialUrl) existing.webContents.loadURL(normalizeWhatsAppUrl(initialUrl)).catch(() => {});
+    return existing;
+  }
+
+  const view = new BrowserView({
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      partition: getWhatsAppPartition(sid)
+    }
+  });
+  try { view.webContents.setUserAgent(getWhatsAppUserAgent()); } catch (_) {}
+  applyStealthToWebContents(view.webContents);
+  // Aplicar proxy si el perfil tiene uno configurado
+  const profile = whatsappHubMeta?.sessionProfiles?.[sid];
+  if (profile?.proxy) {
+    const proxyUrl = String(profile.proxy).trim();
+    if (proxyUrl) {
+      const ses = session.fromPartition(getWhatsAppPartition(sid), { cache: true });
+      ses.setProxy({ proxyRules: proxyUrl }).catch(() => {});
+    }
+  }
+  view.webContents.setWindowOpenHandler(({ url }) => {
+    try { view.webContents.loadURL(normalizeWhatsAppUrl(url)).catch(() => {}); } catch (_) {}
+    return { action: 'deny' };
+  });
+  view.webContents.on('will-navigate', (event, url) => {
+    if (!/whatsapp\.com|wa\.me/i.test(url)) {
+      event.preventDefault();
+      shell.openExternal(url).catch(() => {});
+      return;
+    }
+    if (!/web\.whatsapp\.com/i.test(url)) {
+      event.preventDefault();
+      view.webContents.loadURL(normalizeWhatsAppUrl(url)).catch(() => {});
+    }
+  });
+  view.webContents.loadURL(normalizeWhatsAppUrl(initialUrl || 'https://web.whatsapp.com/')).catch(() => {});
+  whatsappHubViews.set(sid, view);
+  return view;
+}
+
+function hubAttachActiveView(sessionId) {
+  const hub = ensureWhatsAppHubWindow();
+  if (!hub || hub.isDestroyed()) return;
+  const sid = String(sessionId || '1');
+  const view = ensureHubSessionView(sid, '');
+  // Remover vista anterior (evita superposición de BrowserViews)
+  try {
+    // Seguridad extra: sacar TODAS las views montadas antes de agregar la nueva.
+    const mounted = hub.getBrowserViews?.() || [];
+    mounted.forEach((v) => { try { hub.removeBrowserView(v); } catch (_) {} });
+    whatsappHubAttachedView = null;
+  } catch (_) {}
+  try {
+    hub.addBrowserView(view);
+  } catch (_) {}
+  whatsappHubAttachedView = view;
+  whatsappHubActiveSessionId = sid;
+  whatsappHubMeta.lastActiveSessionId = sid;
+  writeWhatsAppHubMeta(whatsappHubMeta).catch(() => {});
+  try {
+    const [w, h] = hub.getContentSize();
+    const sidebarW = 120;
+    const topbarH = 92; // .topbar (56) + .url-bar (36)
+    view.setBounds({ x: sidebarW, y: topbarH, width: Math.max(300, w - sidebarW), height: Math.max(200, h - topbarH) });
+    view.setAutoResize({ width: true, height: true });
+  } catch (_) {}
+}
+
+function ensureWhatsAppSessionWindow(sessionId = '1', initialUrl = '') {
+  const targetUrl = normalizeWhatsAppUrl(initialUrl);
+  const sid = String(sessionId || '1');
+  const existing = whatsappSessions.get(sid);
+  if (existing && !existing.isDestroyed()) {
+    try {
+      existing.show();
+      existing.focus();
+      // Si se pide un send específico, cargarlo.
+      if (initialUrl) existing.loadURL(targetUrl).catch(() => {});
+    } catch (_) {}
+    return existing;
+  }
+
+  const win = new BrowserWindow({
+    width: 1120,
+    height: 820,
+    title: `WhatsApp Web · Sesión ${sid}`,
+    show: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      partition: getWhatsAppPartition(sid)
+    }
+  });
+
+  try {
+    win.webContents.setUserAgent(getWhatsAppUserAgent());
+  } catch (_) {}
+  applyStealthToWebContents(win.webContents);
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    // Dentro de WhatsApp, cualquier popup → abrir en la misma ventana.
+    try {
+      win.loadURL(normalizeWhatsAppUrl(url)).catch(() => {});
+    } catch (_) {}
+    return { action: 'deny' };
+  });
+
+  win.webContents.on('will-navigate', (event, url) => {
+    // Mantener navegación dentro de WhatsApp Web; bloquear otras cosas.
+    if (!/whatsapp\.com|wa\.me/i.test(url)) {
+      event.preventDefault();
+      shell.openExternal(url).catch(() => {});
+      return;
+    }
+    // Normalizar enlaces a WhatsApp hacia el formato web.
+    if (!/web\.whatsapp\.com/i.test(url)) {
+      event.preventDefault();
+      win.loadURL(normalizeWhatsAppUrl(url)).catch(() => {});
+    }
+  });
+
+  win.once('ready-to-show', () => {
+    try {
+      win.show();
+      win.focus();
+    } catch (_) {}
+  });
+
+  win.on('closed', () => {
+    whatsappSessions.delete(sid);
+  });
+
+  win.loadURL(targetUrl).catch(() => {});
+  whatsappSessions.set(sid, win);
+  return win;
+}
+
+function ensureWhatsAppWindow(initialUrl = '') {
+  // Compat: si no se especifica sesión, usar la "1"
+  return ensureWhatsAppSessionWindow('1', initialUrl);
+}
+
 function parseDeepLink(url) {
   try {
     if (!url || typeof url !== 'string' || !url.startsWith('nexo://')) return null;
@@ -732,7 +1183,7 @@ function createWindow() {
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/whatsapp\.com|wa\.me/i.test(url)) {
-      shell.openExternal(url);
+      ensureWhatsAppWindow(url);
       return { action: 'deny' };
     }
     if (url.startsWith('nexo://')) {
@@ -745,7 +1196,7 @@ function createWindow() {
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (/whatsapp\.com|wa\.me/i.test(url)) {
       event.preventDefault();
-      shell.openExternal(url);
+      ensureWhatsAppWindow(url);
       return;
     }
     if (url.startsWith('nexo://')) {
@@ -762,6 +1213,20 @@ function createWindow() {
     if (!input.control) return;
     if (input.type !== 'keyDown') return;
     const key = String(input.key || '').toLowerCase();
+    if (input.shift && key === 'w') {
+      event.preventDefault();
+      try {
+        // Abrir WhatsApp Hub (tipo Rambox) desde cualquier pantalla
+        ensureWhatsAppHubWindow();
+        // Abrir con última sesión activa si existe
+        readWhatsAppHubMeta().then(() => {
+          const sid = whatsappHubActiveSessionId || whatsappHubMeta?.lastActiveSessionId || whatsappHubMeta?.order?.[0] || '1';
+          ensureHubSessionView(sid, '');
+          hubAttachActiveView(sid);
+        }).catch(() => {});
+      } catch (_) {}
+      return;
+    }
     if (input.shift && key === 'u') {
       event.preventDefault();
       getUpdaterDiagnostics().then(async (diag) => {
@@ -829,6 +1294,319 @@ function createWindow() {
   });
 
 }
+
+// ─── WhatsApp Web (in-app) controls ───────────────────────────────────────────
+ipcMain.handle('whatsapp:open', async (_event, payload) => {
+  try {
+    const url = typeof payload === 'string' ? payload : (payload?.url || '');
+    const sessionId = (payload && typeof payload === 'object' && payload.sessionId != null) ? String(payload.sessionId) : '1';
+    ensureWhatsAppSessionWindow(sessionId, url || 'https://web.whatsapp.com/');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('whatsapp:back', async (_event, payload) => {
+  try {
+    const sessionId = (payload && typeof payload === 'object' && payload.sessionId != null) ? String(payload.sessionId) : '1';
+    const win = whatsappSessions.get(sessionId);
+    if (win && !win.isDestroyed() && win.webContents.canGoBack()) {
+      win.webContents.goBack();
+      return { ok: true, did: true };
+    }
+    return { ok: true, did: false };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('whatsapp:minimize', async (_event, payload) => {
+  try {
+    const sessionId = (payload && typeof payload === 'object' && payload.sessionId != null) ? String(payload.sessionId) : '1';
+    const win = whatsappSessions.get(sessionId);
+    if (win && !win.isDestroyed()) win.minimize();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('whatsapp:close', async (_event, payload) => {
+  try {
+    const sessionId = (payload && typeof payload === 'object' && payload.sessionId != null) ? String(payload.sessionId) : '1';
+    const win = whatsappSessions.get(sessionId);
+    if (win && !win.isDestroyed()) win.close();
+    whatsappSessions.delete(sessionId);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('whatsapp:focusMain', async () => {
+  try {
+    showOrCreateMainWindow();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+// ─── WhatsApp Hub (Rambox-like) ───────────────────────────────────────────────
+ipcMain.handle('whatsappHub:open', async (_event, payload) => {
+  try {
+    await readWhatsAppHubMeta();
+    const sessionId = payload?.sessionId != null ? String(payload.sessionId) : (whatsappHubActiveSessionId || whatsappHubMeta.lastActiveSessionId || whatsappHubMeta.order?.[0] || '1');
+    const url = payload?.url ? String(payload.url) : '';
+    ensureWhatsAppHubWindow();
+    ensureHubSessionView(sessionId, url);
+    hubAttachActiveView(sessionId);
+    return { ok: true, activeSessionId: sessionId };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('whatsappHub:list', async () => {
+  try {
+    await readWhatsAppHubMeta();
+    // sessions = meta.order + cualquier view viva que no esté en meta (fallback)
+    const viewKeys = Array.from(whatsappHubViews.keys()).map((x) => String(x));
+    const merged = [];
+    const seen = new Set();
+    for (const sid of (whatsappHubMeta.order || [])) {
+      if (!sid) continue;
+      if (!seen.has(sid)) { merged.push(sid); seen.add(sid); }
+    }
+    for (const sid of viewKeys) {
+      if (!sid) continue;
+      if (!seen.has(sid)) { merged.push(sid); seen.add(sid); }
+    }
+    if (merged.length === 0) merged.push('1');
+    // Mantener meta consistente
+    whatsappHubMeta.order = merged;
+    await writeWhatsAppHubMeta(whatsappHubMeta);
+    const active = whatsappHubActiveSessionId || whatsappHubMeta.lastActiveSessionId || merged[0] || null;
+    const sessionProfiles = whatsappHubMeta.sessionProfiles || {};
+    return { ok: true, sessions: merged, activeSessionId: active, sessionProfiles };
+  } catch (err) {
+    return { ok: false, sessions: [], message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('whatsappHub:add', async (_event, payload) => {
+  try {
+    await readWhatsAppHubMeta();
+    const sessionId = payload?.sessionId != null ? String(payload.sessionId) : nextNumericSessionId();
+    const url = payload?.url ? String(payload.url) : 'https://web.whatsapp.com/';
+    ensureWhatsAppHubWindow();
+    ensureHubSessionView(sessionId, url);
+    hubAttachActiveView(sessionId);
+    ensureHubOrderHas(sessionId);
+    await writeWhatsAppHubMeta(whatsappHubMeta);
+    return { ok: true, sessionId };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('whatsappHub:select', async (_event, payload) => {
+  try {
+    const sessionId = payload?.sessionId != null ? String(payload.sessionId) : '1';
+    ensureWhatsAppHubWindow();
+    ensureHubSessionView(sessionId, payload?.url ? String(payload.url) : '');
+    hubAttachActiveView(sessionId);
+    ensureHubOrderHas(sessionId);
+    await writeWhatsAppHubMeta(whatsappHubMeta);
+    return { ok: true, sessionId };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('whatsappHub:closeSession', async (_event, payload) => {
+  try {
+    await readWhatsAppHubMeta();
+    const sessionId = payload?.sessionId != null ? String(payload.sessionId) : '';
+    const view = whatsappHubViews.get(sessionId);
+    if (view) {
+      try {
+        if (whatsappHubWindow && !whatsappHubWindow.isDestroyed()) whatsappHubWindow.removeBrowserView(view);
+      } catch (_) {}
+      if (whatsappHubAttachedView === view) whatsappHubAttachedView = null;
+      try { view.webContents.destroy(); } catch (_) {}
+      whatsappHubViews.delete(sessionId);
+    }
+    whatsappHubMeta.order = (whatsappHubMeta.order || []).filter((x) => String(x) !== String(sessionId));
+    if (whatsappHubMeta.lastActiveSessionId === sessionId) whatsappHubMeta.lastActiveSessionId = whatsappHubMeta.order[0] || null;
+    if (whatsappHubActiveSessionId === sessionId) whatsappHubActiveSessionId = whatsappHubMeta.lastActiveSessionId || null;
+    await writeWhatsAppHubMeta(whatsappHubMeta);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('whatsappHub:reorder', async (_event, payload) => {
+  try {
+    await readWhatsAppHubMeta();
+    const order = Array.isArray(payload?.order) ? payload.order.map((x) => String(x)).filter(Boolean) : [];
+    if (!order.length) return { ok: false, message: 'Orden vacío' };
+    // Dedup y mantener ids válidos
+    const seen = new Set();
+    const dedup = [];
+    for (const sid of order) {
+      if (seen.has(sid)) continue;
+      seen.add(sid);
+      dedup.push(sid);
+    }
+    whatsappHubMeta.order = dedup;
+    if (whatsappHubMeta.lastActiveSessionId && !seen.has(whatsappHubMeta.lastActiveSessionId)) {
+      whatsappHubMeta.lastActiveSessionId = dedup[0] || null;
+    }
+    await writeWhatsAppHubMeta(whatsappHubMeta);
+    return { ok: true, sessions: whatsappHubMeta.order, activeSessionId: whatsappHubMeta.lastActiveSessionId || null };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('whatsappHub:resetSession', async (_event, payload) => {
+  try {
+    await readWhatsAppHubMeta();
+    const sessionId = payload?.sessionId != null ? String(payload.sessionId) : (whatsappHubActiveSessionId || whatsappHubMeta.lastActiveSessionId || '1');
+    // Destruir view si está viva (así no queda pegada a datos viejos)
+    const view = whatsappHubViews.get(sessionId);
+    if (view) {
+      try {
+        if (whatsappHubWindow && !whatsappHubWindow.isDestroyed()) whatsappHubWindow.removeBrowserView(view);
+      } catch (_) {}
+      if (whatsappHubAttachedView === view) whatsappHubAttachedView = null;
+      try { view.webContents.destroy(); } catch (_) {}
+      whatsappHubViews.delete(sessionId);
+    }
+    const reset = await resetWhatsAppPartition(sessionId);
+    // Volver a crear view limpia y dejarla activa en el hub
+    ensureWhatsAppHubWindow();
+    ensureHubSessionView(sessionId, 'https://web.whatsapp.com/');
+    hubAttachActiveView(sessionId);
+    return { ok: true, sessionId, reset };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+// Actualizar perfil de sesión (proxy, label, status)
+ipcMain.handle('whatsappHub:updateProfile', async (_event, payload) => {
+  try {
+    await readWhatsAppHubMeta();
+    const sessionId = payload?.sessionId != null ? String(payload.sessionId) : '';
+    if (!sessionId) return { ok: false, message: 'sessionId requerido' };
+    if (!whatsappHubMeta.sessionProfiles) whatsappHubMeta.sessionProfiles = {};
+    const existing = whatsappHubMeta.sessionProfiles[sessionId] || {};
+    const next = { ...existing };
+    if (payload.label !== undefined) next.label = String(payload.label || '').trim();
+    if (payload.status !== undefined) next.status = String(payload.status || 'active').trim();
+    if (payload.proxy !== undefined) next.proxy = String(payload.proxy || '').trim();
+    whatsappHubMeta.sessionProfiles[sessionId] = next;
+    await writeWhatsAppHubMeta(whatsappHubMeta);
+    // Si cambió el proxy y hay view viva, aplicar
+    if (payload.proxy !== undefined) {
+      const ses = session.fromPartition(getWhatsAppPartition(sessionId), { cache: true });
+      const proxyUrl = next.proxy;
+      if (proxyUrl) {
+        await ses.setProxy({ proxyRules: proxyUrl });
+      } else {
+        await ses.setProxy({ proxyRules: '' });
+      }
+    }
+    return { ok: true, profile: next };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+// Navegar la sesión activa a una URL
+ipcMain.handle('whatsappHub:navigate', async (_event, payload) => {
+  try {
+    const sessionId = payload?.sessionId != null ? String(payload.sessionId) : (whatsappHubActiveSessionId || '1');
+    const url = payload?.url ? String(payload.url) : '';
+    if (!url) return { ok: false, message: 'URL requerida' };
+    const view = whatsappHubViews.get(sessionId);
+    if (view && !view.webContents.isDestroyed()) {
+      await view.webContents.loadURL(url);
+      return { ok: true, sessionId, url };
+    }
+    return { ok: false, message: 'Sesión no encontrada o sin view activa' };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+// Abrir contacto en Hub con rotación automática de sesión
+ipcMain.handle('whatsappHub:openContact', async (_event, payload) => {
+  try {
+    await readWhatsAppHubMeta();
+    const url = payload?.url ? String(payload.url) : 'https://web.whatsapp.com/';
+    const profiles = whatsappHubMeta?.sessionProfiles || {};
+
+    // Elegir la próxima sesión activa (excluye "caídas"), con cooldown de 90 seg
+    const sid = pickHubSessionForRouting({ cooldownMs: 90 * 1000 });
+
+    // Registrar timestamp de uso para el round-robin
+    if (!whatsappHubMeta.routeLastAtBySession) whatsappHubMeta.routeLastAtBySession = {};
+    whatsappHubMeta.routeLastAtBySession[sid] = Date.now();
+    await writeWhatsAppHubMeta(whatsappHubMeta);
+
+    // Asegurar ventana Hub y navegar la sesión seleccionada al contacto
+    ensureWhatsAppHubWindow();
+    ensureHubSessionView(sid, url);
+    hubAttachActiveView(sid);
+
+    const profile = profiles[sid] || {};
+    const label = profile.label || sid;
+    return { ok: true, sessionId: sid, sessionLabel: label };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+// Navegar atrás en la sesión activa
+ipcMain.handle('whatsappHub:goBack', async (_event, payload) => {
+  try {
+    const sessionId = payload?.sessionId != null ? String(payload.sessionId) : (whatsappHubActiveSessionId || '1');
+    const view = whatsappHubViews.get(sessionId);
+    if (view && !view.webContents.isDestroyed() && view.webContents.canGoBack()) {
+      view.webContents.goBack();
+      return { ok: true };
+    }
+    return { ok: false, message: 'No se puede retroceder' };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('whatsapp:listSessions', async () => {
+  try {
+    const sessions = Array.from(whatsappSessions.keys()).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+    return { ok: true, sessions };
+  } catch (err) {
+    return { ok: false, sessions: [], message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('whatsapp:focus', async (_event, payload) => {
+  try {
+    const sessionId = (payload && typeof payload === 'object' && payload.sessionId != null) ? String(payload.sessionId) : '1';
+    const win = ensureWhatsAppSessionWindow(sessionId, '');
+    win.show();
+    win.focus();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+});
 
 function versionToParts(version) {
   return String(version || '0.0.0').split('.').map((n) => parseInt(n, 10) || 0);
@@ -1364,6 +2142,65 @@ ipcMain.handle('ops:getMonthlyHistory', async (_event, payload) => {
 });
 // ─── END OPS MONTHLY HISTORY ──────────────────────────────────────────────────
 
+// ─── OPS RAW CSV UPLOADS ─────────────────────────────────────────────────────
+// Persiste los CSV crudos de operaciones para rehidratar opsProfiles al reiniciar
+// la app (evita tener que re-subir los mismos archivos).
+// Path: userData/ops-uploads/<profileId>/<timestamp>-<safename>.csv
+function getOpsUploadsDir(profileId) {
+  const safe = String(profileId || 'default').replace(/[^a-z0-9_-]/gi, '_');
+  return path.join(app.getPath('userData'), 'ops-uploads', safe);
+}
+
+function sanitizeFilename(name) {
+  return String(name || 'upload.csv').replace(/[^a-z0-9._-]/gi, '_').slice(0, 120);
+}
+
+ipcMain.handle('ops:saveRawUpload', async (_event, payload) => {
+  try {
+    const profileId = String(payload?.profileId || 'default');
+    const filename = sanitizeFilename(payload?.filename || 'upload.csv');
+    const content = String(payload?.content || '');
+    if (!content) return { ok: false, message: 'empty content' };
+    const dir = getOpsUploadsDir(profileId);
+    if (!fssync.existsSync(dir)) fssync.mkdirSync(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const target = path.join(dir, `${stamp}-${filename}`);
+    await fs.writeFile(target, content, 'utf8');
+    return { ok: true, path: target };
+  } catch (err) {
+    await appendErrorLog('ops:saveRawUpload', err, {});
+    return { ok: false, message: err.message };
+  }
+});
+
+ipcMain.handle('ops:listRawUploads', async (_event, payload) => {
+  try {
+    const profileId = String(payload?.profileId || 'default');
+    const dir = getOpsUploadsDir(profileId);
+    if (!fssync.existsSync(dir)) return { ok: true, files: [] };
+    const entries = await fs.readdir(dir);
+    const files = entries.filter(f => f.toLowerCase().endsWith('.csv')).sort();
+    return { ok: true, files };
+  } catch (err) {
+    return { ok: false, files: [], message: err.message };
+  }
+});
+
+ipcMain.handle('ops:loadRawUpload', async (_event, payload) => {
+  try {
+    const profileId = String(payload?.profileId || 'default');
+    const filename = sanitizeFilename(payload?.filename || '');
+    if (!filename) return { ok: false, message: 'missing filename' };
+    const target = path.join(getOpsUploadsDir(profileId), filename);
+    if (!fssync.existsSync(target)) return { ok: false, message: 'not found' };
+    const content = await fs.readFile(target, 'utf8');
+    return { ok: true, content };
+  } catch (err) {
+    return { ok: false, message: err.message };
+  }
+});
+// ─── END OPS RAW CSV UPLOADS ─────────────────────────────────────────────────
+
 // ─── COMPLETE HISTORY: unified read of shadow log + ops monthly history ───────
 // Returns a single object with both data sources so the renderer can populate
 // AppState.metricEvents (timeline) and the Ops Calendar in a single round-trip.
@@ -1837,6 +2674,24 @@ ipcMain.handle('app:notify', async (_event, payload) => {
 
 ipcMain.handle('external:open', async (_event, url) => {
   if (!url || typeof url !== 'string') throw new Error('URL inválida');
+  // Si es WhatsApp, abrir dentro de Electron (ventana dedicada) en vez del navegador.
+  if (/whatsapp\.com|wa\.me/i.test(url)) {
+    // Enrutado a WhatsApp Hub con rotación de sesiones (cooldown 2 minutos).
+    try {
+      await readWhatsAppHubMeta();
+      const sid = pickHubSessionForRouting({ cooldownMs: 2 * 60 * 1000 });
+      whatsappHubMeta.routeLastAtBySession = whatsappHubMeta.routeLastAtBySession || {};
+      whatsappHubMeta.routeLastAtBySession[sid] = Date.now();
+      writeWhatsAppHubMeta(whatsappHubMeta).catch(() => {});
+      ensureWhatsAppHubWindow();
+      ensureHubSessionView(sid, url);
+      hubAttachActiveView(sid);
+      return true;
+    } catch (_) {
+      ensureWhatsAppWindow(url);
+    }
+    return true;
+  }
   await shell.openExternal(url);
   return true;
 });

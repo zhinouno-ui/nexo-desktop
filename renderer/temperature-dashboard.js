@@ -29,67 +29,55 @@
         var pid = appState.activeProfileId || 'default';
         var stats = {};
 
-        // Pass 1: Contar desde opsGranular (operaciones CSV reales)
-        var opsProfiles = appState.opsProfiles || {};
-        var countedAliases = new Set();
-
-        for (var alias in opsProfiles) {
-            if (!opsProfiles.hasOwnProperty(alias)) continue;
-            var profile = opsProfiles[alias];
-            var granular = profile.opsGranular || [];
-
-            for (var g = 0; g < granular.length; g++) {
-                var op = granular[g];
-                var dateStr = op.date; // formato: YYYY-MM-DD
-                var key = getMonthKey(dateStr);
-                if (!key) continue;
-
-                if (!stats[key]) {
-                    stats[key] = { cargasTotal: 0, newUsers: 0, depositadoTotal: 0, jugandoCount: 0, userCount: new Set() };
-                }
-
-                // Contar operación
-                if (op.amount > 0) {
-                    stats[key].cargasTotal++;
-                    stats[key].depositadoTotal += op.amount;
-                }
-
-                // Registrar usuario único por mes
-                stats[key].userCount.add(alias);
+        // Fuente primaria: opsMonthlyHistory (persistente en disco, cargado al init)
+        var opsHistory = appState.opsMonthlyHistory;
+        if (opsHistory && opsHistory.months && Object.keys(opsHistory.months).length > 0) {
+            for (var mk in opsHistory.months) {
+                if (!opsHistory.months.hasOwnProperty(mk)) continue;
+                var mdata = opsHistory.months[mk];
+                // Convertir YYYY-MM a key MonLabel+Year (ej: "Nov2025")
+                var parts = mk.split('-');
+                if (parts.length !== 2) continue;
+                var histKey = MONTHS_LABELS[parseInt(parts[1], 10) - 1] + parts[0];
+                stats[histKey] = {
+                    cargasTotal: mdata.cargas || 0,
+                    depositadoTotal: mdata.volumenCargas || 0,
+                    newUsers: mdata.newAliasCount || 0,
+                    jugandoCount: 0,
+                    userCount: mdata.uniqueAliasCount || 0
+                };
             }
-
-            countedAliases.add(alias);
+        } else {
+            // Fallback: leer desde opsGranular en memoria (sesión actual, pre-persistencia)
+            var opsProfiles = appState.opsProfiles || {};
+            for (var alias in opsProfiles) {
+                if (!opsProfiles.hasOwnProperty(alias)) continue;
+                var granular = opsProfiles[alias].opsGranular || [];
+                for (var g = 0; g < granular.length; g++) {
+                    var op = granular[g];
+                    var key = getMonthKey(op.date);
+                    if (!key) continue;
+                    if (!stats[key]) stats[key] = { cargasTotal: 0, newUsers: 0, depositadoTotal: 0, jugandoCount: 0, userCount: new Set() };
+                    if (op.amount > 0) { stats[key].cargasTotal++; stats[key].depositadoTotal += op.amount; }
+                    stats[key].userCount.add(alias);
+                }
+            }
+            for (var k in stats) {
+                if (stats[k].userCount instanceof Set) stats[k].userCount = stats[k].userCount.size;
+            }
         }
 
-        // Pass 2: Datos adicionales de contactos (nuevos, jugando)
+        // Siempre: datos vivos de contactos (jugando, nuevos si no vienen del historial)
         var contacts = appState.contacts || [];
         for (var i = 0; i < contacts.length; i++) {
             var c = contacts[i];
             if ((c.profileId || 'default') !== pid) continue;
             if (!c.ops) continue;
-
             var dateStr2 = c.ops.lastCargaAt || c.ops.lastAt;
             var key2 = getMonthKey(dateStr2);
             if (!key2) continue;
-
-            if (!stats[key2]) {
-                stats[key2] = { cargasTotal: 0, newUsers: 0, depositadoTotal: 0, jugandoCount: 0, userCount: new Set() };
-            }
-
-            if (c.isNewFromOps) stats[key2].newUsers++;
+            if (!stats[key2]) stats[key2] = { cargasTotal: 0, newUsers: 0, depositadoTotal: 0, jugandoCount: 0, userCount: 0 };
             if (c.status === 'jugando') stats[key2].jugandoCount++;
-
-            var alias2 = String(c.ops.alias || c.alias || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (alias2) stats[key2].userCount.add(alias2);
-        }
-
-        // Convertir Sets a números
-        for (var k in stats) {
-            if (stats[k].userCount && typeof stats[k].userCount.size !== 'undefined') {
-                stats[k].userCount = stats[k].userCount.size;
-            } else {
-                stats[k].userCount = 0;
-            }
         }
 
         return stats;
@@ -97,7 +85,17 @@
 
     function getImportedMonths() {
         var pid = (window.AppState && window.AppState.activeProfileId) || 'default';
-        try { return new Set(JSON.parse(localStorage.getItem('opsImportedMonths:' + pid) || '[]')); } catch(_) { return new Set(); }
+        var result = new Set();
+        // Desde localStorage (actualizado en cada import)
+        try { JSON.parse(localStorage.getItem('opsImportedMonths:' + pid) || '[]').forEach(function(m) { result.add(m); }); } catch(_) {}
+        // Desde opsMonthlyHistory en AppState (fuente de verdad persistente)
+        try {
+            var hist = window.AppState && window.AppState.opsMonthlyHistory;
+            if (hist && hist.months) {
+                Object.keys(hist.months).forEach(function(mk) { result.add(mk); });
+            }
+        } catch(_) {}
+        return result;
     }
 
     function getOpsTemperature() {
@@ -172,14 +170,15 @@
                 var userCount = _d.userCount || 0;
                 var jugandoCount = _d.jugandoCount || 0;
                 var newUsers = _d.newUsers || 0;
+                var depositadoTotal = _d.depositadoTotal || 0;
                 var pctJugando = userCount > 0 ? Math.round((jugandoCount / userCount) * 100) : 0;
                 html += '<div style="background:var(--card-bg,#1e293b);border:1px solid var(--border,#334155);border-radius:8px;padding:10px 8px;text-align:center;">';
                 html += '<div style="font-size:10px;font-weight:700;color:var(--text-secondary);margin-bottom:5px;">' + m.label + '</div>';
                 html += '<div style="font-size:14px;font-weight:700;color:#22c55e;">' + userCount + '</div>';
-                html += '<div style="font-size:9px;color:var(--text-secondary);margin-top:4px;">usuarios activos</div>';
-                if (newUsers > 0) {
-                    html += '<div style="font-size:9px;color:#60a5fa;margin-top:2px;">+' + newUsers + ' nuevos</div>';
-                }
+                html += '<div style="font-size:9px;color:var(--text-secondary);margin-top:2px;">usuarios activos</div>';
+                html += '<div style="font-size:11px;font-weight:700;color:#a78bfa;margin-top:4px;">' + fmtMoney(depositadoTotal) + '</div>';
+                html += '<div style="font-size:9px;color:var(--text-secondary);margin-top:1px;">total cargado</div>';
+                html += '<div style="font-size:9px;color:#60a5fa;margin-top:3px;">+' + newUsers + ' nuevos</div>';
                 if (jugandoCount > 0) {
                     html += '<div style="font-size:9px;color:#fbbf24;margin-top:2px;">🎮 ' + jugandoCount + ' jugando (' + pctJugando + '%)</div>';
                 }

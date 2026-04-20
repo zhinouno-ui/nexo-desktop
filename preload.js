@@ -21,6 +21,26 @@ contextBridge.exposeInMainWorld('telemetry', {
 
 contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => ipcRenderer.invoke('external:open', url),
+  // WhatsApp Web dentro de Electron (ventana dedicada)
+  whatsappOpen: (payload) => ipcRenderer.invoke('whatsapp:open', payload || {}),
+  whatsappBack: (payload) => ipcRenderer.invoke('whatsapp:back', payload || {}),
+  whatsappMinimize: (payload) => ipcRenderer.invoke('whatsapp:minimize', payload || {}),
+  whatsappClose: (payload) => ipcRenderer.invoke('whatsapp:close', payload || {}),
+  whatsappFocusMain: () => ipcRenderer.invoke('whatsapp:focusMain'),
+  whatsappListSessions: () => ipcRenderer.invoke('whatsapp:listSessions'),
+  whatsappFocus: (payload) => ipcRenderer.invoke('whatsapp:focus', payload || {}),
+  // WhatsApp Hub (tipo Rambox)
+  whatsappHubOpen: (payload) => ipcRenderer.invoke('whatsappHub:open', payload || {}),
+  whatsappHubList: () => ipcRenderer.invoke('whatsappHub:list'),
+  whatsappHubAdd: (payload) => ipcRenderer.invoke('whatsappHub:add', payload || {}),
+  whatsappHubSelect: (payload) => ipcRenderer.invoke('whatsappHub:select', payload || {}),
+  whatsappHubCloseSession: (payload) => ipcRenderer.invoke('whatsappHub:closeSession', payload || {}),
+  whatsappHubReorder: (payload) => ipcRenderer.invoke('whatsappHub:reorder', payload || {}),
+  whatsappHubResetSession: (payload) => ipcRenderer.invoke('whatsappHub:resetSession', payload || {}),
+  whatsappHubUpdateProfile: (payload) => ipcRenderer.invoke('whatsappHub:updateProfile', payload || {}),
+  whatsappHubOpenContact: (payload) => ipcRenderer.invoke('whatsappHub:openContact', payload || {}),
+  whatsappHubNavigate: (payload) => ipcRenderer.invoke('whatsappHub:navigate', payload || {}),
+  whatsappHubGoBack: (payload) => ipcRenderer.invoke('whatsappHub:goBack', payload || {}),
   openImportDialog: () => ipcRenderer.invoke('dialog:openImportFiles'),
   readTextFile: (filePath) => ipcRenderer.invoke('file:readText', filePath),
   notify: (payload) => ipcRenderer.invoke('app:notify', payload || {}),
@@ -55,6 +75,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Ops Monthly History — Calendario Operativo
   saveOpsMonthlyHistory: (payload) => ipcRenderer.invoke('ops:saveMonthlyHistory', payload || {}),
   getOpsMonthlyHistory: (payload) => ipcRenderer.invoke('ops:getMonthlyHistory', payload || {}),
+
+  // Ops Raw CSV Uploads — persistencia de archivos crudos para rehidratar al reiniciar
+  saveOpsRawUpload: (payload) => ipcRenderer.invoke('ops:saveRawUpload', payload || {}),
+  listOpsRawUploads: (payload) => ipcRenderer.invoke('ops:listRawUploads', payload || {}),
+  loadOpsRawUpload: (payload) => ipcRenderer.invoke('ops:loadRawUpload', payload || {}),
 
   zoomIn: () => ipcRenderer.invoke('zoom:in'),
   zoomOut: () => ipcRenderer.invoke('zoom:out'),

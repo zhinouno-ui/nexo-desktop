@@ -232,11 +232,14 @@
     // ─── Helpers de contacto ──────────────────────────────────────────────────
 
     function isRecontactDue(contact) {
-        if (contact.status !== 'revisado') return false;
-        const lastEditTime = contact.lastEditedAt || contact.lastUpdated;
-        if (!lastEditTime) return false;
-        const hoursElapsed = (Date.now() - new Date(lastEditTime).getTime()) / 3600000;
-        return hoursElapsed > 48;
+        const ts = contact.lastUpdated || contact.lastEditedAt;
+        if (!ts) return false;
+        const elapsedMs = Date.now() - new Date(ts).getTime();
+        if (contact.status === 'revisado')   return elapsedMs > 2  * 86400000;  // 48hs
+        if (contact.status === 'contactado') return elapsedMs > 2  * 86400000;  // 48hs
+        if (contact.status === 'jugando')    return elapsedMs > 7  * 86400000;  // 7 días
+        if (contact.status === 'sin wsp')    return elapsedMs > 14 * 86400000;  // 14 días
+        return false;
     }
 
     function getContactUrgency(contact) {
@@ -286,6 +289,59 @@
         return getLocalCompetitionShift(dt);
     }
 
+    // Parsea strings de fecha de CSV de ops en múltiples formatos (DD/MM/YYYY,
+    // MM/DD/YYYY, YYYY-MM-DD, con o sin hora). Devuelve timestamp ms, o null
+    // si la fecha es inválida o cae en el futuro.
+    //
+    // Lógica de desambiguación para formatos numéricos:
+    //  - Si el primer segmento >= 1000 → ISO (YYYY-MM-DD).
+    //  - Si algún segmento > 12 → ese es DÍA (no puede ser mes).
+    //  - Si ambos ≤ 12 (ambiguo) → asume DD/MM/YYYY (Argentina).
+    // Si la fecha resultante es futura, retorna null (dato corrupto).
+    function parseOpsDate(raw) {
+        const s = String(raw || '').trim();
+        if (!s) return null;
+        const parts = s.split(' ');
+        const dateStr = parts[0];
+        const timeParts = parts[1] ? parts[1].split(':') : ['0', '0', '0'];
+        const hh = parseInt(timeParts[0]) || 0;
+        const mm = parseInt(timeParts[1]) || 0;
+        const ss = parseInt(timeParts[2]) || 0;
+
+        let dp = [];
+        if (dateStr.includes('-')) dp = dateStr.split('-');
+        else if (dateStr.includes('/')) dp = dateStr.split('/');
+        else if (dateStr.includes('.')) dp = dateStr.split('.');
+        else return null;
+
+        if (dp.length !== 3 || dp.some(p => isNaN(parseInt(p)))) return null;
+        const a = parseInt(dp[0]), b = parseInt(dp[1]), c = parseInt(dp[2]);
+
+        let year, month, day;
+        if (a >= 1000) { // YYYY-MM-DD
+            year = a; month = b; day = c;
+        } else if (c >= 1000 || c >= 100) { // DD-MM-YYYY o MM-DD-YYYY
+            year = c < 100 ? (c <= 30 ? 2000 + c : 1900 + c) : c;
+            if (a > 12 && b <= 12) { day = a; month = b; }        // día claro
+            else if (b > 12 && a <= 12) { day = b; month = a; }   // MM/DD invertido
+            else { day = a; month = b; }                          // ambiguo → DD/MM
+        } else {
+            // Dos años de 2 dígitos en posición inesperada — ignorar.
+            return null;
+        }
+
+        if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+        const d = new Date(year, month - 1, day, hh, mm, ss);
+        const ts = d.getTime();
+        if (isNaN(ts)) return null;
+        // Validar que la fecha parseada sea exactamente la que pedimos (detecta
+        // overflow: p.ej. 31 de febrero → 3 de marzo).
+        if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+        // Rechazar fechas futuras (tolerancia de 1 día por desfase de zona horaria).
+        if (ts > Date.now() + 86400000) return null;
+        return ts;
+    }
+
     // ─── Registro público ─────────────────────────────────────────────────────
 
     window.NexoEngine = {
@@ -314,7 +370,8 @@
         getMessageSentBadge,
         getLocalCompetitionShift,
         getShiftDateRange,
-        inferShiftFromIso
+        inferShiftFromIso,
+        parseOpsDate
     };
 
     console.log('[NexoEngine] ✅ Motor de utilidades listo. ' + Object.keys(window.NexoEngine).length + ' funciones.');

@@ -41,7 +41,12 @@
     function getOpsMiniHtml(contact) {
         if (!contact.ops) return '';
         const o = contact.ops;
-        const heat = o.heat || _Eng().getOpsHeatLabel(o.lastCargaAt);
+        // No confiar en o.heat persistido: puede quedar desactualizado si opsProfiles mergea lastCargaAt
+        // pero no recomputa heat/suggestedStatus. Calcular siempre en vivo desde lastCargaAt.
+        const heat = _Eng().getOpsHeatLabel(o.lastCargaAt);
+        const suggested = (typeof _Eng().getOpsSuggestedStatus === 'function')
+            ? _Eng().getOpsSuggestedStatus(o.lastCargaAt)
+            : (o.suggestedStatus || 'sin revisar');
         const last = o.lastCargaAt ? new Date(o.lastCargaAt).toLocaleString('es-ES') : '-';
         const topHours = (o.topHours || []).join(' / ') || '-';
 
@@ -67,7 +72,7 @@
                 <span class="ops-chip">Score ${o.score || 0}</span>
                 ${shiftChip}
                 <div class="ops-info-wrap">
-                    <button class="ops-info-btn" type="button" onclick="event.stopPropagation()">ℹ️</button>
+                    <button class="ops-info-btn" type="button" onclick="window.toggleOpsInfoTooltip(event)">ℹ️</button>
                     <div class="ops-tooltip" onclick="event.stopPropagation()">
                         <div class="line"><span>Última actividad</span><strong>${last}</strong></div>
                         <div class="line"><span>Promedio / Mediana</span><strong>$${Math.round(o.avgCarga || 0)} / $${Math.round(o.medianCarga || 0)}</strong></div>
@@ -76,7 +81,7 @@
                         ${shiftTooltipLine}
                         <div class="line"><span>Lealtad</span><strong>${o.loyalty || 0}/4</strong></div>
                         <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
-                            <button class="btn" style="padding:4px 8px;font-size:.72rem;" onclick="applyOpsSuggestion(${contact.id}, event)">Aplicar ${o.suggestedStatus || 'sin revisar'}</button>
+                            <button class="btn" style="padding:4px 8px;font-size:.72rem;" onclick="applyOpsSuggestion(${contact.id}, event)">Aplicar ${suggested}</button>
                             <button class="btn" style="padding:4px 8px;font-size:.72rem;" onclick="pinContact(${contact.id}, event)">${contact.pinned ? 'Desfijar' : 'Pin'}</button>
                         </div>
                     </div>
@@ -418,6 +423,93 @@
         // clientWidth excluye la scrollbar — evita que el tooltip quede oculto detrás de ella
         const visibleRight = document.documentElement.clientWidth;
         wrap.classList.toggle('flip-left', (visibleRight - rect.left) < 320);
+    }, { passive: true });
+
+    // Tooltip OPS en portal fijo (no se clipea en cards/list virtualizados)
+    let _opsTooltipPortalEl = null;
+    let _opsTooltipLastAnchor = null;
+
+    function _ensureOpsTooltipPortal() {
+        if (_opsTooltipPortalEl && _opsTooltipPortalEl.isConnected) return _opsTooltipPortalEl;
+        const portal = document.getElementById('dropdowns-portal') || document.body;
+        const el = document.createElement('div');
+        el.className = 'ops-tooltip-portal';
+        el.style.display = 'none';
+        el.addEventListener('click', (ev) => ev.stopPropagation());
+        portal.appendChild(el);
+        _opsTooltipPortalEl = el;
+        return el;
+    }
+
+    function _positionOpsTooltip(anchorEl) {
+        const tip = _ensureOpsTooltipPortal();
+        if (!anchorEl) return;
+        const rect = anchorEl.getBoundingClientRect();
+        const vw = document.documentElement.clientWidth;
+        const vh = document.documentElement.clientHeight;
+        const margin = 10;
+        const preferredTop = rect.bottom + 8;
+        const preferredLeft = rect.left;
+
+        tip.style.maxWidth = 'min(310px, calc(100vw - 24px))';
+        tip.style.width = '310px';
+
+        // Medir luego de setear contenido/width (si aún no está visible, forzamos layout)
+        const tipW = tip.offsetWidth || 310;
+        const tipH = tip.offsetHeight || 180;
+
+        let left = preferredLeft;
+        if (left + tipW > vw - margin) left = Math.max(margin, vw - margin - tipW);
+        if (left < margin) left = margin;
+
+        let top = preferredTop;
+        if (top + tipH > vh - margin) {
+            // si no entra abajo, intentar arriba
+            top = rect.top - tipH - 8;
+        }
+        if (top < margin) top = margin;
+
+        tip.style.left = `${Math.round(left)}px`;
+        tip.style.top = `${Math.round(top)}px`;
+    }
+
+    function _closeOpsTooltip() {
+        if (_opsTooltipPortalEl) _opsTooltipPortalEl.style.display = 'none';
+        _opsTooltipLastAnchor = null;
+    }
+
+    function _openOpsTooltipFromButton(btn) {
+        const wrap = btn?.closest?.('.ops-info-wrap');
+        const inline = wrap?.querySelector?.('.ops-tooltip');
+        if (!inline) return;
+        const tip = _ensureOpsTooltipPortal();
+        tip.innerHTML = inline.innerHTML;
+        tip.style.display = 'block';
+        _opsTooltipLastAnchor = btn;
+        _positionOpsTooltip(btn);
+    }
+
+    window.toggleOpsInfoTooltip = function (event) {
+        if (event) event.stopPropagation();
+        const btn = event?.currentTarget || event?.target;
+        if (!btn) return;
+        if (_opsTooltipPortalEl && _opsTooltipPortalEl.style.display === 'block' && _opsTooltipLastAnchor === btn) {
+            _closeOpsTooltip();
+            return;
+        }
+        _openOpsTooltipFromButton(btn);
+    };
+
+    // Cerrar al click afuera / ESC, y reposicionar en resize/scroll
+    document.addEventListener('click', () => _closeOpsTooltip());
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') _closeOpsTooltip();
+    });
+    window.addEventListener('resize', () => {
+        if (_opsTooltipLastAnchor && _opsTooltipPortalEl?.style.display === 'block') _positionOpsTooltip(_opsTooltipLastAnchor);
+    }, { passive: true });
+    window.addEventListener('scroll', () => {
+        if (_opsTooltipLastAnchor && _opsTooltipPortalEl?.style.display === 'block') _positionOpsTooltip(_opsTooltipLastAnchor);
     }, { passive: true });
 
     console.log('[NexoUI] ✅ Módulo de UI listo.');

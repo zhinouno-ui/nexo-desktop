@@ -46,6 +46,8 @@
             undoStack: [],
             currentView: 'cards',
             whatsappTemplate: 'Hola {usuario}, ¿cómo estás? Te escribo por la propuesta que vimos.',
+            whatsappTemplates: [],   // array de plantillas, poblado en loadPreferences
+            whatsappTemplateIdx: 0,  // índice rotativo actual
             duplicateMergeMode: 'phone-auto',
             opsProfiles: {},
             opsLastImportedAt: null,
@@ -184,7 +186,7 @@
             importOpsBtn: $('#importOpsBtn'),
             midnightExportBtn: $('#midnightExportBtn'),
             undoBtn: $('#undoBtn'),
-            whatsappTemplateInput: $('#whatsappTemplateInput'),
+            // whatsappTemplateInput: $('#whatsappTemplateInput'), // Eliminado - nuevo sistema de múltiples mensajes
             saveTemplateBtn: $('#saveTemplateBtn'),
             checkUpdatesOption: $('#checkUpdatesOption'),
             restartUpdateOption: $('#restartUpdateOption'),
@@ -371,25 +373,30 @@
                         const amount = parseInt((row[amountIdx] || '0').replace(/[^\d-]/g, ''), 10);
                         if (Number.isNaN(amount)) continue;
                         const dateRaw = row[dateIdx] || '';
-                        // Parse multiple date formats: DD-MM-YYYY HH:MM:SS, DD/MM/YYYY HH:MM, etc.
-                        let ts = Date.now();
-                        if (dateRaw.includes(':')) {
-                            const parts = dateRaw.split(' ');
-                            const dateStr = parts[0];
-                            const timeParts = parts[1] ? parts[1].split(':') : ['0','0','0'];
-
-                            let dateParts = [];
-                            if (dateStr.includes('-')) dateParts = dateStr.split('-'); // DD-MM-YYYY
-                            else if (dateStr.includes('/')) dateParts = dateStr.split('/'); // DD/MM/YYYY
-
-                            if (dateParts.length === 3 && !isNaN(dateParts[0]) && !isNaN(dateParts[1]) && !isNaN(dateParts[2])) {
-                                const d = new Date(parseInt(dateParts[2]), parseInt(dateParts[1])-1, parseInt(dateParts[0]),
-                                                   parseInt(timeParts[0]) || 0, parseInt(timeParts[1]) || 0, parseInt(timeParts[2]) || 0);
-                                if (!isNaN(d.getTime())) ts = d.getTime();
+                        // Parser robusto: intenta detectar el formato real y rechazar futuras.
+                        // Si no puede, cae al parser legacy (DD-MM-YYYY / DD/MM/YYYY asumido)
+                        // para no descartar filas con fechas en formatos exóticos.
+                        let ts = window.NexoEngine.parseOpsDate(dateRaw);
+                        if (ts === null) {
+                            if (dateRaw.includes(':')) {
+                                const parts = dateRaw.split(' ');
+                                const dateStr = parts[0];
+                                const timeParts = parts[1] ? parts[1].split(':') : ['0','0','0'];
+                                let dateParts = [];
+                                if (dateStr.includes('-')) dateParts = dateStr.split('-');
+                                else if (dateStr.includes('/')) dateParts = dateStr.split('/');
+                                if (dateParts.length === 3 && !isNaN(dateParts[0]) && !isNaN(dateParts[1]) && !isNaN(dateParts[2])) {
+                                    let yr = parseInt(dateParts[2]);
+                                    if (yr < 100) yr += yr >= 0 && yr <= 30 ? 2000 : 1900;
+                                    const d = new Date(yr, parseInt(dateParts[1])-1, parseInt(dateParts[0]),
+                                                       parseInt(timeParts[0]) || 0, parseInt(timeParts[1]) || 0, parseInt(timeParts[2]) || 0);
+                                    if (!isNaN(d.getTime())) ts = d.getTime();
+                                }
+                            } else {
+                                const fallback = Date.parse(dateRaw.replace(' ', 'T'));
+                                if (!isNaN(fallback)) ts = fallback;
                             }
-                        } else {
-                            const fallback = Date.parse(dateRaw.replace(' ', 'T'));
-                            if (!isNaN(fallback)) ts = fallback;
+                            if (ts === null) ts = Date.now(); // último recurso: la fila entra igual
                         }
                         const hour = new Date(ts).getHours();
 
@@ -553,6 +560,41 @@
                         if (_d <= 30) return { text: '🧊 Target Revinculación', cls: 'cold', tier: 'cold' };
                         return { text: '💀 Inactivo', cls: 'cold', tier: 'frozen' };
                     };
+                    // Parser robusto de fecha (equivalente a NexoEngine.parseOpsDate).
+                    // Detecta YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY; rechaza fechas inválidas
+                    // o futuras (datos corruptos). Retorna null si no puede parsear.
+                    const parseOpsDate = (raw) => {
+                        const s = String(raw || '').trim();
+                        if (!s) return null;
+                        const parts = s.split(' ');
+                        const dateStr = parts[0];
+                        const timeParts = parts[1] ? parts[1].split(':') : ['0','0','0'];
+                        const hh = parseInt(timeParts[0]) || 0;
+                        const mm = parseInt(timeParts[1]) || 0;
+                        const ss = parseInt(timeParts[2]) || 0;
+                        let dp = [];
+                        if (dateStr.includes('-')) dp = dateStr.split('-');
+                        else if (dateStr.includes('/')) dp = dateStr.split('/');
+                        else if (dateStr.includes('.')) dp = dateStr.split('.');
+                        else return null;
+                        if (dp.length !== 3 || dp.some(p => isNaN(parseInt(p)))) return null;
+                        const a = parseInt(dp[0]), b = parseInt(dp[1]), c = parseInt(dp[2]);
+                        let year, month, day;
+                        if (a >= 1000) { year = a; month = b; day = c; }
+                        else if (c >= 100) {
+                            year = c < 100 ? (c <= 30 ? 2000 + c : 1900 + c) : c;
+                            if (a > 12 && b <= 12) { day = a; month = b; }
+                            else if (b > 12 && a <= 12) { day = b; month = a; }
+                            else { day = a; month = b; } // ambiguo → DD/MM (Argentina)
+                        } else return null;
+                        if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+                        const d = new Date(year, month - 1, day, hh, mm, ss);
+                        const ts = d.getTime();
+                        if (isNaN(ts)) return null;
+                        if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+                        if (ts > Date.now() + 86400000) return null;
+                        return ts;
+                    };
 
                     self.onmessage = (event) => {
                         try {
@@ -568,9 +610,9 @@
                             const header = parseCsvRow(lines[idx] || '');
                             idx++;
                             const h = header.map(v => normalizeUsername(v));
-                            const aliasIdx = h.findIndex(v => v.includes('alias'));
-                            const amountIdx = h.findIndex(v => v.includes('cantidad'));
-                            const dateIdx = h.findIndex(v => v.includes('fecha'));
+                            const aliasIdx = h.findIndex(v => /alias|usuario|cuenta|nombre|jugador|usuario_master|user/.test(v));
+                            const amountIdx = h.findIndex(v => /cantidad|monto|importe|total|balance|deposito|movimiento/.test(v));
+                            const dateIdx = h.findIndex(v => /fecha|date|creacion|dia|timestamp|hora/.test(v));
                             const stats = new Map();
                             const now = Date.now();
                             const chunk = 1200;
@@ -587,7 +629,26 @@
                                     const amount = parseInt((row[amountIdx] || '0').replace(/[^\d-]/g, ''), 10);
                                     if (Number.isNaN(amount)) continue;
                                     const dateRaw = row[dateIdx] || '';
-                                    const ts = Date.parse(dateRaw.replace(' ', 'T')) || Date.now();
+                                    let ts = parseOpsDate(dateRaw);
+                                    if (ts === null) {
+                                        // Fallback legacy: asume DD-MM/DD-MM-YYYY, no rechaza futuras
+                                        if (dateRaw.includes(':')) {
+                                            const _parts = dateRaw.split(' ');
+                                            const _ds = _parts[0]; const _tp = _parts[1] ? _parts[1].split(':') : ['0','0','0'];
+                                            let _dp = [];
+                                            if (_ds.includes('-')) _dp = _ds.split('-');
+                                            else if (_ds.includes('/')) _dp = _ds.split('/');
+                                            if (_dp.length === 3 && !isNaN(_dp[0]) && !isNaN(_dp[1]) && !isNaN(_dp[2])) {
+                                                let _yr = parseInt(_dp[2]); if (_yr < 100) _yr += (_yr >= 0 && _yr <= 30) ? 2000 : 1900;
+                                                const _d = new Date(_yr, parseInt(_dp[1])-1, parseInt(_dp[0]), parseInt(_tp[0])||0, parseInt(_tp[1])||0, parseInt(_tp[2])||0);
+                                                if (!isNaN(_d.getTime())) ts = _d.getTime();
+                                            }
+                                        } else {
+                                            const _fb = Date.parse(dateRaw.replace(' ', 'T'));
+                                            if (!isNaN(_fb)) ts = _fb;
+                                        }
+                                        if (ts === null) ts = Date.now();
+                                    }
                                     const hour = new Date(ts).getHours();
 
                                     if (!stats.has(alias)) {
@@ -607,7 +668,9 @@
                                             cargado30d: 0,
                                             cargado90d: 0,
                                             weeks30: new Set(),
-                                            months90: new Set()
+                                            months90: new Set(),
+                                            shiftBreakdown: { tm: 0, tt: 0, tn: 0 },
+                                            opsGranular: []
                                         });
                                     }
 
@@ -618,11 +681,17 @@
                                     if (!st.lastAt || ts > st.lastAt) st.lastAt = ts;
 
                                     const ageDays = (now - ts) / 86400000;
+                                    const _hr = new Date(ts).getHours();
+                                    const _sk = _hr >= 6 && _hr < 14 ? 'tm' : _hr >= 14 && _hr < 22 ? 'tt' : 'tn';
+                                    const _dateStr = new Date(ts).toISOString().slice(0, 10);
+                                    st.opsGranular.push({ ts, amount, shift: _sk, date: _dateStr });
+
                                     if (amount > 0) {
                                         st.cargasCount++;
                                         st.cargadoTotal += amount;
                                         st.cargasVals.push(amount);
                                         if (!st.lastCargaAt || ts > st.lastCargaAt) st.lastCargaAt = ts;
+                                        st.shiftBreakdown[_sk]++;
                                         if (ageDays <= 30) {
                                             st.cargas30d++;
                                             st.cargado30d += amount;
@@ -734,8 +803,14 @@
                 : Infinity;
             const isFrozen = daysSince > 30;
             if (contact.ops) contact.ops.isFrozen = isFrozen;
-            // Propagar turno dominante desde ops al contacto
-            if (contact.ops?.dominantShift) contact.assignedShift = contact.ops.dominantShift;
+            // Propagar turno dominante desde ops al contacto SOLO si el contacto aún no
+            // tiene turno asignado. Si ya lo tiene (por distribución round-robin, edición
+            // manual o importación previa), no sobrescribir — el `dominantShift` del CSV
+            // recién subido suele estar sesgado hacia las ops de ESE CSV y no refleja
+            // el patrón histórico completo.
+            if (contact.ops?.dominantShift && !contact.assignedShift) {
+                contact.assignedShift = contact.ops.dominantShift;
+            }
             // Cualquier 'jugando' cuya última carga fue > 7 días → forzar 'revisado'
             // (getHigherPriorityStatus rank 3 > 2 nunca lo bajaría solo)
             const needsDowngrade = contact.status === 'jugando' && daysSince > 7;
@@ -745,6 +820,7 @@
             if (nextStatus !== contact.status) {
                 const oldStatus = contact.status;
                 contact.status = nextStatus;
+                if (AppState.searchIndex && AppState.searchIndex.byId.has(contact.id)) addContactToIndex(contact);
                 touchContactEdit(contact, 'ops_sync');
                 const opsAt = contact?.ops?.lastCargaAt || new Date().toISOString();
                 const opsShift = inferShiftFromIso(opsAt);
@@ -837,11 +913,83 @@
             return { updatedCount, createdCount };
         }
 
+        function _buildMonthlyDataFromByAlias(byAlias) {
+            const monthly = {};
+            for (const [alias, profile] of Object.entries(byAlias || {})) {
+                const granular = profile.opsGranular || [];
+                for (const op of granular) {
+                    if (!op.date) continue;
+                    const monthKey = op.date.slice(0, 7); // YYYY-MM
+                    if (!monthly[monthKey]) monthly[monthKey] = { volumenCargas: 0, volumenRetiros: 0, cargas: 0, retiros: 0, aliases: new Set() };
+                    const m = monthly[monthKey];
+                    if (op.amount > 0) { m.volumenCargas += op.amount; m.cargas++; }
+                    else if (op.amount < 0) { m.volumenRetiros += Math.abs(op.amount); m.retiros++; }
+                    m.aliases.add(alias);
+                }
+            }
+            // Convertir Sets a arrays
+            for (const mk of Object.keys(monthly)) monthly[mk].aliases = Array.from(monthly[mk].aliases);
+            return monthly;
+        }
+
+        async function _persistOpsMonthlyHistory(byAlias) {
+            try {
+                const pid = AppState.activeProfileId || 'default';
+                const monthlyData = _buildMonthlyDataFromByAlias(byAlias);
+                // Actualizar opsImportedMonths en localStorage con los meses reales del CSV
+                const _k = `opsImportedMonths:${pid}`;
+                const _m = new Set(JSON.parse(localStorage.getItem(_k) || '[]'));
+                for (const mk of Object.keys(monthlyData)) _m.add(mk);
+                localStorage.setItem(_k, JSON.stringify([..._m]));
+                // Persistir historial en disco vía IPC
+                if (window.electronAPI?.saveOpsMonthlyHistory) {
+                    await window.electronAPI.saveOpsMonthlyHistory({ profileId: pid, monthlyData });
+                }
+                // Cachear en AppState para que el dashboard lo lea sin esperar IPC
+                if (!AppState.opsMonthlyHistory) AppState.opsMonthlyHistory = { months: {}, knownAliases: [] };
+                const hist = AppState.opsMonthlyHistory;
+                const knownSet = new Set(hist.knownAliases || []);
+                for (const [mk, incoming] of Object.entries(monthlyData)) {
+                    const ex = hist.months[mk] || { volumenCargas: 0, volumenRetiros: 0, cargas: 0, retiros: 0, aliases: [], uniqueAliasCount: 0, newAliasCount: 0 };
+                    ex.volumenCargas += incoming.volumenCargas || 0;
+                    ex.volumenRetiros += incoming.volumenRetiros || 0;
+                    ex.cargas += incoming.cargas || 0;
+                    ex.retiros += incoming.retiros || 0;
+                    const merged = new Set([...(ex.aliases || []), ...(incoming.aliases || [])]);
+                    ex.aliases = Array.from(merged);
+                    ex.uniqueAliasCount = merged.size;
+                    let newC = 0;
+                    for (const a of merged) { if (!knownSet.has(a)) { newC++; knownSet.add(a); } }
+                    ex.newAliasCount = (ex.newAliasCount || 0) + newC;
+                    hist.months[mk] = ex;
+                }
+                hist.knownAliases = Array.from(knownSet);
+            } catch (_) {}
+        }
+
         function mergeOpsProfiles(newProfiles) {
             const merged = { ...(AppState.opsProfiles || {}) };
+            // Recomputa dominantShift desde opsGranular combinado para que refleje
+            // el patrón histórico completo, no sólo el del último CSV subido.
+            const recomputeDominantShift = (granular) => {
+                const sb = { tm: 0, tt: 0, tn: 0 };
+                for (const op of (granular || [])) {
+                    if (op && op.shift && sb[op.shift] !== undefined) sb[op.shift]++;
+                }
+                const total = sb.tm + sb.tt + sb.tn;
+                if (total === 0) return { shift: null, pct: 0 };
+                const top = Object.entries(sb).sort((a, b) => b[1] - a[1])[0];
+                return { shift: top[0], pct: Math.round((top[1] / total) * 100) };
+            };
             Object.entries(newProfiles || {}).forEach(([alias, n]) => {
                 const prev = merged[alias];
-                if (!prev) { merged[alias] = n; return; }
+                if (!prev || typeof prev !== 'object') { merged[alias] = n; return; }
+                const combinedGranular = (function() {
+                    const combined = [...(prev.opsGranular || []), ...(n.opsGranular || [])];
+                    const seen = new Set();
+                    return combined.filter(op => { const k = op.ts + '|' + op.amount; return seen.has(k) ? false : (seen.add(k), true); });
+                })();
+                const dom = recomputeDominantShift(combinedGranular);
                 merged[alias] = {
                     ...n,
                     cargasCount: (prev.cargasCount || 0) + (n.cargasCount || 0),
@@ -861,7 +1009,9 @@
                     suggestedStatus: n.suggestedStatus || prev.suggestedStatus,
                     heat: n.heat || prev.heat,
                     topHours: n.topHours?.length ? n.topHours : (prev.topHours || []),
-                    opsGranular: n.opsGranular || prev.opsGranular || []
+                    opsGranular: combinedGranular,
+                    dominantShift: dom.shift,
+                    dominantShiftPct: dom.pct
                 };
             });
             AppState.opsProfiles = merged;
@@ -908,26 +1058,42 @@
             const _pid = AppState.activeProfileId || 'default';
             if (!AppState.opsProfiles) AppState.opsProfiles = {};
             if (!AppState.opsLastImportedAt) AppState.opsLastImportedAt = null;
-            // Fuente de verdad: disco vía IPC
+            // Fuente de verdad: el snapshot en disco (opsProfilesData_<pid>) escrito por
+            // saveOpsData(). Si el snapshot existe, se carga tal cual. Si no existe (primer
+            // uso, migración, limpieza de storage), se intenta rehidratar desde los CSV
+            // crudos archivados como red de seguridad — nunca quema datos existentes.
             if (window.nexoStore?.getAll) {
                 window.nexoStore.getAll().then(db => {
                     if (db && db[`opsProfilesData_${_pid}`]) {
-                        AppState.opsProfiles = db[`opsProfilesData_${_pid}`] || {};
+                        const _loaded = db[`opsProfilesData_${_pid}`] || {};
+                        // Purgar opsGranular con fechas inválidas (año < 2000 = parser bug con años de 2 dígitos)
+                        let _purged = false;
+                        for (const _alias in _loaded) {
+                            const _g = _loaded[_alias].opsGranular;
+                            if (Array.isArray(_g) && _g.some(op => op.ts < 0 || (op.date && op.date.slice(0,4) < '2000'))) {
+                                _loaded[_alias].opsGranular = _g.filter(op => op.ts >= 0 && (!op.date || op.date.slice(0,4) >= '2000'));
+                                _purged = true;
+                            }
+                        }
+                        AppState.opsProfiles = _loaded;
                         AppState.opsLastImportedAt = db[`opsLastImportedAt_${_pid}`] || null;
+                        if (_purged) saveOpsData();
                         return;
                     }
-                    // Migración: datos legacy en localStorage → migrar a disco y limpiar
+                    // Sin snapshot: intentar migración legacy de localStorage.
                     try {
                         const raw = localStorage.getItem(`opsProfilesData:${_pid}`) || localStorage.getItem('opsProfilesData');
                         if (raw) {
                             AppState.opsProfiles = JSON.parse(raw);
                             AppState.opsLastImportedAt = localStorage.getItem(`opsLastImportedAt:${_pid}`) || localStorage.getItem('opsLastImportedAt') || null;
-                            saveOpsData(); // migrar al disco
+                            saveOpsData();
                             try { localStorage.removeItem(`opsProfilesData:${_pid}`); localStorage.removeItem('opsProfilesData'); } catch(_) {}
+                            return;
                         }
                     } catch (_) {}
+                    // Sin snapshot ni legacy: último recurso, rehidratar desde CSV archivados.
+                    rehydrateOpsFromRawUploads(_pid).catch(err => console.warn('[loadOpsData] rehydrate falló:', err));
                 }).catch(() => {
-                    // IPC no disponible — fallback de emergencia a localStorage
                     try {
                         const raw = localStorage.getItem(`opsProfilesData:${_pid}`);
                         if (raw) {
@@ -937,7 +1103,6 @@
                     } catch(_) {}
                 });
             } else {
-                // Sin IPC (dev/test) — usar localStorage como emergencia
                 try {
                     const raw = localStorage.getItem(`opsProfilesData:${_pid}`);
                     if (raw) {
@@ -945,6 +1110,67 @@
                         AppState.opsLastImportedAt = localStorage.getItem(`opsLastImportedAt:${_pid}`) || null;
                     }
                 } catch(_) {}
+            }
+        }
+
+        // Red de seguridad: si el snapshot se perdió (primer uso post-update, migración
+        // corrupta, etc.), mergea los CSV crudos archivados encima de lo que haya en
+        // memoria para no perder datos. No resetea opsProfiles.
+        //
+        // Sólo aplica al perfil ACTIVO. AppState.opsProfiles en memoria contiene un único
+        // perfil a la vez; los demás viven en disco intactos. Si pid no coincide con el
+        // perfil activo, abortar para no pisar saveOpsData() al perfil equivocado.
+        async function rehydrateOpsFromRawUploads(pid) {
+            if (!window.electronAPI?.listOpsRawUploads || !window.electronAPI?.loadOpsRawUpload) return;
+            const activePid = AppState.activeProfileId || 'default';
+            if (pid !== activePid) {
+                console.warn(`[ops] rehidratación abortada: pid=${pid} no coincide con perfil activo=${activePid}`);
+                return;
+            }
+            const listRes = await window.electronAPI.listOpsRawUploads({ profileId: pid });
+            if (!listRes?.ok || !Array.isArray(listRes.files) || listRes.files.length === 0) return;
+
+            // Re-chequear el perfil activo por si el operador cambió de perfil durante el await.
+            if ((AppState.activeProfileId || 'default') !== pid) {
+                console.warn(`[ops] rehidratación abortada durante listRes: perfil cambió a ${AppState.activeProfileId}`);
+                return;
+            }
+
+            console.info(`[ops] Rehidratando opsProfiles del perfil "${pid}" desde ${listRes.files.length} CSV(s) archivados`);
+            // CUIDADO: mergeOpsProfiles SUMA los contadores (cargasCount, cargadoTotal, etc.)
+            // cada vez que se llama. Esta función sólo debe invocarse cuando opsProfiles está
+            // vacío (ver loadOpsData: sólo como último recurso). Si hubiera datos previos,
+            // rehidratar duplicaría totales. Por seguridad, verificamos y abortamos si el
+            // operador subió algo entre el check de loadOpsData y el primer await de acá.
+            if (Object.keys(AppState.opsProfiles || {}).length > 0) {
+                console.warn('[ops] rehidratación abortada: opsProfiles ya tiene datos, no se rehidrata para evitar duplicación');
+                return;
+            }
+
+            let totalRows = 0;
+            for (const fname of listRes.files) {
+                // Abortar si el operador cambió de perfil — no pisar el opsProfiles
+                // del nuevo perfil activo con ops de otro.
+                if ((AppState.activeProfileId || 'default') !== pid) {
+                    console.warn(`[ops] rehidratación interrumpida: perfil cambió a ${AppState.activeProfileId}`);
+                    return;
+                }
+                try {
+                    const loadRes = await window.electronAPI.loadOpsRawUpload({ profileId: pid, filename: fname });
+                    if (!loadRes?.ok || !loadRes.content) continue;
+                    const opsResult = await parseOperationsCsvChunked(loadRes.content);
+                    mergeOpsProfiles(opsResult.byAlias || {});
+                    await _persistOpsMonthlyHistory(opsResult.byAlias || {});
+                    totalRows += opsResult.importedRows || 0;
+                } catch (err) {
+                    console.warn(`[ops] rehidratar ${fname} falló:`, err);
+                }
+            }
+            if (totalRows > 0 && (AppState.activeProfileId || 'default') === pid) {
+                try { await syncOpsToContacts({ createNewUsers: false }); } catch (_) {}
+                saveOpsData();
+                try { render(); } catch (_) {}
+                console.info(`[ops] Rehidratación completa: ${totalRows} filas de ${listRes.files.length} CSV(s)`);
             }
         }
 
@@ -1143,7 +1369,6 @@
 
         function detectDuplicates() {
             const nameMap = new Map();
-            const phoneMap = new Map();
             const aliasMap = new Map();
             const duplicateGroups = [];
             const duplicateIds = new Set();
@@ -1160,23 +1385,9 @@
                 nameMap.get(normalizedName).push(contact);
             });
 
-            // Agrupar por teléfono — normaliza números argentinos con/sin prefijo 54
-            // para que 1122334455 y 541122334455 caigan en el mismo bucket
-            const _argPhoneKey = (phone) => {
-                const d = normalizePhoneNumber(phone);
-                if (!d) return '';
-                // Quitar prefijo 54 para clave canónica (mantener el original en el contacto)
-                if (d.startsWith('54') && d.length >= 12) return d.slice(2);
-                return d;
-            };
-            contactsInProfile.forEach(contact => {
-                if (contact.phone) {
-                    const key = _argPhoneKey(contact.phone);
-                    if (!key) return;
-                    if (!phoneMap.has(key)) phoneMap.set(key, []);
-                    phoneMap.get(key).push(contact);
-                }
-            });
+            // IMPORTANTE (regla negocio):
+            // El teléfono NO se usa para detectar/fusionar duplicados, porque un usuario puede cambiar de número
+            // y no se puede inferir cuál es el nuevo. El teléfono se trata como dato (y alerta), no identidad.
 
             // Agrupar por alias primario (maneja formato alias//NombreReal y similares)
             contactsInProfile.forEach(contact => {
@@ -1207,28 +1418,27 @@
                 }
             });
 
-            // Detectar duplicados por teléfono
-            phoneMap.forEach((contacts, phone) => {
-                if (contacts.length > 1) {
-                    const uniqueNames = new Set(contacts.map(c => normalizeUsername(c.name)));
-                    if (uniqueNames.size > 1) {
-                        const pairKey = contacts.map(c => c.id).sort().join('|');
-                        if (!reportedPairs.has(pairKey)) {
-                            reportedPairs.add(pairKey);
-                            duplicateGroups.push({
-                                type: 'teléfono',
-                                name: `Teléfono: ${contacts[0].phone}`,
-                                contacts: contacts
-                            });
-                            contacts.forEach(c => duplicateIds.add(c.id));
-                        }
-                    }
-                }
-            });
-
             // Detectar duplicados por alias (cubre formato bichi8009//Saul Rodriguez vs bichi8009)
             aliasMap.forEach((contacts, alias) => {
                 if (contacts.length > 1) {
+                    // Regla negocio: si hay teléfonos DISTINTOS y VÁLIDOS dentro del mismo alias,
+                    // NO los consideramos duplicados (podrían ser 2 usuarios y el alias se recicla).
+                    // En cambio, si los teléfonos son corruptos/ausentes, sí mantenemos el grupo por alias
+                    // para poder limpiar la data.
+                    const validPhones = new Set();
+                    contacts.forEach(c => {
+                        const d = normalizePhoneNumber(c.phone || '');
+                        if (!d) return;
+                        if (isApocryphalPhone(d)) return;
+                        // Normalizar a una clave estable para comparar (últimos 10 si es AR típico, sino full)
+                        const key = d.length >= 10 ? d.slice(-10) : d;
+                        if (key) validPhones.add(key);
+                    });
+                    if (validPhones.size > 1) {
+                        // Teléfonos válidos distintos => tratarlos como usuarios distintos, no duplicado.
+                        return;
+                    }
+
                     // Verificar que no sean todos el mismo nombre normalizado (ya cubiertos por nameMap)
                     const uniqueNormNames = new Set(contacts.map(c => normalizeUsername(c.name)));
                     if (uniqueNormNames.size > 1) {
@@ -1258,6 +1468,47 @@
 
             return duplicateGroups;
         }
+
+        function countCorruptPhoneJunk(profileId = (AppState.activeProfileId || 'default')) {
+            const list = (AppState.contacts || []).filter(c => (c.profileId || 'default') === profileId);
+            let count = 0;
+            for (const c of list) {
+                if (!c?.phone) continue;
+                if (!isApocryphalPhone(c.phone)) continue;
+                const missingUser = (window.NexoEngine && typeof window.NexoEngine.hasMissingUsername === 'function')
+                    ? window.NexoEngine.hasMissingUsername(c)
+                    : false;
+                if (!missingUser) continue;
+                count += 1;
+            }
+            return count;
+        }
+
+        function purgeCorruptPhoneJunk({ profileId = (AppState.activeProfileId || 'default'), silent = false } = {}) {
+            const removed = [];
+            AppState.contacts = (AppState.contacts || []).filter(c => {
+                if ((c.profileId || 'default') !== profileId) return true;
+                if (!c?.phone) return true;
+                if (!isApocryphalPhone(c.phone)) return true;
+                const missingUser = (window.NexoEngine && typeof window.NexoEngine.hasMissingUsername === 'function')
+                    ? window.NexoEngine.hasMissingUsername(c)
+                    : false;
+                if (!missingUser) return true;
+                removed.push(c);
+                return false;
+            });
+            const removedCount = removed.length;
+            if (removedCount > 0) {
+                addToHistory('Limpieza automática', `${removedCount} contactos basura (teléfono corrupto + sin usuario) eliminados`);
+                saveData();
+                render();
+                if (!silent) showNotification(`🧹 Eliminados ${removedCount} contactos basura (teléfono corrupto).`, 'success');
+            } else {
+                if (!silent) showNotification('No había teléfonos corruptos para limpiar.', 'info');
+            }
+            return { removedCount };
+        }
+        window.purgeCorruptPhoneJunk = purgeCorruptPhoneJunk;
 
         function parseCSV(text) {
             // Detectar si es VCF
@@ -1362,6 +1613,8 @@
                         contact.name = value;
                     } else if (isPhoneHeader(header)) {
                         contact.phone = normalizePhoneNumber(value);
+                        // No conservar teléfonos corruptos
+                        if (contact.phone && isApocryphalPhone(contact.phone)) contact.phone = '';
                     } else if (header.includes('estado') && !header.includes('revision')) {
                         const status = mapStatus(value);
                         if (status) contact.status = status;
@@ -1371,7 +1624,10 @@
                 // Fallback: si el CSV no tiene headers claros, tomar la primera celda numérica como teléfono.
                 if (!contact.phone) {
                     const probablePhone = values.find(v => /\d{6,}/.test((v || '').replace(/\D/g, '')));
-                    if (probablePhone) contact.phone = normalizePhoneNumber(probablePhone);
+                    if (probablePhone) {
+                        contact.phone = normalizePhoneNumber(probablePhone);
+                        if (contact.phone && isApocryphalPhone(contact.phone)) contact.phone = '';
+                    }
                 }
 
                 if (!contact.name && contact.phone) {
@@ -1619,13 +1875,22 @@
                         setLoadingState(true, 'Procesando operaciones…', 20, true);
                         setSaveState('pending', 'Procesando operaciones…');
                         try {
+                            // Persistir CSV crudo antes de parsear (rehidratación al reiniciar)
+                            try {
+                                if (window.electronAPI?.saveOpsRawUpload) {
+                                    await window.electronAPI.saveOpsRawUpload({
+                                        profileId: AppState.activeProfileId || 'default',
+                                        filename: file.name,
+                                        content: text
+                                    });
+                                }
+                            } catch (persistErr) { console.warn('[ops] saveOpsRawUpload falló', persistErr); }
                             const opsResult = await parseOperationsCsvChunked(text, (pct) => {
                                 setLoadingState(true, `Procesando operaciones ${pct}%`, 20 + Math.round(pct * 0.4), true);
                             });
                             setLoadingState(true, 'Fusionando perfiles…', 62, true);
                             mergeOpsProfiles(opsResult.byAlias || {});
-                            // Persistir meses importados — Verde de por vida en Inteligencia 12M
-                            (function() { try { const _p = AppState.activeProfileId || 'default', _k = `opsImportedMonths:${_p}`, _m = new Set(JSON.parse(localStorage.getItem(_k) || '[]')); const _vals = Object.values(opsResult.byAlias || {}); let _minTs = Infinity, _maxTs = -Infinity; _vals.forEach(p => { const d = p.lastCargaAt || p.lastAt; if (d) { const t = new Date(d).getTime(); if (!isNaN(t)) { if (t < _minTs) _minTs = t; if (t > _maxTs) _maxTs = t; } } }); if (_minTs !== Infinity) { let _cur = new Date(_minTs); _cur.setDate(1); const _end = new Date(_maxTs); while (_cur <= _end) { _m.add(`${_cur.getFullYear()}-${String(_cur.getMonth()+1).padStart(2,'0')}`); _cur.setMonth(_cur.getMonth()+1); } } localStorage.setItem(_k, JSON.stringify([..._m])); } catch(_) {} })();
+                            await _persistOpsMonthlyHistory(opsResult.byAlias || {});
                             setLoadingState(true, 'Sincronizando contactos…', 66, true);
                             const syncResult = await syncOpsToContacts({ createNewUsers: true, onProgress: ({ processed, total }) => {
                                 const pct = 66 + (total > 0 ? Math.min(24, Math.round((processed / total) * 24)) : 0);
@@ -1702,6 +1967,16 @@
 
                     if (existingContact) {
                         let touched = false;
+                        // Preservar explícitamente campos críticos de modo turno/competencia
+                        const preservedShiftData = {
+                            shiftReviewedByShift: existingContact.shiftReviewedByShift,
+                            shiftReviewed: existingContact.shiftReviewed,
+                            shiftReviewedAt: existingContact.shiftReviewedAt,
+                            assignedShift: existingContact.assignedShift,
+                            shiftSkippedByShift: existingContact.shiftSkippedByShift,
+                            shiftSkippedAt: existingContact.shiftSkippedAt
+                        };
+                        
                         if ((!existingContact.phone || !existingContact.phone.trim()) && normalizedPhone) {
                             existingContact.phone = newContact.phone;
                             phoneIndex.set(normalizedPhone, existingContact);
@@ -1734,6 +2009,8 @@
                             existingContact.lastImportFile = file.name;
                             existingContact.lastImportedAt = nowIso;
                             existingContact.profileId = profileIdForFile;
+                            // Restaurar campos preservados para evitar pérdida en modo turno
+                            Object.assign(existingContact, preservedShiftData);
                             totalMerged++;
                             fileMerged++;
                         }
@@ -1814,15 +2091,25 @@
                     showNotification('Procesando operaciones...', 'info');
                     announceGeneral('Procesando archivo de operaciones…', 'info');
                     setSaveState('pending', 'Procesando operaciones 0%');
-                    const { byAlias, importedRows } = await parseOperationsCsvChunked(String(e.target.result || ''), ({ processed = 0, total = 0 }) => {
+                    const _rawText = String(e.target.result || '');
+                    // Persistir CSV crudo antes de parsear (rehidratación al reiniciar)
+                    try {
+                        if (window.electronAPI?.saveOpsRawUpload) {
+                            await window.electronAPI.saveOpsRawUpload({
+                                profileId: AppState.activeProfileId || 'default',
+                                filename: file.name || 'ops.csv',
+                                content: _rawText
+                            });
+                        }
+                    } catch (persistErr) { console.warn('[ops] saveOpsRawUpload falló', persistErr); }
+                    const { byAlias, importedRows } = await parseOperationsCsvChunked(_rawText, ({ processed = 0, total = 0 }) => {
                         const pct = total > 0 ? Math.min(49, Math.round((processed / total) * 50)) : 0;
                         setSaveState('pending', `Procesando operaciones ${pct}%`);
                         setLoadingState(true, `Procesando operaciones ${processed}/${total}`, pct, false);
                     });
                     setLoadingState(true, 'Fusionando perfiles…', 50, false);
                     mergeOpsProfiles(byAlias);
-                    // Persistir meses importados — Verde de por vida en Inteligencia 12M
-                    (function() { try { const _p = AppState.activeProfileId || 'default', _k = `opsImportedMonths:${_p}`, _m = new Set(JSON.parse(localStorage.getItem(_k) || '[]')); const _vals = Object.values(byAlias || {}); let _minTs = Infinity, _maxTs = -Infinity; _vals.forEach(p => { const d = p.lastCargaAt || p.lastAt; if (d) { const t = new Date(d).getTime(); if (!isNaN(t)) { if (t < _minTs) _minTs = t; if (t > _maxTs) _maxTs = t; } } }); if (_minTs !== Infinity) { let _cur = new Date(_minTs); _cur.setDate(1); const _end = new Date(_maxTs); while (_cur <= _end) { _m.add(`${_cur.getFullYear()}-${String(_cur.getMonth()+1).padStart(2,'0')}`); _cur.setMonth(_cur.getMonth()+1); } } localStorage.setItem(_k, JSON.stringify([..._m])); } catch(_) {} })();
+                    await _persistOpsMonthlyHistory(byAlias);
                     setLoadingState(true, 'Sincronizando contactos…', 55, false);
                     const syncResult = await syncOpsToContacts({ createNewUsers: true, onProgress: ({ processed, total }) => {
                         const pct = 55 + (total > 0 ? Math.min(35, Math.round((processed / total) * 35)) : 0);
@@ -2375,12 +2662,16 @@
                     AppState.shiftFilter = '';
                     AppState.phoneFilter = 'all';
                     AppState.editActivityFilter = 'all';
+                    AppState.opsFilter = 'all';
+                    AppState.opsSortOrder = 'desc';
+                    AppState.dominantShiftFilter.clear();
                     if (elements.searchInput) elements.searchInput.value = '';
                     if (elements.statusFilter) elements.statusFilter.value = '';
                     if (elements.originFilter) elements.originFilter.value = '';
                     if (elements.shiftFilter) elements.shiftFilter.value = '';
                     if (elements.phoneFilter) elements.phoneFilter.value = 'all';
                     if (elements.editActivityFilter) elements.editActivityFilter.value = 'all';
+                    if (elements.opsSegmentFilter) elements.opsSegmentFilter.value = 'all';
 
                     assignShifts();
                     detectDuplicates();
@@ -2648,14 +2939,32 @@
             AppState.searchIndexDirty = false;
         }
 
-        // Agrega un único contacto al índice sin reconstruir todo
+        // Elimina un ID de todos los buckets del índice donde pueda estar
+        function removeContactFromIndex(id) {
+            if (!AppState.searchIndex) return;
+            const idx = AppState.searchIndex;
+            const maps = [idx.byStatus, idx.byShift, idx.byProfile, idx.byPhoneType, idx.byOrigin, idx.bySearchToken];
+            for (const map of maps) {
+                for (const [_key, arr] of map) {
+                    const pos = arr.indexOf(id);
+                    if (pos !== -1) arr.splice(pos, 1);
+                }
+            }
+            const allPos = idx.allIds.indexOf(id);
+            if (allPos !== -1) idx.allIds.splice(allPos, 1);
+        }
+
+        // Agrega o actualiza un contacto en el índice sin reconstruir todo.
+        // Siempre limpia las entradas viejas del contacto antes de re-indexar
+        // para que no quede en buckets de estados/turnos anteriores.
         function addContactToIndex(contact) {
             if (!contact || !AppState.searchIndex) return;
             const idx = AppState.searchIndex;
             buildContactDerivedFields(contact);
             const id = contact.id;
-            // Evitar duplicados si ya estaba
-            if (!idx.byId.has(id)) idx.allIds.push(id);
+            // Limpiar entradas previas para evitar que el ID quede en buckets viejos
+            if (idx.byId.has(id)) removeContactFromIndex(id);
+            idx.allIds.push(id);
             idx.byId.set(id, contact);
             mapPush(idx.byStatus, normalizeSearchText(contact.status), id);
             mapPush(idx.byShift, normalizeSearchText(contact.assignedShift), id);
@@ -2693,35 +3002,60 @@
             }
             bypassBadge.style.display = hasActiveSearch ? 'block' : 'none';
 
-            if (selectedStatus) ids = intersectIds(ids, new Set(AppState.searchIndex.byStatus.get(selectedStatus) || []));
-            // "Jugando" filter = only active (<48h ops). Cold/frozen contacts hidden from this filter.
-            if (selectedStatus === 'jugando') {
-                const now48 = Date.now() - 48 * 3600000;
-                ids = ids.filter(id => {
-                    const c = AppState.searchIndex.byId.get(id);
-                    if (!c?.ops?.lastCargaAt) return true; // no ops data → keep visible
-                    return new Date(c.ops.lastCargaAt).getTime() >= now48;
-                });
+            // Filtros evaluados sobre el contacto vivo (no sobre buckets indexados).
+            // El índice por status/shift/origin/phoneType se mantiene denormalizado y puede
+            // quedar desincronizado si algún mutador olvida reindexar — por eso aquí
+            // siempre leemos la propiedad real del contacto. El índice queda sólo como
+            // pool por perfil y como acelerador de tokens de búsqueda.
+            const normStatus = selectedStatus ? normalizeSearchText(selectedStatus) : '';
+            const normShift = selectedShift ? normalizeSearchText(selectedShift) : '';
+            const normOrigin = selectedOrigin && selectedOrigin !== '__last_upload__' ? normalizeSearchText(selectedOrigin) : '';
+            const phoneBucket = (!hasActiveSearch && AppState.phoneFilter && AppState.phoneFilter !== 'all')
+                ? (AppState.phoneFilter === 'with' ? 'with' : AppState.phoneFilter === 'without' ? 'without' : AppState.phoneFilter)
+                : '';
+            const now48 = Date.now() - 48 * 3600000;
+            const lastBatch = selectedOrigin === '__last_upload__' ? AppState.lastImportBatchId : null;
+
+            ids = ids.filter(id => {
+                const c = AppState.searchIndex.byId.get(id);
+                if (!c) return false;
+
+                // Status — match contra propiedad real
+                if (normStatus && normalizeSearchText(c.status) !== normStatus) return false;
+                // Jugando: sólo activos (<48h de última carga) — fríos se ocultan
+                if (normStatus === 'jugando' && c.ops?.lastCargaAt) {
+                    if (new Date(c.ops.lastCargaAt).getTime() < now48) return false;
+                }
+
+                // Shift — match contra propiedad real
+                if (normShift && normalizeSearchText(c.assignedShift) !== normShift) return false;
+
+                // Phone bucket — computar categoría en vivo (phoneAlert/hasMissingUsername
+                // son derivados que cambian con syncOps sin que el índice se entere).
+                if (phoneBucket) {
+                    const live = hasMissingUsername(c) ? 'missing-user'
+                        : c.phoneAlert ? 'suspicious'
+                        : ((c.phone || '').trim() ? 'with' : 'without');
+                    if (live !== phoneBucket) return false;
+                }
+
+                // Origin
+                if (lastBatch !== null) {
+                    if (!lastBatch || getContactBatchId(c) !== lastBatch) return false;
+                } else if (normOrigin === 'operaciones panel') {
+                    if (!c.ops) return false;
+                } else if (normOrigin) {
+                    if (normalizeSearchText(c.origin) !== normOrigin) return false;
+                }
+
+                return true;
+            });
+            if (!hasActiveSearch) {
+                if (AppState.opsFilter === 'matched') ids = ids.filter((id) => !!AppState.searchIndex.byId.get(id)?.ops);
+                else if (AppState.opsFilter === 'nomatch') ids = ids.filter((id) => !AppState.searchIndex.byId.get(id)?.ops);
             }
-            if (selectedShift) ids = intersectIds(ids, new Set(AppState.searchIndex.byShift.get(selectedShift) || []));
-            if (AppState.phoneFilter && AppState.phoneFilter !== 'all') {
-                const bucket = AppState.phoneFilter === 'with' ? 'with' : AppState.phoneFilter === 'without' ? 'without' : AppState.phoneFilter;
-                ids = intersectIds(ids, new Set(AppState.searchIndex.byPhoneType.get(bucket) || []));
-            }
-            if (selectedOrigin === '__last_upload__') {
-                const lastBatch = AppState.lastImportBatchId;
-                ids = ids.filter((id) => {
-                    const c = AppState.searchIndex.byId.get(id);
-                    return lastBatch && getContactBatchId(c) === lastBatch;
-                });
-            } else if (selectedOrigin) {
-                const norm = normalizeSearchText(selectedOrigin);
-                ids = norm === 'operaciones panel' ? ids.filter((id) => !!AppState.searchIndex.byId.get(id)?.ops) : intersectIds(ids, new Set(AppState.searchIndex.byOrigin.get(norm) || []));
-            }
-            if (AppState.opsFilter === 'matched') ids = ids.filter((id) => !!AppState.searchIndex.byId.get(id)?.ops);
-            else if (AppState.opsFilter === 'nomatch') ids = ids.filter((id) => !AppState.searchIndex.byId.get(id)?.ops);
-            // Filtrar por turno dominante si hay seleccionados
-            if (AppState.dominantShiftFilter.size > 0) {
+            // Filtrar por turno dominante si hay seleccionados (solo cuando no hay búsqueda activa)
+            if (!hasActiveSearch && AppState.dominantShiftFilter.size > 0) {
                 ids = ids.filter((id) => {
                     const c = AppState.searchIndex.byId.get(id);
                     return c?.ops?.dominantShift && AppState.dominantShiftFilter.has(c.ops.dominantShift);
@@ -2733,7 +3067,7 @@
                     if (!ids.length) break;
                 }
             }
-            if (AppState.editActivityFilter !== 'all') {
+            if (!hasActiveSearch && AppState.editActivityFilter !== 'all') {
                 ids = ids.filter((id) => {
                     const c = AppState.searchIndex.byId.get(id);
                     const editedDay = getIsoDay(c?.lastEditedAt);
@@ -2898,17 +3232,24 @@
                 else if (c.status === 'no interesado') totals.noInteresado++;
             });
 
-            $('#totalCount').textContent = totals.total;
-            $('#unreviewedCount').textContent = totals.unreviewed;
-            $('#contactadoCount').textContent = totals.contactado;
+            const totalCountEl = $('#totalCount');
+            const unreviewedCountEl = $('#unreviewedCount');
+            const contactadoCountEl = $('#contactadoCount');
+            if (totalCountEl) totalCountEl.textContent = totals.total;
+            if (unreviewedCountEl) unreviewedCountEl.textContent = totals.unreviewed;
+            if (contactadoCountEl) contactadoCountEl.textContent = totals.contactado;
             const revisadoCountEl = $('#revisadoCount');
             if (revisadoCountEl) revisadoCountEl.textContent = totals.revisado;
-            $('#jugandoCount').textContent = totals.jugando;
-            $('#sinWspCount').textContent = totals.sinWsp;
-            $('#noInteresadoCount').textContent = totals.noInteresado;
+            const jugandoCountEl = $('#jugandoCount');
+            const sinWspCountEl = $('#sinWspCount');
+            const noInteresadoCountEl = $('#noInteresadoCount');
+            if (jugandoCountEl) jugandoCountEl.textContent = totals.jugando;
+            if (sinWspCountEl) sinWspCountEl.textContent = totals.sinWsp;
+            if (noInteresadoCountEl) noInteresadoCountEl.textContent = totals.noInteresado;
 
             const totalDuplicateEntries = (AppState.duplicates || []).reduce((sum, group) => sum + group.contacts.filter(c => (c.profileId || 'default') === activeProfile).length, 0);
-            $('#duplicatesCount').textContent = totalDuplicateEntries;
+            const duplicatesCountEl = $('#duplicatesCount');
+            if (duplicatesCountEl) duplicatesCountEl.textContent = totalDuplicateEntries;
 
             // Speed counter: users/hour calculation
             const speedCount = calculateCurrentShiftSpeed();
@@ -2918,20 +3259,26 @@
             updateExportUrgencyBadge();
             const progressPercentage = totals.total > 0 ? Math.round((totals.reviewed / totals.total) * 100) : 0;
 
-            $('#reviewedCount').textContent = totals.reviewed;
-            $('#totalContactsCount').textContent = totals.total;
-            $('#progressPercentage').textContent = `${progressPercentage}%`;
-            $('#progressFill').style.width = `${progressPercentage}%`;
+            const reviewedCountEl = $('#reviewedCount');
+            const totalContactsCountEl = $('#totalContactsCount');
+            const progressPercentageEl = $('#progressPercentage');
+            const progressFillEl = $('#progressFill');
+            if (reviewedCountEl) reviewedCountEl.textContent = totals.reviewed;
+            if (totalContactsCountEl) totalContactsCountEl.textContent = totals.total;
+            if (progressPercentageEl) progressPercentageEl.textContent = `${progressPercentage}%`;
+            if (progressFillEl) progressFillEl.style.width = `${progressPercentage}%`;
 
             // Check for shift completion and show summary
             checkShiftCompletion(progressPercentage, totals);
 
             const uniqueOrigins = [...originSet].sort();
             const lastUploadLabel = AppState.lastImportFileName ? `Última subida (${AppState.lastImportFileName})` : 'Última subida';
-            elements.originFilter.innerHTML = '<option value="">Todos los orígenes</option>' +
-                `<option value="__last_upload__">${lastUploadLabel}</option>` +
-                uniqueOrigins.map(o => `<option value="${o}">${o}</option>`).join('');
-            elements.originFilter.value = AppState.originFilter;
+            if (elements.originFilter) {
+                elements.originFilter.innerHTML = '<option value="">Todos los orígenes</option>' +
+                    `<option value="__last_upload__">${lastUploadLabel}</option>` +
+                    uniqueOrigins.map(o => `<option value="${o}">${o}</option>`).join('');
+                elements.originFilter.value = AppState.originFilter;
+            }
         }
 
         function checkShiftCompletion(progressPercentage, totals) {
@@ -3148,6 +3495,10 @@
             const changed = forceTransfer || !contact.shiftReviewed || contact.shiftReviewedByShift !== localShift;
             contact.shiftReviewed = true;
             contact.shiftReviewedByShift = localShift;
+            // Reasignar al turno que realmente trabajó el contacto
+            if (contact.assignedShift && contact.assignedShift !== localShift) {
+                contact.assignedShift = localShift;
+            }
             if (changed) contact.shiftReviewedAt = atOverride || new Date().toISOString();
             return changed;
         }
@@ -3163,10 +3514,34 @@
         function getShiftStats(shift) {
             const activeProfile = AppState.activeProfileId || 'default';
             const scoped = AppState.contacts.filter(c => (c.profileId || 'default') === activeProfile);
-            const pendientes = scoped.filter(c => c.assignedShift === shift && c.status === 'sin revisar').length;
-            const revisados = scoped.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift && c.status !== 'sin revisar').length;
-            const total = revisados + pendientes;
+            const _isRecontactDue = (window.NexoEngine && typeof window.NexoEngine.isRecontactDue === 'function')
+                ? window.NexoEngine.isRecontactDue
+                : (() => false);
+            // Total real = todos los asignados al turno
+            const assigned = scoped.filter(c => c.assignedShift === shift);
+            const total = assigned.length;
+            // Pendientes = sin revisar + recontactos vencidos (activos pero que necesitan atención)
+            const pendientes = assigned.filter(c => {
+                if (c.status === 'sin revisar') return true;
+                return _isRecontactDue(c);
+            }).length;
+            // Revisados = asignados a este turno, trabajados por este turno, sin recontacto vencido
+            const revisados = assigned.filter(c => {
+                if (!c.shiftReviewed || c.shiftReviewedByShift !== shift) return false;
+                if (c.status === 'sin revisar') return false;
+                if (_isRecontactDue(c)) return false;
+                return true;
+            }).length;
             const pct = total ? Math.min(100, Math.round((revisados / total) * 100)) : 0;
+            
+            // DIAGNOSTICO: Log de estadísticas por turno para verificar detección
+            if (AppState.perfDebug) {
+                const revisadosDetalle = scoped.filter(c => c.shiftReviewed && c.shiftReviewedByShift === shift && c.status !== 'sin revisar');
+                console.log(`[SHIFT-STATS] ${shift.toUpperCase()}: revisados=${revisados} pendientes=${pendientes} total=${total} pct=${pct}%`, {
+                    revisadosSample: revisadosDetalle.slice(0, 3).map(c => ({ name: c.name, status: c.status, shift: c.shiftReviewedByShift }))
+                });
+            }
+            
             return { total, revisados, pendientes, pct };
         }
 
@@ -3176,6 +3551,9 @@
         // RENDIMIENTO EN TIEMPO REAL - Sin workers, sin giladas. Solo array loop.
 
         function renderShiftsView() {
+            // Importante: en vista Turnos no siempre se llama render() completo,
+            // así que actualizamos stats/progreso global acá también.
+            try { updateStats(); } catch (_) {}
             assignShifts();
             const shifts = ['tm', 'tt', 'tn'];
             const shiftStats = shifts.map(shift => ({ shift, st: getShiftStats(shift), data: AppState.shiftMode[shift] }));
@@ -3210,13 +3588,14 @@
                 <div class="shift-card">
                     <h3>
                         <span>${shift.toUpperCase()}</span>
-                        <input class="filter-select" style="max-width:130px;" value="${data.name}" onchange="renameShift('${shift}', this.value)">
+                        <input class="filter-select" value="${data.name}" onchange="renameShift('${shift}', this.value)">
                     </h3>
                     <div class="shift-card-sub">Operador y cola de revisión para este turno.</div>
                     <div class="shift-stats">
                         <span>Asignados: <strong>${st.total}</strong></span>
                         <span>Revisados: <strong>${st.revisados}</strong></span>
                         <span>Pendientes: <strong>${st.pendientes}</strong></span>
+                        <span>Avance: <strong>${st.pct}%</strong></span>
                     </div>
                     <div class="shift-progress"><span style="width:${st.pct}%"></span></div>
                     <div class="shift-controls">
@@ -3394,7 +3773,15 @@
             setTimeout(() => {
                 try { saveData(); } catch (_) {}
             }, 1200);
-            if (source !== 'shift') {
+            if (source === 'shift') {
+                // Renderizar solo la vista de turnos, pero sin perder stats/progreso global.
+                setTimeout(() => {
+                    try { updateStats(); } catch (_) {}
+                }, 250);
+                setTimeout(() => {
+                    try { renderShiftsView(); } catch (_) {}
+                }, 500);
+            } else {
                 setTimeout(() => {
                     try { render(); } catch (_) {}
                 }, 500);
@@ -3500,10 +3887,13 @@
                 setSaveState('pending', 'Guardado diferido...');
                 enqueueStatusDelta(contact, oldStatus, requestedStatus, eventAt);
                 scheduleFastBackgroundSave(source);
+                // Registrar en timeline del contacto que fue transferido
+                addContactTimeline(contact.id, 'Turno transferido', `Pasó a contar para ${String(contact.shiftReviewedByShift || '-').toUpperCase()} (estado: ${requestedStatus})`);
                 return;
             }
 
             contact.status = requestedStatus;
+            addContactToIndex(contact);
             adjustStatsCountersForStatus(contact.profileId || 'default', oldStatus, requestedStatus);
             updateCompetitionCredit(contact, requestedStatus, source, { shiftOverride: shiftByEvent, atOverride: eventAt });
             try { setReviewMetadata(contact, requestedStatus); } catch (e) { console.error('Error metadata estado:', e); }
@@ -3606,7 +3996,36 @@
         function loadPreferences() {
             try {
                 const tpl = localStorage.getItem('whatsappTemplate');
-                if (tpl) AppState.whatsappTemplate = tpl;
+                if (tpl) {
+                    AppState.whatsappTemplate = tpl;
+                    // Intentar parsear como JSON (nuevo formato)
+                    try {
+                        const parsed = JSON.parse(tpl);
+                        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].text) {
+                            // Es el nuevo formato
+                            AppState.whatsappMessagesData = parsed;
+                            AppState.whatsappTemplates = parsed.filter(m => m.active && m.text.trim()).map(m => m.text);
+                        } else {
+                            // Es el formato antiguo (string con ---)
+                            reloadWhatsAppTemplates();
+                        }
+                    } catch (e) {
+                        // No es JSON, es formato antiguo
+                        reloadWhatsAppTemplates();
+                    }
+                } else {
+                    reloadWhatsAppTemplates();
+                }
+                // Parsear múltiples plantillas separadas por "---" (fallback)
+                if (!AppState.whatsappTemplates || !Array.isArray(AppState.whatsappTemplates)) {
+                    AppState.whatsappTemplates = AppState.whatsappTemplate
+                        .split(/^\s*---\s*$/m)
+                        .map((s) => s.trim())
+                        .filter(Boolean);
+                    if (!AppState.whatsappTemplates.length) AppState.whatsappTemplates = [AppState.whatsappTemplate];
+                }
+                const tplIdx = parseInt(localStorage.getItem('whatsappTemplateIdx') || '0', 10);
+                AppState.whatsappTemplateIdx = Number.isNaN(tplIdx) ? 0 : tplIdx;
                 const mode = localStorage.getItem('duplicateMergeMode');
                 if (mode) AppState.duplicateMergeMode = mode;
                 const lastAutoDl = parseInt(localStorage.getItem('lastAutoBackupDownloadAt') || '0', 10);
@@ -3659,15 +4078,14 @@
             } catch (e) {
                 console.error('Error al cargar preferencias:', e);
             }
-            if (elements.whatsappTemplateInput) {
-                elements.whatsappTemplateInput.value = AppState.whatsappTemplate;
-            }
+            // elements.whatsappTemplateInput ya no existe - nuevo sistema de múltiples mensajes
         }
 
         let preferencesSaveTimer = null;
         function persistPreferencesNow() {
             try {
                 localStorage.setItem('whatsappTemplate', AppState.whatsappTemplate);
+                localStorage.setItem('whatsappTemplateIdx', String(AppState.whatsappTemplateIdx || 0));
                 localStorage.setItem('duplicateMergeMode', AppState.duplicateMergeMode);
                 localStorage.setItem('nexoProfiles', JSON.stringify(AppState.profiles || []));
                 localStorage.setItem('activeProfileId', AppState.activeProfileId || 'default');
@@ -3771,8 +4189,41 @@
             return hashControlPassword(rawPassword) === currentHash;
         }
 
-        function buildWhatsAppMessage(contactName) {
-            const base = (AppState.whatsappTemplate || '').trim();
+        function buildWhatsAppMessage(contactName, { rotate = false } = {}) {
+            // Usar los datos de mensajes si están disponibles
+            if (AppState.whatsappMessagesData && Array.isArray(AppState.whatsappMessagesData)) {
+                const activeMessages = AppState.whatsappMessagesData.filter(m => m.active && m.text.trim());
+                if (activeMessages.length > 0) {
+                    const templates = activeMessages;
+                    const hasMultiple = templates.length > 1;
+                    let base;
+                    if (hasMultiple) {
+                        const idx = (AppState.whatsappTemplateIdx || 0) % templates.length;
+                        base = (templates[idx]?.text || '').trim();
+                        if (rotate) {
+                            AppState.whatsappTemplateIdx = (idx + 1) % templates.length;
+                            localStorage.setItem('whatsappTemplateIdx', String(AppState.whatsappTemplateIdx));
+                        }
+                    } else {
+                        base = (templates[0]?.text || '').trim();
+                    }
+                    return base.replaceAll('{usuario}', contactName || '');
+                }
+            }
+            // Fallback al sistema antiguo
+            const templates = AppState.whatsappTemplates;
+            const hasMultiple = Array.isArray(templates) && templates.length > 1;
+            let base;
+            if (hasMultiple) {
+                const idx = (AppState.whatsappTemplateIdx || 0) % templates.length;
+                base = (templates[idx] || AppState.whatsappTemplate || '').trim();
+                if (rotate) {
+                    AppState.whatsappTemplateIdx = (idx + 1) % templates.length;
+                    localStorage.setItem('whatsappTemplateIdx', String(AppState.whatsappTemplateIdx));
+                }
+            } else {
+                base = (AppState.whatsappTemplate || '').trim();
+            }
             return base.replaceAll('{usuario}', contactName || '');
         }
 
@@ -4055,17 +4506,36 @@
                 return;
             }
             const contact = AppState.contacts.find(c => normalizePhoneToE164(c.phone) === normalized);
-            const message = buildWhatsAppMessage(contact?.name || '');
+            // Rotar mensaje al enviar (consume el siguiente template en la cola)
+            const message = buildWhatsAppMessage(contact?.name || '', { rotate: true });
             const waMe = `https://wa.me/${normalized}${message ? `?text=${encodeURIComponent(message)}` : ''}`;
             const fallback = `https://api.whatsapp.com/send?phone=${normalized}${message ? `&text=${encodeURIComponent(message)}` : ''}`;
-            try {
-                if (window.electronAPI && window.electronAPI.openExternal) {
-                    await window.electronAPI.openExternal(waMe);
-                } else {
-                    window.open(waMe, '_blank');
+            // Preferir Hub con rotación automática de sesión; fallback a navegador externo
+            if (window.electronAPI?.whatsappHubOpenContact) {
+                try {
+                    const res = await window.electronAPI.whatsappHubOpenContact({ url: waMe });
+                    if (res?.ok) {
+                        const sessionInfo = res.sessionLabel && res.sessionLabel !== res.sessionId
+                            ? `${res.sessionLabel} (${res.sessionId})`
+                            : `Sesión ${res.sessionId}`;
+                        const tplCount = AppState.whatsappTemplates?.length || 1;
+                        const tplInfo = tplCount > 1 ? ` · Msg ${((AppState.whatsappTemplateIdx || 0) === 0 ? tplCount : AppState.whatsappTemplateIdx)}/${tplCount}` : '';
+                        showNotification(`WhatsApp → ${sessionInfo}${tplInfo}`, 'success', 2500);
+                    } else {
+                        // Hub no tiene sesiones activas, abrir externo
+                        await window.electronAPI.openExternal(waMe).catch(() => window.open(waMe, '_blank'));
+                    }
+                } catch (_) {
+                    await window.electronAPI.openExternal(waMe).catch(() => window.open(waMe, '_blank'));
                 }
-            } catch (_) {
-                await window.electronAPI.openExternal(fallback);
+            } else if (window.electronAPI?.openExternal) {
+                try {
+                    await window.electronAPI.openExternal(waMe);
+                } catch (_) {
+                    await window.electronAPI.openExternal(fallback).catch(() => {});
+                }
+            } else {
+                window.open(waMe, '_blank');
             }
             if (contact) {
                 const eventAt = contact.lastMessageSentAt || new Date().toISOString();
@@ -4122,6 +4592,7 @@
                     if (next !== contact.status) {
                         const old = contact.status;
                         contact.status = next;
+                        addContactToIndex(contact);
                         updateCompetitionCredit(contact, next, 'common');
                         setReviewMetadata(contact, next);
                         touchContactEdit(contact, 'inline_status');
@@ -4134,7 +4605,36 @@
                 };
             });
 
-            container.appendChild(menu);
+            // Agregar al portal para evitar clipping por contenedores padres
+            const portal = document.getElementById('dropdowns-portal') || document.body;
+            portal.appendChild(menu);
+            portal.style.pointerEvents = 'auto';
+
+            // Posicionamiento fixed: calcular desde el trigger en el viewport
+            const triggerRect = container.getBoundingClientRect();
+            const menuHeight = menu.offsetHeight || 260;
+            const menuWidth = menu.offsetWidth || 190;
+            // Intentar abrir hacia arriba; si no hay espacio, abrir abajo
+            let top;
+            if (triggerRect.top - menuHeight - 8 >= 0) {
+                top = triggerRect.top - menuHeight - 8;
+            } else {
+                top = triggerRect.bottom + 8;
+            }
+            // Ajustar si se sale por abajo
+            if (top + menuHeight > window.innerHeight) {
+                top = Math.max(4, window.innerHeight - menuHeight - 4);
+            }
+            let left = triggerRect.left;
+            // Ajustar si se sale por la derecha
+            if (left + menuWidth > window.innerWidth) {
+                left = window.innerWidth - menuWidth - 4;
+            }
+            if (left < 0) left = 4;
+            // Asegurar pointer-events en el menú
+            menu.style.pointerEvents = 'auto';
+            menu.style.top = `${top}px`;
+            menu.style.left = `${left}px`;
 
             // Registrar en AppState para que renderNow no limpie el menú abierto
             AppState._openStatusMenuId = id;
@@ -4142,8 +4642,8 @@
 
             setTimeout(() => {
                 const closeMenu = (evt) => {
-                    // Solo cerrar si el click fue FUERA del contenedor; ignorar clicks internos
-                    if (container.contains(evt.target)) return;
+                    // Solo cerrar si el click fue FUERA del menú y del trigger
+                    if (menu.contains(evt.target) || container.contains(evt.target)) return;
                     menu.remove();
                     AppState._openStatusMenuId = null;
                     document.removeEventListener('click', closeMenu, true);
@@ -4282,6 +4782,12 @@
                 <div class="duplicates-config">
                     <label><input type="radio" name="dupMergeMode" value="phone-auto" ${AppState.duplicateMergeMode === 'phone-auto' ? 'checked' : ''}> Si coincide teléfono: merge seguro. Si coincide nombre: pedir confirmación.</label>
                     <label><input type="radio" name="dupMergeMode" value="always-ask" ${AppState.duplicateMergeMode === 'always-ask' ? 'checked' : ''}> Pedir confirmación para todos los grupos.</label>
+                    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                        <button class="btn btn-danger" style="padding:6px 10px;font-size:0.82rem;" onclick="window.purgeCorruptPhoneJunk({profileId:'${AppState.activeProfileId || 'default'}'})" title="Elimina contactos basura: sin usuario real + teléfono corrupto">
+                            <i class="fas fa-broom"></i> Eliminar corruptos (${countCorruptPhoneJunk(AppState.activeProfileId || 'default')})
+                        </button>
+                        <span style="font-size:0.78rem;color:var(--text-secondary);">Solo borra entradas sin usuario real (nombre vacío/numérico) con teléfono inválido.</span>
+                    </div>
                 </div>`;
                 
                 $('#duplicatesContent').innerHTML = html;
@@ -4552,18 +5058,26 @@
         function normalizePhoneToE164(raw) {
             const digits = String(raw || '').replace(/\D/g, '');
             if (!digits) return null;
+            // Ya tiene formato E164 argentino completo: 549XXXXXXXXXX
             if (digits.startsWith('549') && digits.length >= 12) return digits;
+            // Empieza con 54 pero sin 9 móvil: 54XXXXXXXXXX → insertar 9
             if (digits.startsWith('54') && digits.length >= 10) {
                 if (digits[2] !== '9') return `549${digits.slice(2)}`;
                 return digits;
             }
+            // Empieza con 0 (formato local con prefijo): 011XXXXXXXX → quitar 0, agregar 549
             if (digits.startsWith('0') && digits.length >= 10) {
                 const noZero = digits.replace(/^0+/, '');
                 return noZero.startsWith('9') ? `54${noZero}` : `549${noZero}`;
             }
+            // 10-11 dígitos: número local con código de área (ej: 1123562145)
             if (digits.length >= 10 && digits.length <= 11) return digits.startsWith('9') ? `54${digits}` : `549${digits}`;
-            if (digits.length >= 8) return digits;
-            return null;
+            // 8-9 dígitos: número sin código de área → asumir Buenos Aires (11)
+            if (digits.length >= 8 && digits.length <= 9) return `54911${digits}`;
+            // Números muy cortos no son válidos
+            if (digits.length < 8) return null;
+            // Números largos (internacionales): devolver tal cual
+            return digits;
         }
 
         function parseContactsInWorker(fileName, text, onProgress) {
@@ -4848,7 +5362,10 @@
             $('#openWhatsappMessageOption').onclick = () => {
                 elements.userOptionsModal.classList.remove('active');
                 elements.whatsappMessageModal.classList.add('active');
-                elements.whatsappTemplateInput.value = AppState.whatsappTemplate;
+                renderWhatsAppMessagesModal();
+            };
+            $('#addMessageBtn').onclick = () => {
+                addNewMessage();
             };
             if (elements.openGithubReleasesOption) {
                 elements.openGithubReleasesOption.onclick = async () => {
@@ -5629,6 +6146,9 @@
                     const contacts = AppState.contacts.filter(c => (c.profileId || 'default') === pid);
                     const midnight = new Date(now); midnight.setHours(0, 0, 0, 0);
                     const midnightMs = midnight.getTime();
+                    // TN empieza a las 22:00 del día anterior
+                    const lastNightStart = new Date(midnight); lastNightStart.setHours(-2, 0, 0, 0); // ayer 22:00
+                    const lastNightStartMs = lastNightStart.getTime();
                     const oneMonthAgo = now.getTime() - 30 * 86400000;
                     const h24ago = now.getTime() - 86400000;
                     const currentShift = getLocalCompetitionShift(now);
@@ -5640,14 +6160,19 @@
 
                     for (let i = 0; i < contacts.length; i++) {
                         const c = contacts[i];
-                        if (c.lastEditedAt && new Date(c.lastEditedAt).getTime() >= midnightMs) {
-                            editedToday++;
-                            // Shift en que fue revisado HOY — calculado desde la hora de edición
+                        if (c.lastEditedAt) {
+                            const editTs = new Date(c.lastEditedAt).getTime();
                             const editShift = getLocalCompetitionShift(new Date(c.lastEditedAt));
-                            if (shiftRich[editShift]) {
-                                shiftRich[editShift].total++;
-                                const st = c.status || 'sin revisar';
-                                shiftRich[editShift].byTo[st] = (shiftRich[editShift].byTo[st] || 0) + 1;
+                            // Incluir en "editedToday" si fue editado hoy (desde medianoche) o en TN de esta noche (desde ayer 22:00)
+                            const inTodayWindow = editTs >= midnightMs;
+                            const inTNWindow = editShift === 'tn' && editTs >= lastNightStartMs;
+                            if (inTodayWindow || inTNWindow) {
+                                editedToday++;
+                                if (shiftRich[editShift]) {
+                                    shiftRich[editShift].total++;
+                                    const st = c.status || 'sin revisar';
+                                    shiftRich[editShift].byTo[st] = (shiftRich[editShift].byTo[st] || 0) + 1;
+                                }
                             }
                         }
                         if (c.ops?.lastCargaAt && new Date(c.ops.lastCargaAt).getTime() < oneMonthAgo) coldCount++;
@@ -5702,6 +6227,7 @@
             window.populateMiTurnoFromShadowLog = async () => { window.calcularRendimientoHoyo(); };
 
             let currentMetricsFilter = 'today';
+            let currentMetricsShift = 'all';
             
             window.setMetricsHistoryFilter = (filter) => {
                 currentMetricsFilter = filter;
@@ -5779,7 +6305,10 @@
                     if (!ts) return false;
                     const eventDate = new Date(ts);
                     if (Number.isNaN(eventDate.getTime())) return false;
-                    return (!fromDate || eventDate >= fromDate) && (!toDate || eventDate <= toDate);
+                    if (!(!fromDate || eventDate >= fromDate) || !(!toDate || eventDate <= toDate)) return false;
+                    // Filtrar por turno si hay uno seleccionado
+                    if (currentMetricsShift !== 'all' && e.shift && e.shift !== currentMetricsShift) return false;
+                    return true;
                 });
 
                 // Group by day
@@ -5848,18 +6377,15 @@
             window.renderShiftDailyLogs = window.renderMetricsHistory;
 
             window.setMetricsShift = (shift) => {
+                currentMetricsShift = shift || 'all';
                 // Update pills visual
                 ['metricsShiftMorningBtn','metricsShiftAfternoonBtn','metricsShiftNightBtn','metricsShiftResetBtn'].forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.classList.remove('active');
                 });
                 const map = { tm: 'metricsShiftMorningBtn', tt: 'metricsShiftAfternoonBtn', tn: 'metricsShiftNightBtn', all: 'metricsShiftResetBtn' };
-                if (map[shift]) document.getElementById(map[shift])?.classList.add('active');
-                // Set the hidden select value and trigger update
-                if (elements.metricsShiftFilter) {
-                    elements.metricsShiftFilter.value = shift;
-                    elements.metricsShiftFilter.dispatchEvent(new Event('change'));
-                }
+                if (map[currentMetricsShift]) document.getElementById(map[currentMetricsShift])?.classList.add('active');
+                window.renderMetricsHistory();
             };
 
             async function renderProfileCompare() {
@@ -6127,25 +6653,137 @@
 
             $('#undoBtn').onclick = undoToLastContact;
             
-            elements.saveTemplateBtn.onclick = () => {
-                AppState.whatsappTemplate = elements.whatsappTemplateInput.value;
-                savePreferences();
-                showNotification('Mensaje de WhatsApp guardado', 'success');
-                elements.whatsappMessageModal.classList.remove('active');
+            function reloadWhatsAppTemplates() {
+                AppState.whatsappTemplates = AppState.whatsappTemplate
+                    .split(/^\s*---\s*$/m)
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                if (!AppState.whatsappTemplates.length) AppState.whatsappTemplates = [AppState.whatsappTemplate];
+                // Resetear índice al guardar nuevos templates
+                AppState.whatsappTemplateIdx = 0;
+            }
+
+            // ── Sistema de Múltiples Mensajes de WhatsApp ──
+            function initWhatsAppMessagesData() {
+                // Si no hay datos de mensajes, crear desde el template antiguo
+                if (!AppState.whatsappMessagesData || !Array.isArray(AppState.whatsappMessagesData)) {
+                    const templates = AppState.whatsappTemplates || [AppState.whatsappTemplate || ''];
+                    AppState.whatsappMessagesData = templates.map((text, idx) => ({
+                        id: Date.now() + idx,
+                        text: text || '',
+                        active: true
+                    }));
+                }
+                if (!AppState.whatsappMessagesData.length) {
+                    AppState.whatsappMessagesData = [{
+                        id: Date.now(),
+                        text: 'Hola {usuario}, ¿cómo estás? Te escribo por la propuesta que vimos.',
+                        active: true
+                    }];
+                }
+            }
+
+            function renderWhatsAppMessagesModal() {
+                initWhatsAppMessagesData();
+                const container = $('#whatsappMessagesContainer');
+                if (!container) return;
+                
+                container.innerHTML = AppState.whatsappMessagesData.map((msg, idx) => {
+                    const msgId = `msg-${msg.id}`;
+                    return `
+                    <div class="message-box" data-msg-id="${msg.id}">
+                        <input type="checkbox" class="msg-checkbox" ${msg.active ? 'checked' : ''} onchange="toggleMessageActive(${msg.id})">
+                        <textarea class="msg-textarea" placeholder="Escribe tu mensaje aquí. Usá {usuario} para el nombre." onchange="updateMessageText(${msg.id}, this.value)">${escapeHtml(msg.text)}</textarea>
+                        <div class="message-box-actions">
+                            <button class="btn" onclick="insertUserTokenToMessage(${msg.id})" title="Insertar {usuario}"><i class="fas fa-user"></i> Usr</button>
+                            <button class="btn" style="color: #ef4444;" onclick="deleteMessage(${msg.id})" title="Eliminar mensaje"><i class="fas fa-trash"></i> Del</button>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            window.toggleMessageActive = (msgId) => {
+                const msg = AppState.whatsappMessagesData.find(m => m.id === msgId);
+                if (msg) msg.active = !msg.active;
+                renderWhatsAppMessagesModal();
             };
-            elements.insertUserTokenBtn.onclick = () => {
-                const el = elements.whatsappTemplateInput;
+
+            window.updateMessageText = (msgId, text) => {
+                const msg = AppState.whatsappMessagesData.find(m => m.id === msgId);
+                if (msg) msg.text = text;
+            };
+
+            window.insertUserTokenToMessage = (msgId) => {
+                const textarea = document.querySelector(`[data-msg-id="${msgId}"] .msg-textarea`);
+                if (!textarea) return;
+                const start = textarea.selectionStart || 0;
+                const end = textarea.selectionEnd || 0;
                 const token = '{usuario}';
-                const start = el.selectionStart || el.value.length;
-                const end = el.selectionEnd || el.value.length;
-                el.value = el.value.slice(0, start) + token + el.value.slice(end);
-                el.focus();
-                el.selectionStart = el.selectionEnd = start + token.length;
+                const before = textarea.value.slice(0, start);
+                const after = textarea.value.slice(end);
+                textarea.value = before + token + after;
+                textarea.focus();
+                textarea.selectionStart = textarea.selectionEnd = start + token.length;
+                updateMessageText(msgId, textarea.value);
             };
-            elements.resetTemplateBtn.onclick = () => {
-                elements.whatsappTemplateInput.value = 'Hola {usuario}, ¿cómo estás? Te escribo por la propuesta que vimos.';
-                AppState.whatsappTemplate = elements.whatsappTemplateInput.value;
+
+            window.deleteMessage = (msgId) => {
+                AppState.whatsappMessagesData = AppState.whatsappMessagesData.filter(m => m.id !== msgId);
+                if (AppState.whatsappMessagesData.length === 0) {
+                    AppState.whatsappMessagesData.push({
+                        id: Date.now(),
+                        text: '',
+                        active: true
+                    });
+                }
+                renderWhatsAppMessagesModal();
+            };
+
+            function addNewMessage() {
+                AppState.whatsappMessagesData.push({
+                    id: Date.now(),
+                    text: '',
+                    active: true
+                });
+                renderWhatsAppMessagesModal();
+                // Scroll al nuevo mensaje
+                setTimeout(() => {
+                    const container = $('#whatsappMessagesContainer');
+                    if (container) {
+                        container.scrollTop = container.scrollHeight;
+                    }
+                }, 0);
+            }
+
+            window.addNewMessage = addNewMessage;
+
+            elements.saveTemplateBtn.onclick = () => {
+                // Guardar datos de mensajes
+                const activeMessages = AppState.whatsappMessagesData.filter(m => m.active && m.text.trim());
+                if (activeMessages.length === 0) {
+                    showNotification('Debes tener al menos un mensaje activo', 'warn');
+                    return;
+                }
+                
+                // Guardar como JSON format
+                AppState.whatsappTemplate = JSON.stringify(AppState.whatsappMessagesData);
+                AppState.whatsappTemplates = activeMessages.map(m => m.text);
+                AppState.whatsappTemplateIdx = 0;
+                
                 savePreferences();
+                showNotification(
+                    AppState.whatsappMessagesData.length > 1 
+                        ? `${AppState.whatsappMessagesData.length} mensajes guardados — ${activeMessages.length} activos` 
+                        : 'Mensaje de WhatsApp guardado',
+                    'success'
+                );
+                elements.whatsappMessageModal.classList.remove('active');
             };
             $('#closeWhatsappMessageModal').onclick = () => elements.whatsappMessageModal.classList.remove('active');
             const closeShortcutsBtn = $('#closeShortcutsModal');
@@ -6522,6 +7160,7 @@
                         hasSaved = true;
                         const oldStatus = contact.status;
                         contact.status = select.value;
+                        addContactToIndex(contact);
                         updateCompetitionCredit(contact, select.value, 'common');
                         setReviewMetadata(contact, select.value);
                         touchContactEdit(contact, 'inline_status');
@@ -6560,6 +7199,7 @@
                         const contact = AppState.searchIndex?.byId?.get(id) || AppState.contacts.find(c => c.id === id);
                         if (contact) {
                             contact.status = newStatus;
+                            addContactToIndex(contact);
                             updateCompetitionCredit(contact, newStatus, 'common');
                             setReviewMetadata(contact, newStatus);
                             touchContactEdit(contact, 'inline_status');
@@ -7057,6 +7697,15 @@
                 }
                 _step(11, 'Cargando datos de operaciones (opsProfiles)…');
                 loadOpsData();
+                // Cargar historial mensual persistente en AppState para el dashboard
+                try {
+                    const _pid = AppState.activeProfileId || 'default';
+                    if (window.electronAPI?.getOpsMonthlyHistory) {
+                        window.electronAPI.getOpsMonthlyHistory({ profileId: _pid }).then(res => {
+                            if (res?.ok && res.history) AppState.opsMonthlyHistory = res.history;
+                        }).catch(() => {});
+                    }
+                } catch (_) {}
                 _step(12, 'Hidratando contactos desde disco…');
                 setLoadingState(true, 'Hidratando datos…', 8, false);
                 await perfMark('init/hidratacion', async () => loadData());
