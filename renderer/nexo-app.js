@@ -319,14 +319,30 @@
                 let idx = 0;
                 const firstLineLow = (lines[0] || '').toLowerCase();
                 if (firstLineLow.startsWith('sep=')) {
-                    const sepChar = lines[0].slice(4).trim();
-                    if (sepChar === ';' || sepChar === '\t' || sepChar === '|') delim = sepChar;
+                    // sep= puede ser "sep=;" o "sep=\t" o "sep=	" (tab literal) o "sep=" vacío con tabs siguientes
+                    const sepRaw = lines[0].slice(4); // NO hacer trim — el tab puede ser el delimitador
+                    const sepTrimmed = sepRaw.trim();
+                    if (sepTrimmed === ';') delim = ';';
+                    else if (sepTrimmed === '|') delim = '|';
+                    else if (sepTrimmed === '\\t' || sepRaw.startsWith('\t') || sepRaw === '') {
+                        // sep=\t literal, sep=	(tab), o sep= vacío seguido de tabs → auto-detect desde header
+                        delim = '\t';
+                    }
                     idx = 1;
                 }
                 if (delim === ',' && idx === 0) {
                     const sample = lines[0] || '';
                     if ((sample.match(/;/g) || []).length > (sample.match(/,/g) || []).length) delim = ';';
                     else if ((sample.match(/\t/g) || []).length > 1) delim = '\t';
+                }
+                // Validar delimitador contra el header real (línea idx) para no quedarse con ',' si no matchea
+                if (idx < lines.length) {
+                    const headerLine = lines[idx] || '';
+                    const tabCount = (headerLine.match(/\t/g) || []).length;
+                    const commaCount = (headerLine.match(/,/g) || []).length;
+                    const semiCount = (headerLine.match(/;/g) || []).length;
+                    if (delim === ',' && tabCount > commaCount && tabCount > 1) delim = '\t';
+                    else if (delim === ',' && semiCount > commaCount && semiCount > 1) delim = ';';
                 }
 
                 // Delimiter-aware ops row parser
@@ -606,8 +622,39 @@
                             }
 
                             let idx = 0;
-                            if ((lines[0] || '').toLowerCase().startsWith('sep=')) idx = 1;
-                            const header = parseCsvRow(lines[idx] || '');
+                            // Detectar delimitador — igual que el fallback parser
+                            let delim = ',';
+                            const firstLineLow = (lines[0] || '').toLowerCase();
+                            if (firstLineLow.startsWith('sep=')) {
+                                const sepRaw = lines[0].slice(4);
+                                const sepTrimmed = sepRaw.trim();
+                                if (sepTrimmed === ';') delim = ';';
+                                else if (sepTrimmed === '|') delim = '|';
+                                else delim = '\t'; // sep= vacío o con tabs → tab-delimited
+                                idx = 1;
+                            }
+                            // Validar contra el header real
+                            if (idx < lines.length) {
+                                const hl = lines[idx] || '';
+                                const tc = (hl.match(/\t/g) || []).length;
+                                const cc = (hl.match(/,/g) || []).length;
+                                const sc = (hl.match(/;/g) || []).length;
+                                if (delim === ',' && tc > cc && tc > 1) delim = '\t';
+                                else if (delim === ',' && sc > cc && sc > 1) delim = ';';
+                            }
+                            const parseRow = (line) => {
+                                if (delim === ',') return parseCsvRow(line);
+                                const out = []; let cur = ''; let inQ = false;
+                                for (let ci = 0; ci < line.length; ci++) {
+                                    const ch = line[ci];
+                                    if (ch === '"') { if (inQ && line[ci+1] === '"') { cur += '"'; ci++; } else inQ = !inQ; }
+                                    else if (ch === delim && !inQ) { out.push(cur); cur = ''; }
+                                    else cur += ch;
+                                }
+                                out.push(cur);
+                                return out.map(v => v.trim());
+                            };
+                            const header = parseRow(lines[idx] || '');
                             idx++;
                             const h = header.map(v => normalizeUsername(v));
                             const aliasIdx = h.findIndex(v => /alias|usuario|cuenta|nombre|jugador|usuario_master|user/.test(v));
@@ -622,7 +669,7 @@
                             while (idx < lines.length) {
                                 const end = Math.min(lines.length, idx + chunk);
                                 for (; idx < end; idx++) {
-                                    const row = parseCsvRow(lines[idx]);
+                                    const row = parseRow(lines[idx]);
                                     const aliasRaw = row[aliasIdx] || '';
                                     const alias = normalizeAlias(aliasRaw);
                                     if (!alias) continue;
@@ -794,43 +841,67 @@
             });
         }
 
+        // Regla: las ops NO marcan a un contacto como 'revisado'. Tener actividad en el
+        // CSV no implica que alguien haya chequeado WhatsApp manualmente. Solo usamos las
+        // ops para informar (isFrozen, dominantShift) y para un downgrade: si hace más
+        // de 30 días que no hay carga registrada, el contacto vuelve a 'sin revisar'.
         function applyOpsHeuristicsToContact(contact) {
-            if (!contact || !contact.ops?.suggestedStatus) return;
-            const suggested = contact.ops.suggestedStatus;
-            const lastCargaAt = contact.ops?.lastCargaAt;
+            if (!contact || !contact.ops) return;
+            const lastCargaAt = contact.ops.lastCargaAt;
             const daysSince = lastCargaAt
                 ? (Date.now() - new Date(lastCargaAt).getTime()) / 86400000
                 : Infinity;
-            const isFrozen = daysSince > 30;
-            if (contact.ops) contact.ops.isFrozen = isFrozen;
-            // Propagar turno dominante desde ops al contacto SOLO si el contacto aún no
-            // tiene turno asignado. Si ya lo tiene (por distribución round-robin, edición
-            // manual o importación previa), no sobrescribir — el `dominantShift` del CSV
-            // recién subido suele estar sesgado hacia las ops de ESE CSV y no refleja
-            // el patrón histórico completo.
-            if (contact.ops?.dominantShift && !contact.assignedShift) {
+            contact.ops.isFrozen = daysSince > 30;
+            // Turno dominante: solo si el contacto aún no tiene uno asignado.
+            if (contact.ops.dominantShift && !contact.assignedShift) {
                 contact.assignedShift = contact.ops.dominantShift;
             }
-            // Cualquier 'jugando' cuya última carga fue > 7 días → forzar 'revisado'
-            // (getHigherPriorityStatus rank 3 > 2 nunca lo bajaría solo)
-            const needsDowngrade = contact.status === 'jugando' && daysSince > 7;
-            const nextStatus = needsDowngrade
-                ? 'revisado'
-                : getHigherPriorityStatus(contact.status, suggested);
-            if (nextStatus !== contact.status) {
+            // Downgrade: más de 30 días sin carga → sin revisar (a menos que ya esté ahí).
+            if (daysSince > 30 && contact.status && contact.status !== 'sin revisar') {
                 const oldStatus = contact.status;
-                contact.status = nextStatus;
+                contact.status = 'sin revisar';
+                contact.shiftReviewed = false;
+                contact.shiftReviewedByShift = null;
+                contact.shiftReviewedAt = null;
                 if (AppState.searchIndex && AppState.searchIndex.byId.has(contact.id)) addContactToIndex(contact);
-                touchContactEdit(contact, 'ops_sync');
-                const opsAt = contact?.ops?.lastCargaAt || new Date().toISOString();
-                const opsShift = inferShiftFromIso(opsAt);
-                AppState.statusTransitions.unshift({ at: opsAt, from: oldStatus, to: nextStatus, contactId: contact.id, profileId: contact.profileId || 'default', actor: 'ops-import', shift: opsShift || contact.assignedShift || '' });
-                AppState.buttonPressEvents.unshift({ at: opsAt, action: 'ops-sync', from: oldStatus, to: nextStatus, shift: opsShift || contact.assignedShift || '', profileId: contact.profileId || 'default', actor: 'ops-import' });
-                recordMetricEvent('operation_created', { profileId: contact.profileId || 'default', contactId: contact.id, status: nextStatus, from: oldStatus, to: nextStatus, at: opsAt, shift: opsShift, selectionType: 'ops' });
-                saveStatusTransitions();
-                saveButtonPressEvents();
+                touchContactEdit(contact, 'ops_stale_downgrade');
+                const nowIso = new Date().toISOString();
+                AppState.statusTransitions.unshift({ at: nowIso, from: oldStatus, to: 'sin revisar', contactId: contact.id, profileId: contact.profileId || 'default', actor: 'ops-stale', shift: contact.assignedShift || '' });
             }
         }
+
+        // Limpieza puntual: recorre todos los contactos del perfil activo y aplica la
+        // regla "sin ops en 30 días → sin revisar". Devuelve cuántos se degradaron.
+        // Uso desde consola: await window.cleanupStaleStatuses()
+        window.cleanupStaleStatuses = async function () {
+            const pid = AppState.activeProfileId || 'default';
+            const contacts = AppState.contacts.filter(c => (c.profileId || 'default') === pid);
+            let downgraded = 0;
+            for (const c of contacts) {
+                if (c.status === 'sin revisar') continue;
+                const lastCargaAt = c.ops?.lastCargaAt;
+                const daysSince = lastCargaAt
+                    ? (Date.now() - new Date(lastCargaAt).getTime()) / 86400000
+                    : Infinity;
+                if (daysSince > 30) {
+                    c.status = 'sin revisar';
+                    c.shiftReviewed = false;
+                    c.shiftReviewedByShift = null;
+                    c.shiftReviewedAt = null;
+                    c.lastEditedAt = new Date().toISOString();
+                    c.lastEditReason = 'cleanup_stale';
+                    downgraded++;
+                }
+            }
+            console.log(`[cleanupStaleStatuses] ${downgraded} contactos bajados a 'sin revisar' (>30 días sin ops)`);
+            if (downgraded > 0) {
+                if (typeof rebuildSearchIndex === 'function') rebuildSearchIndex();
+                if (typeof saveCurrentProfileContacts === 'function') await saveCurrentProfileContacts();
+                if (typeof render === 'function') render();
+                if (typeof updateHeaderStats === 'function') updateHeaderStats();
+            }
+            return downgraded;
+        };
 
         async function syncOpsToContacts({ createNewUsers = true, onProgress = null } = {}) {
             const profiles = AppState.opsProfiles || {};
@@ -932,91 +1003,145 @@
             return monthly;
         }
 
-        async function _persistOpsMonthlyHistory(byAlias) {
+        // _persistOpsMonthlyHistory (v1.4 — idempotente):
+        // Recomputa el historial mensual COMPLETO desde AppState.opsProfiles (fuente
+        // de verdad), no acumula con +=. Llamarlo dos veces con los mismos datos
+        // produce el mismo resultado.
+        async function _persistOpsMonthlyHistory(_byAliasIgnored) {
             try {
                 const pid = AppState.activeProfileId || 'default';
-                const monthlyData = _buildMonthlyDataFromByAlias(byAlias);
-                // Actualizar opsImportedMonths en localStorage con los meses reales del CSV
+                const NM = window.NexoMetrics;
+                if (!NM) return;
+
+                // Construir monthlyData desde TODO el opsProfiles en memoria, no sólo del CSV nuevo.
+                const opsProfiles = AppState.opsProfiles || {};
+                const monthlyData = {};
+                const firstSeenMonth = {};
+                const aliasesByMonth = {};
+
+                for (const alias of Object.keys(opsProfiles)) {
+                    const granular = opsProfiles[alias].opsGranular || [];
+                    for (let i = 0; i < granular.length; i++) {
+                        const op = granular[i];
+                        const cls = NM.classifyTs(op && op.ts, op && op.shift, op && op.date);
+                        if (!cls) continue;
+                        // Usamos el mes CALENDARIO (YYYY-MM del ts real), no el mes operativo,
+                        // para mantener compatibilidad con el dashboard 12M existente.
+                        const d = new Date(op.ts);
+                        const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                        if (!monthlyData[mk]) monthlyData[mk] = { volumenCargas: 0, volumenRetiros: 0, cargas: 0, retiros: 0 };
+                        if (!aliasesByMonth[mk]) aliasesByMonth[mk] = new Set();
+                        aliasesByMonth[mk].add(alias);
+                        if (!firstSeenMonth[alias] || mk < firstSeenMonth[alias]) firstSeenMonth[alias] = mk;
+                        if (op.amount > 0) { monthlyData[mk].cargas++; monthlyData[mk].volumenCargas += op.amount; }
+                        else if (op.amount < 0) { monthlyData[mk].retiros++; monthlyData[mk].volumenRetiros += Math.abs(op.amount); }
+                    }
+                }
+
+                // Construir historial mensual completo (reemplaza, no acumula).
+                const knownAliases = Array.from(new Set(Object.keys(firstSeenMonth)));
+                const months = {};
+                for (const mk of Object.keys(monthlyData)) {
+                    const aliases = Array.from(aliasesByMonth[mk] || []);
+                    let newAliasCount = 0;
+                    for (const a of aliases) if (firstSeenMonth[a] === mk) newAliasCount++;
+                    months[mk] = {
+                        ...monthlyData[mk],
+                        aliases,
+                        uniqueAliasCount: aliases.length,
+                        newAliasCount
+                    };
+                }
+
+                // opsImportedMonths en localStorage: unión acumulativa (esto SÍ es acumulativo
+                // porque registra qué meses fueron importados alguna vez, no totales).
                 const _k = `opsImportedMonths:${pid}`;
-                const _m = new Set(JSON.parse(localStorage.getItem(_k) || '[]'));
-                for (const mk of Object.keys(monthlyData)) _m.add(mk);
-                localStorage.setItem(_k, JSON.stringify([..._m]));
-                // Persistir historial en disco vía IPC
+                const _m = new Set();
+                try { JSON.parse(localStorage.getItem(_k) || '[]').forEach(x => _m.add(x)); } catch (_) {}
+                for (const mk of Object.keys(months)) _m.add(mk);
+                try { localStorage.setItem(_k, JSON.stringify([..._m])); } catch (_) {}
+
+                // Persistir en disco (si hay IPC disponible).
                 if (window.electronAPI?.saveOpsMonthlyHistory) {
-                    await window.electronAPI.saveOpsMonthlyHistory({ profileId: pid, monthlyData });
+                    await window.electronAPI.saveOpsMonthlyHistory({ profileId: pid, monthlyData: months });
                 }
-                // Cachear en AppState para que el dashboard lo lea sin esperar IPC
-                if (!AppState.opsMonthlyHistory) AppState.opsMonthlyHistory = { months: {}, knownAliases: [] };
-                const hist = AppState.opsMonthlyHistory;
-                const knownSet = new Set(hist.knownAliases || []);
-                for (const [mk, incoming] of Object.entries(monthlyData)) {
-                    const ex = hist.months[mk] || { volumenCargas: 0, volumenRetiros: 0, cargas: 0, retiros: 0, aliases: [], uniqueAliasCount: 0, newAliasCount: 0 };
-                    ex.volumenCargas += incoming.volumenCargas || 0;
-                    ex.volumenRetiros += incoming.volumenRetiros || 0;
-                    ex.cargas += incoming.cargas || 0;
-                    ex.retiros += incoming.retiros || 0;
-                    const merged = new Set([...(ex.aliases || []), ...(incoming.aliases || [])]);
-                    ex.aliases = Array.from(merged);
-                    ex.uniqueAliasCount = merged.size;
-                    let newC = 0;
-                    for (const a of merged) { if (!knownSet.has(a)) { newC++; knownSet.add(a); } }
-                    ex.newAliasCount = (ex.newAliasCount || 0) + newC;
-                    hist.months[mk] = ex;
-                }
-                hist.knownAliases = Array.from(knownSet);
-            } catch (_) {}
+
+                // Reemplazar caché en AppState (no merge).
+                AppState.opsMonthlyHistory = { months, knownAliases, updatedAt: new Date().toISOString() };
+            } catch (err) {
+                console.warn('[_persistOpsMonthlyHistory]', err);
+            }
         }
 
+        // mergeOpsProfiles (v1.4 — event-sourced):
+        // opsGranular es la fuente de verdad. Todos los derivados (totales, 30d/90d,
+        // avg, median, score, dominantShift) se RECOMPUTAN desde el granular combinado.
+        // Idempotente: importar el mismo CSV dos veces NO duplica nada — dedup por (ts|amount).
         function mergeOpsProfiles(newProfiles) {
+            const NM = window.NexoMetrics;
+            if (!NM) {
+                console.error('[mergeOpsProfiles] NexoMetrics no disponible — abort');
+                return;
+            }
+            // Backup pre-merge la primera vez (por si algo sale mal al deployar).
+            _ensureOpsBackupOnce();
+
             const merged = { ...(AppState.opsProfiles || {}) };
-            // Recomputa dominantShift desde opsGranular combinado para que refleje
-            // el patrón histórico completo, no sólo el del último CSV subido.
-            const recomputeDominantShift = (granular) => {
-                const sb = { tm: 0, tt: 0, tn: 0 };
-                for (const op of (granular || [])) {
-                    if (op && op.shift && sb[op.shift] !== undefined) sb[op.shift]++;
-                }
-                const total = sb.tm + sb.tt + sb.tn;
-                if (total === 0) return { shift: null, pct: 0 };
-                const top = Object.entries(sb).sort((a, b) => b[1] - a[1])[0];
-                return { shift: top[0], pct: Math.round((top[1] / total) * 100) };
-            };
             Object.entries(newProfiles || {}).forEach(([alias, n]) => {
                 const prev = merged[alias];
-                if (!prev || typeof prev !== 'object') { merged[alias] = n; return; }
-                const combinedGranular = (function() {
-                    const combined = [...(prev.opsGranular || []), ...(n.opsGranular || [])];
-                    const seen = new Set();
-                    return combined.filter(op => { const k = op.ts + '|' + op.amount; return seen.has(k) ? false : (seen.add(k), true); });
-                })();
-                const dom = recomputeDominantShift(combinedGranular);
-                merged[alias] = {
-                    ...n,
-                    cargasCount: (prev.cargasCount || 0) + (n.cargasCount || 0),
-                    descargasCount: (prev.descargasCount || 0) + (n.descargasCount || 0),
-                    cargadoTotal: (prev.cargadoTotal || 0) + (n.cargadoTotal || 0),
-                    descargadoTotal: (prev.descargadoTotal || 0) + (n.descargadoTotal || 0),
-                    netoTotal: (prev.netoTotal || 0) + (n.netoTotal || 0),
-                    cargas30d: Math.max(prev.cargas30d || 0, n.cargas30d || 0),
-                    cargado30d: Math.max(prev.cargado30d || 0, n.cargado30d || 0),
-                    cargado90d: Math.max(prev.cargado90d || 0, n.cargado90d || 0),
-                    lastAt: (!prev.lastAt || (n.lastAt && n.lastAt > prev.lastAt)) ? n.lastAt : prev.lastAt,
-                    lastCargaAt: (!prev.lastCargaAt || (n.lastCargaAt && n.lastCargaAt > prev.lastCargaAt)) ? n.lastCargaAt : prev.lastCargaAt,
-                    avgCarga: Math.round(((prev.avgCarga || 0) + (n.avgCarga || 0)) / 2),
-                    medianCarga: Math.round(((prev.medianCarga || 0) + (n.medianCarga || 0)) / 2),
-                    loyalty: Math.max(prev.loyalty || 0, n.loyalty || 0),
-                    score: Math.max(prev.score || 0, n.score || 0),
-                    suggestedStatus: n.suggestedStatus || prev.suggestedStatus,
-                    heat: n.heat || prev.heat,
-                    topHours: n.topHours?.length ? n.topHours : (prev.topHours || []),
-                    opsGranular: combinedGranular,
-                    dominantShift: dom.shift,
-                    dominantShiftPct: dom.pct
-                };
+                const combinedGranular = NM.mergeGranular(
+                    (prev && prev.opsGranular) || [],
+                    (n && n.opsGranular) || []
+                );
+                const label = (n && n.aliasLabel) || (prev && prev.aliasLabel) || alias;
+                merged[alias] = NM.rebuildProfileDerived(combinedGranular, label);
             });
             AppState.opsProfiles = merged;
             AppState.opsLastImportedAt = new Date().toISOString();
             saveOpsData();
+        }
+
+        // Backup one-shot de opsProfilesData antes del primer merge con la nueva lógica.
+        // Guarda una copia timestampada en localStorage (liviano, igual que los datos de turno).
+        // Se ejecuta UNA sola vez por sesión aunque el merge se llame muchas veces.
+        let _opsBackupTaken = false;
+        function _ensureOpsBackupOnce() {
+            if (_opsBackupTaken) return;
+            _opsBackupTaken = true;
+            try {
+                const pid = AppState.activeProfileId || 'default';
+                const flag = `opsBackup_v14_done_${pid}`;
+                if (localStorage.getItem(flag)) return;
+                const snap = AppState.opsProfiles || {};
+                if (Object.keys(snap).length === 0) {
+                    localStorage.setItem(flag, new Date().toISOString());
+                    return;
+                }
+                // Guardar el snapshot pre-migración. Los CSVs crudos siguen en disco
+                // como red adicional (rehydrateOpsFromRawUploads).
+                const payload = JSON.stringify(snap);
+                const bkKey = `opsBackup_preV14_${pid}`;
+                try {
+                    localStorage.setItem(bkKey, payload);
+                    localStorage.setItem(flag, new Date().toISOString());
+                    console.info(`[ops-backup] snapshot pre-v1.4 guardado en localStorage: ${bkKey} (${payload.length} bytes)`);
+                } catch (e) {
+                    // Si no entra en localStorage, intentar disco vía IPC.
+                    if (window.electronAPI?.saveProfileMetrics) {
+                        window.electronAPI.saveProfileMetrics({
+                            profileId: pid,
+                            opsBackupPreV14: snap
+                        }).then(() => {
+                            localStorage.setItem(flag, new Date().toISOString());
+                            console.info('[ops-backup] snapshot pre-v1.4 guardado en disco');
+                        }).catch(err => console.warn('[ops-backup] no se pudo guardar backup:', err));
+                    } else {
+                        console.warn('[ops-backup] localStorage lleno y sin IPC — sin backup, pero los CSVs crudos en disco siguen disponibles como respaldo');
+                    }
+                }
+            } catch (err) {
+                console.warn('[ops-backup] error:', err);
+            }
         }
 
         // Campos que se omiten del localStorage por peso (se recomputan o son prescindibles)
@@ -2084,7 +2209,8 @@
 
 
         function importOperationsFile(file) {
-            if (!file) return;
+            if (!file) return Promise.resolve();
+            return new Promise((resolveImport) => {
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
@@ -2118,6 +2244,12 @@
                     }});
                     setLoadingState(true, 'Detectando duplicados…', 92, false);
                     detectDuplicates();
+                    // Limpieza automática: contactos sin carga en >30 días → 'sin revisar'
+                    setLoadingState(true, 'Revisando estados vencidos…', 94, false);
+                    try {
+                        const staleCount = await window.cleanupStaleStatuses();
+                        if (staleCount > 0) addToHistory('Limpieza automática', `${staleCount} contactos sin ops en 30 días → sin revisar`);
+                    } catch (e) { console.warn('[ops] cleanupStaleStatuses falló', e); }
                     setLoadingState(true, 'Guardando…', 96, false);
                     saveData();
                     addToHistory('Operaciones importadas', `${importedRows} filas · ${syncResult.createdCount} nuevos · ${syncResult.updatedCount} actualizados`);
@@ -2133,9 +2265,12 @@
                     showNotification('Error al importar operaciones', 'error');
                     announceGeneral('No se pudo procesar operaciones. Se aplicó modo seguro.', 'warn', 4500);
                     setTimeout(() => setSaveState('pending', 'Pendiente'), 5000);
+                } finally {
+                    resolveImport();
                 }
             };
             reader.readAsText(file);
+            }); // end Promise
         }
 
         function sanitizeContactsForStorage(contacts = []) {
@@ -3611,42 +3746,33 @@
             elements.shiftsView.innerHTML = overviewCard + cards + opsBlock;
         }
 
-        // Progreso diario de operaciones — cuenta desde opsGranular del CSV parse
+        // Progreso diario de operaciones — cuenta por DÍA OPERATIVO desde NexoMetrics.
+        // Día operativo = día del turno: 00:00–05:59 pertenece al tn del día anterior,
+        // así "ver ayer a las 06:40 de hoy" muestra el tn completo sin cortarlo.
         function _buildOpsProgressBlock() {
             const pid = AppState.activeProfileId || 'default';
             const now = new Date();
             const currentShift = getLocalCompetitionShift(now);
-            const opsProfiles = AppState.opsProfiles || {};
+            const NM = window.NexoMetrics;
+            if (!NM) return '';
 
-            // Rangos de hoy y ayer (día calendario completo)
-            const todayStr = now.toISOString().slice(0, 10);
-            const yesterdayStr = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
+            const todayOperDay = NM.getOperDayForNow();
+            const yesterdayOperDay = NM.operDayOffset(1);
 
             const shiftOrder = ['tm', 'tt', 'tn'];
             const currentIdx = shiftOrder.indexOf(currentShift);
             const visibleShifts = shiftOrder.slice(0, currentIdx + 1);
 
-            const opsToday = { tm: 0, tt: 0, tn: 0, total: 0 };
-            const opsYesterday = { tm: 0, tt: 0, tn: 0, total: 0 };
-            const newUsersCreatedLastDay = new Set();
+            const qToday = NM.query({ operDay: todayOperDay });
+            const qYesterday = NM.query({ operDay: yesterdayOperDay });
 
-            // Contar desde opsGranular (datos del CSV parse)
-            for (const alias in opsProfiles) {
-                const p = opsProfiles[alias];
-                const granular = p.opsGranular || [];
-                for (const op of granular) {
-                    const dateStr = op.date || '';
-                    const shift = op.shift || '';
-                    if (dateStr === todayStr && opsToday[shift] !== undefined) {
-                        opsToday[shift]++;
-                        opsToday.total++;
-                        newUsersCreatedLastDay.add(alias);
-                    } else if (dateStr === yesterdayStr && opsYesterday[shift] !== undefined) {
-                        opsYesterday[shift]++;
-                        opsYesterday.total++;
-                    }
-                }
-            }
+            const opsToday = { tm: qToday.byShift.tm, tt: qToday.byShift.tt, tn: qToday.byShift.tn, total: qToday.count };
+            const opsYesterday = { tm: qYesterday.byShift.tm, tt: qYesterday.byShift.tt, tn: qYesterday.byShift.tn, total: qYesterday.count };
+
+            // Alias que operaron hoy o ayer (para detectar usuarios nuevos sin teléfono)
+            const newUsersCreatedLastDay = new Set();
+            const qBoth = NM.query({ fromOperDay: yesterdayOperDay, toOperDay: todayOperDay, includeItems: true, itemsLimit: 50000 });
+            for (const it of (qBoth.items || [])) newUsersCreatedLastDay.add(it.alias);
 
             // Detectar usuarios nuevos: sin teléfono que tuvieron operaciones ayer o hoy
             const newUsersNoPhone = (AppState.contacts || []).filter(c => {
@@ -3994,6 +4120,17 @@
         }
 
         function loadPreferences() {
+            // Fallback local: en el boot temprano, la función global aún no existe
+            const reloadWhatsAppTemplates = (typeof window.reloadWhatsAppTemplates === 'function')
+                ? window.reloadWhatsAppTemplates
+                : function () {
+                    AppState.whatsappTemplates = (AppState.whatsappTemplate || '')
+                        .split(/^\s*---\s*$/m)
+                        .map((s) => s.trim())
+                        .filter(Boolean);
+                    if (!AppState.whatsappTemplates.length) AppState.whatsappTemplates = [AppState.whatsappTemplate || ''];
+                    AppState.whatsappTemplateIdx = 0;
+                };
             try {
                 const tpl = localStorage.getItem('whatsappTemplate');
                 if (tpl) {
@@ -5349,10 +5486,13 @@
                 elements.importOpsBtn.onclick = () => elements.opsFileInput && elements.opsFileInput.click();
             }
             if (elements.opsFileInput) {
-                elements.opsFileInput.onchange = (e) => {
-                    const file = e.target.files && e.target.files[0];
-                    importOperationsFile(file);
+                elements.opsFileInput.onchange = async (e) => {
+                    const files = Array.from(e.target.files || []);
                     elements.opsFileInput.value = '';
+                    if (!files.length) return;
+                    for (const file of files) {
+                        await importOperationsFile(file);
+                    }
                 };
             }
             $('#openShortcutsOption').onclick = () => {
@@ -5889,27 +6029,22 @@
 
 
             const getOpsSummaryForMetrics = () => {
-                const profileId = AppState.activeProfileId || 'default';
-                const opsProfiles = AppState.opsProfiles || {};
+                const NM = window.NexoMetrics;
+                if (!NM) return { day: 0, shift: 0, shiftNow: '-', byShift: {}, volumenDia: 0, volumenTurno: 0 };
                 const now = new Date();
-                const today = now.toISOString().slice(0, 10);
                 const shiftNow = getLocalCompetitionShift(now);
-                let day = 0;
-                let shift = 0;
-
-                // Iterar sobre todos los usuarios y sus opsGranular
-                for (const alias in opsProfiles) {
-                    const profile = opsProfiles[alias];
-                    const granular = profile.opsGranular || [];
-                    for (const op of granular) {
-                        const dateStr = op.date || '';
-                        if (dateStr === today) {
-                            day++;
-                            if (op.shift === shiftNow) shift++;
-                        }
-                    }
-                }
-                return { day, shift, shiftNow };
+                const todayOD = NM.getOperDayForNow();
+                const qDay = NM.query({ operDay: todayOD });
+                const qShift = NM.query({ operDay: todayOD, shift: shiftNow });
+                return {
+                    day: qDay.cargas,
+                    shift: qShift.cargas,
+                    shiftNow,
+                    byShift: qDay.byShift,
+                    volumenDia: qDay.volumenCargas,
+                    volumenTurno: qShift.volumenCargas,
+                    uniqueHoy: qDay.uniqueAliases
+                };
             };
 
             if (elements.showQuickMetricsOption) {
@@ -5925,8 +6060,8 @@
                     if (elements.metricsToDate) elements.metricsToDate.value = toDate;
                     AppState.metricsHourRange = null;
 
-                    // Auto-select current shift pill
-                    window.setMetricsShift(currentShift);
+                    // Auto-select all shifts (not just current shift)
+                    window.setMetricsShift('all');
 
                     const today = now.toISOString().slice(0, 10);
                     const yesterdayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
@@ -5996,7 +6131,10 @@
                     if (elements.metricsDateLabel) elements.metricsDateLabel.textContent = `Turno actual: ${shiftLabel} · ${transitionsShift.length} movimientos`;
                     if (elements.metricsOpsSummary) {
                         const opsSummary = getOpsSummaryForMetrics();
-                        elements.metricsOpsSummary.textContent = `Ops turno: ${opsSummary.shift} · ops hoy: ${opsSummary.day} · turno ${String(opsSummary.shiftNow || '-').toUpperCase()}`;
+                        const bs = opsSummary.byShift || {};
+                        const shiftLabel = String(opsSummary.shiftNow || '-').toUpperCase();
+                        const volumenStr = opsSummary.volumenDia > 0 ? ` · $${Math.round(opsSummary.volumenDia).toLocaleString('es-AR')}` : '';
+                        elements.metricsOpsSummary.textContent = `Hoy: ${opsSummary.day} cargas (TM:${bs.tm||0} TT:${bs.tt||0} TN:${bs.tn||0})${volumenStr} · ${opsSummary.uniqueHoy||0} jugadores · Turno actual ${shiftLabel}: ${opsSummary.shift} cargas`;
                     }
                     if (elements.metricEditedToday) elements.metricEditedToday.textContent = String(opTotal || transitionsShift.length || editedToday);
                     if (elements.metricEditedYesterday) elements.metricEditedYesterday.textContent = String(usersInRange || editedYesterday);
@@ -6118,7 +6256,16 @@
                     });
                 }
                 if (tab === 'supervisor') {
-                    try { window.renderShiftDailyLogs(); } catch (e) { console.error('[supervisor-tab]', e); }
+                    try {
+                        // Si no hay filtro activo o es la primera vez, mostrar "ayer" por defecto
+                        // (más útil: a las 07:00 del TM querés ver qué pasó ayer, no hoy vacío)
+                        if (currentMetricsFilter === 'today' && !window._supervisorTabOpened) {
+                            window._supervisorTabOpened = true;
+                            window.setMetricsHistoryFilter('yesterday');
+                        } else {
+                            window.renderShiftDailyLogs();
+                        }
+                    } catch (e) { console.error('[supervisor-tab]', e); }
                 }
                 if (tab === 'intel') {
                     try {
@@ -6136,86 +6283,161 @@
 
             // ── Shadow Log: poblar "Mi Turno" desde el Main Process ──────────
             // calcularRendimientoHoyo: métricas en memoria real, cero IPC, cero phantom logs
+            let _opsDayView = 'hoy'; // 'hoy' | 'ayer'
+            window.setOpsDayView = (day) => {
+                _opsDayView = day;
+                document.getElementById('opsDayHoyBtn')?.classList.toggle('active', day === 'hoy');
+                document.getElementById('opsDayAyerBtn')?.classList.toggle('active', day === 'ayer');
+                window.calcularRendimientoHoyo();
+            };
+
+            // calcularRendimientoHoyo: muestra los 3 turnos del día seleccionado (hoy/ayer).
+            // TM/TT/TN del mismo día operativo, el turno actual marcado con ★.
             window.calcularRendimientoHoyo = () => {
                 const safeSet = (id, val) => {
                     try { const el = document.getElementById(id); if (el) el.textContent = String(val ?? 0); } catch (_) {}
                 };
                 try {
+                    const NM = window.NexoMetrics;
+                    if (!NM) return;
+
                     const now = new Date();
                     const pid = AppState.activeProfileId || 'default';
-                    const contacts = AppState.contacts.filter(c => (c.profileId || 'default') === pid);
-                    const midnight = new Date(now); midnight.setHours(0, 0, 0, 0);
-                    const midnightMs = midnight.getTime();
-                    // TN empieza a las 22:00 del día anterior
-                    const lastNightStart = new Date(midnight); lastNightStart.setHours(-2, 0, 0, 0); // ayer 22:00
-                    const lastNightStartMs = lastNightStart.getTime();
-                    const oneMonthAgo = now.getTime() - 30 * 86400000;
-                    const h24ago = now.getTime() - 86400000;
                     const currentShift = getLocalCompetitionShift(now);
+                    const todayOD = NM.getOperDayForNow();
+                    const yesterdayOD = NM.operDayOffset(1);
 
-                    let editedToday = 0;
+                    // Día a mostrar según el toggle Hoy/Ayer
+                    const viewOD = (_opsDayView === 'ayer') ? yesterdayOD : todayOD;
+
+                    // Fríos: contactos cuya última carga fue hace más de 30 días
+                    const oneMonthAgo = now.getTime() - 30 * 86400000;
+                    const contacts = AppState.contacts.filter(c => (c.profileId || 'default') === pid);
                     let coldCount = 0;
-                    // shift → { total, byTo: {status→count} }
-                    const shiftRich = { tm: { shift:'tm', total:0, byTo:{} }, tt: { shift:'tt', total:0, byTo:{} }, tn: { shift:'tn', total:0, byTo:{} } };
-
-                    for (let i = 0; i < contacts.length; i++) {
-                        const c = contacts[i];
-                        if (c.lastEditedAt) {
-                            const editTs = new Date(c.lastEditedAt).getTime();
-                            const editShift = getLocalCompetitionShift(new Date(c.lastEditedAt));
-                            // Incluir en "editedToday" si fue editado hoy (desde medianoche) o en TN de esta noche (desde ayer 22:00)
-                            const inTodayWindow = editTs >= midnightMs;
-                            const inTNWindow = editShift === 'tn' && editTs >= lastNightStartMs;
-                            if (inTodayWindow || inTNWindow) {
-                                editedToday++;
-                                if (shiftRich[editShift]) {
-                                    shiftRich[editShift].total++;
-                                    const st = c.status || 'sin revisar';
-                                    shiftRich[editShift].byTo[st] = (shiftRich[editShift].byTo[st] || 0) + 1;
-                                }
-                            }
-                        }
+                    for (const c of contacts) {
                         if (c.ops?.lastCargaAt && new Date(c.ops.lastCargaAt).getTime() < oneMonthAgo) coldCount++;
                     }
 
+                    // Transiciones 24h (global, para KPI)
+                    const h24ago = now.getTime() - 86400000;
                     const transitions24h = (AppState.statusTransitions || []).filter(t => t.at && new Date(t.at).getTime() >= h24ago).length;
-                    const sorted = Object.values(shiftRich).sort((a, b) => {
-                        if (a.shift === currentShift) return -1;
-                        if (b.shift === currentShift) return 1;
-                        return b.total - a.total;
-                    });
-                    const topEntry = sorted[0];
-                    const topShift = topEntry && topEntry.total > 0 ? topEntry.shift.toUpperCase() : '-';
 
-                    safeSet('metricEditedToday', editedToday);
+                    // Clasifica timestamp en operDay+shift usando la misma lógica que NM.classifyTs
+                    const classifyNexoTs = (tsIso) => {
+                        try {
+                            const c = NM.classifyTs(new Date(tsIso).getTime());
+                            return { operDay: c.operDay, shift: c.shift };
+                        } catch (_) { return null; }
+                    };
+
+                    // Nexo actions del viewOD agrupadas por turno: SOLO acciones intencionales del usuario
+                    // (transiciones de estado + revisiones). NO lastEditedAt — ese se dispara con cualquier
+                    // touch del sistema (imports, merges) y produce conteos falsos inflados.
+                    const nexoByShift = { tm: { transitions: 0, reviews: 0, contactsTouched: new Set() }, tt: { transitions: 0, reviews: 0, contactsTouched: new Set() }, tn: { transitions: 0, reviews: 0, contactsTouched: new Set() } };
+
+                    // Transiciones de estado (cambios manuales)
+                    for (const t of (AppState.statusTransitions || [])) {
+                        if (!t.at) continue;
+                        const cls = classifyNexoTs(t.at);
+                        if (!cls || cls.operDay !== viewOD) continue;
+                        if (!nexoByShift[cls.shift]) continue;
+                        nexoByShift[cls.shift].transitions++;
+                        if (t.contactId) nexoByShift[cls.shift].contactsTouched.add(t.contactId);
+                    }
+
+                    // Revisiones (marcado manual de "revisado")
+                    for (const c of contacts) {
+                        if (c.shiftReviewedAt) {
+                            const cls = classifyNexoTs(c.shiftReviewedAt);
+                            if (cls && cls.operDay === viewOD && nexoByShift[cls.shift]) {
+                                nexoByShift[cls.shift].reviews++;
+                                nexoByShift[cls.shift].contactsTouched.add(c.id);
+                            }
+                        }
+                    }
+
+                    // Los 3 turnos del día seleccionado: TM / TT / TN
+                    const shiftEmoji = { tm: '🌅', tt: '☀️', tn: '🌙' };
+                    const shiftLabel = { tm: 'TM 06-14', tt: 'TT 14-22', tn: 'TN 22-06' };
+                    const blocks = ['tm', 'tt', 'tn'].map(sh => {
+                        const q = NM.query({ operDay: viewOD, shift: sh });
+                        const nx = nexoByShift[sh];
+                        const nexoActions = nx.transitions + nx.reviews;
+                        return { sh, operDay: viewOD, q, nx, nexoActions };
+                    });
+
+                    // KPIs
+                    const totalCargas = blocks.reduce((a, b) => a + b.q.cargas, 0);
+                    const totalNexoActions = blocks.reduce((a, b) => a + b.nexoActions, 0);
+                    // "Acciones hoy" = lo que hiciste en Nexo (prioridad) o cargas CSV si no hay Nexo
+                    const accionesHoy = totalNexoActions || totalCargas;
+                    // Turno líder: el que tenga más actividad combinada (Nexo + CSV)
+                    const topBlock = [...blocks].sort((a, b) => (b.nexoActions + b.q.cargas) - (a.nexoActions + a.q.cargas))[0];
+                    const topShift = (topBlock?.nexoActions + topBlock?.q.cargas) > 0 ? topBlock.sh.toUpperCase() : '-';
+                    const volTotal = blocks.reduce((a, b) => a + b.q.volumenCargas, 0);
+                    const retirosTotal = blocks.reduce((a, b) => a + b.q.retiros, 0);
+                    const volRetirosTotal = blocks.reduce((a, b) => a + (b.q.volumenRetiros || 0), 0);
+
+                    safeSet('metricEditedToday', accionesHoy);
                     safeSet('metricTransitions24h', transitions24h);
                     safeSet('metricTopShift', topShift);
                     safeSet('metricButtonsPerHour', coldCount);
 
-                    // Renderizar cards de turnos
+                    // Cards de turno — los 3 bloques, actual primero con ★
                     const bdEl = document.getElementById('metricShiftBreakdown');
                     const rkEl = document.getElementById('metricShiftRanking');
+
+                    const dayViewLabel = viewOD === todayOD ? 'hoy' : 'ayer';
+
                     if (bdEl) {
-                        const cards = sorted.map(row => {
-                            const topStates = Object.entries(row.byTo).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([st,n])=>`${st}: ${n}`).join(' · ');
-                            const isCurrent = row.shift === currentShift;
-                            return `<div class="metrics-card${isCurrent ? ' metrics-card-active' : ''}">` +
-                                `<div class="k">${row.shift.toUpperCase()}${isCurrent ? ' ★' : ''} · ${row.total} contactos</div>` +
-                                `<div class="v">${row.total}</div>` +
-                                `<div class="k">${topStates || 'Sin actividad hoy'}</div></div>`;
+                        const cards = blocks.map(({ sh, q, nx, nexoActions }) => {
+                            const isCurrent = sh === currentShift && viewOD === todayOD;
+                            // Número principal: prioriza Nexo actions; si no hay, muestra cargas
+                            const mainNum = nexoActions > 0 ? nexoActions : q.cargas;
+                            const mainLbl = nexoActions > 0 ? (q.cargas > 0 ? `${nexoActions} nexo · ${q.cargas} cargas` : `acciones Nexo`) : (q.cargas > 0 ? 'cargas CSV' : 'sin actividad');
+                            // Detalle Nexo
+                            const nexoDetail = [];
+                            if (nx.transitions) nexoDetail.push(`${nx.transitions} transiciones`);
+                            if (nx.reviews) nexoDetail.push(`${nx.reviews} revisiones`);
+                            // Detalle CSV
+                            const csvDetail = [];
+                            if (q.cargas > 0) csvDetail.push(`$${Math.round(q.volumenCargas).toLocaleString('es-AR')} cargado`);
+                            if (q.retiros > 0) csvDetail.push(`${q.retiros} retiros · $${Math.round(q.volumenRetiros || 0).toLocaleString('es-AR')}`);
+                            if (q.uniqueAliases > 0) csvDetail.push(`${q.uniqueAliases} jugadores`);
+                            const allDetails = [...nexoDetail, ...csvDetail].join(' · ') || 'Sin actividad';
+                            return `<div class="metrics-card${isCurrent ? ' metrics-card-active' : ''}">
+                                <div class="k">${shiftEmoji[sh]} ${shiftLabel[sh]}${isCurrent ? ' ★' : ''}</div>
+                                <div class="v">${mainNum}</div>
+                                <div class="k" style="font-size:.68rem;opacity:.7;">${mainLbl}</div>
+                                <div class="k" style="margin-top:4px;">${allDetails}</div>
+                            </div>`;
                         });
-                        bdEl.innerHTML = cards.join('') || '<div style="color:var(--text-secondary)">Sin actividad registrada hoy.</div>';
+                        bdEl.innerHTML = cards.join('');
                     }
+
                     if (rkEl) {
-                        if (!sorted.some(r => r.total > 0)) {
-                            rkEl.innerHTML = '<div style="color:var(--text-secondary)">Sin ranking de turnos hoy.</div>';
+                        const sorted = [...blocks].sort((a, b) => (b.nexoActions + b.q.cargas) - (a.nexoActions + a.q.cargas));
+                        const hasActivity = sorted.some(b => (b.nexoActions + b.q.cargas) > 0);
+                        if (!hasActivity) {
+                            rkEl.innerHTML = `<div style="color:var(--text-secondary)">Sin actividad en ${dayViewLabel}.</div>`;
                         } else {
-                            const lines = sorted.map((r, idx) => {
-                                const topStates = Object.entries(r.byTo).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([st,n])=>`${st} ${n}`).join(', ');
-                                return `${idx+1}º ${r.shift.toUpperCase()} ${r.total} contactos${topStates ? ` — ${topStates}` : ''}${r.shift === currentShift ? ' ← actual' : ''}`;
+                            // Header: turno líder con resumen global de Nexo + CSV del día
+                            const headerBits = [];
+                            if (totalNexoActions > 0) headerBits.push(`${totalNexoActions} acciones Nexo`);
+                            if (totalCargas > 0) headerBits.push(`${totalCargas} cargas · $${Math.round(volTotal).toLocaleString('es-AR')}`);
+                            if (retirosTotal > 0) headerBits.push(`${retirosTotal} retiros · $${Math.round(volRetirosTotal).toLocaleString('es-AR')}`);
+                            const topCombo = sorted[0].nexoActions + sorted[0].q.cargas;
+                            const lines = sorted.map((b, idx) => {
+                                const isCur = b.sh === currentShift && viewOD === todayOD ? ' ← actual' : '';
+                                const bits = [];
+                                if (b.nexoActions) bits.push(`${b.nexoActions} acciones`);
+                                if (b.q.cargas) bits.push(`${b.q.cargas} cargas`);
+                                if (b.q.retiros) bits.push(`${b.q.retiros} retiros`);
+                                if (b.q.uniqueAliases) bits.push(`${b.q.uniqueAliases} jugadores`);
+                                return `${idx+1}º ${shiftEmoji[b.sh]} ${b.sh.toUpperCase()}: ${bits.join(' · ') || 'sin datos'}${isCur}`;
                             });
-                            rkEl.innerHTML = `<div><strong>${sorted[0].shift.toUpperCase()} 1er puesto:</strong> ${sorted[0].total} contactos</div>` +
-                                `<div style="margin-top:6px">${lines.join('<br>')}</div>`;
+                            rkEl.innerHTML = `<div style="font-weight:700;margin-bottom:6px;">${shiftEmoji[sorted[0].sh]} ${sorted[0].sh.toUpperCase()} líder ${dayViewLabel}: ${topCombo} total · ${headerBits.join(' · ')}</div>` +
+                                `<div style="font-size:.82rem;color:var(--text-secondary);">${lines.join('<br>')}</div>`;
                         }
                     }
                 } catch (err) {
@@ -6244,132 +6466,187 @@
                 const summaryBar = document.getElementById('metricsHistorySummary');
                 if (!container) return;
 
-                // Construir eventos desde opsGranular (datos reales del CSV)
-                const pid = AppState.activeProfileId || 'default';
-                const opsProfiles = AppState.opsProfiles || {};
-                const builtEvents = [];
-
-                for (const alias in opsProfiles) {
-                    const profile = opsProfiles[alias];
-                    if ((profile.profileId || 'default') !== pid) continue;
-                    const granular = profile.opsGranular || [];
-                    for (const op of granular) {
-                        builtEvents.push({
-                            type: 'operation',
-                            at: op.ts,
-                            alias: alias,
-                            amount: op.amount,
-                            shift: op.shift
-                        });
-                    }
+                const NM = window.NexoMetrics;
+                if (!NM) {
+                    container.innerHTML = '<div style="color:#ef4444;font-size:.85rem;">NexoMetrics no disponible.</div>';
+                    return;
                 }
 
-                // Fallback a metricEvents si no hay opsGranular
-                const events = builtEvents.length ? builtEvents : (AppState.metricEvents || []);
+                // Construir rango de días operativos según el filtro
+                const now = new Date();
+                let fromOD, toOD;
 
-                if (!events.length) {
-                    container.innerHTML = '<div style="color:var(--text-secondary);font-size:.85rem;">No hay actividad registrada aún.</div>';
+                if (currentMetricsFilter === 'today') {
+                    fromOD = toOD = NM.getOperDayForNow();
+                } else if (currentMetricsFilter === 'yesterday') {
+                    fromOD = toOD = NM.operDayOffset(1);
+                } else if (currentMetricsFilter === 'dayBefore') {
+                    fromOD = toOD = NM.operDayOffset(2);
+                } else if (currentMetricsFilter === 'week') {
+                    fromOD = NM.operDayOffset(6);
+                    toOD = NM.getOperDayForNow();
+                } else if (currentMetricsFilter === 'month') {
+                    fromOD = NM.operDayOffset(29);
+                    toOD = NM.getOperDayForNow();
+                } else if (currentMetricsFilter === 'custom') {
+                    const fromEl = document.getElementById('customFromDate');
+                    const toEl = document.getElementById('customToDate');
+                    fromOD = fromEl?.value || NM.operDayOffset(6);
+                    toOD = toEl?.value || NM.getOperDayForNow();
+                } else {
+                    fromOD = NM.operDayOffset(6);
+                    toOD = NM.getOperDayForNow();
+                }
+
+                const filters = {
+                    fromOperDay: fromOD,
+                    toOperDay: toOD,
+                    includeItems: true,
+                    itemsLimit: 100000
+                };
+                if (currentMetricsShift !== 'all') filters.shift = currentMetricsShift;
+
+                const qResult = NM.query(filters);
+                const items = qResult.items || [];
+
+                if (!items.length) {
+                    container.innerHTML = '<div style="color:var(--text-secondary);font-size:.85rem;">No hay operaciones en el período seleccionado.</div>';
                     if (summaryBar) summaryBar.style.display = 'none';
                     return;
                 }
 
-                // Calculate date range based on filter
-                const now = new Date();
-                let fromDate, toDate;
-                
-                if (currentMetricsFilter === 'today') {
-                    fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-                } else if (currentMetricsFilter === 'yesterday') {
-                    fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-                    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                } else if (currentMetricsFilter === 'dayBefore') {
-                    fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2);
-                    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-                } else if (currentMetricsFilter === 'week') {
-                    fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
-                    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-                } else if (currentMetricsFilter === 'month') {
-                    fromDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-                    toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-                } else if (currentMetricsFilter === 'custom') {
-                    const fromEl = document.getElementById('customFromDate');
-                    const toEl = document.getElementById('customToDate');
-                    if (fromEl?.value) fromDate = new Date(fromEl.value + 'T00:00:00');
-                    if (toEl?.value) toDate = new Date(toEl.value + 'T23:59:59');
-                }
-
-                // Filter events by date range — usar 'at' (campo real del evento) con fallback a 'timestamp'
-                const filtered = events.filter(e => {
-                    const ts = e.at || e.timestamp;
-                    if (!ts) return false;
-                    const eventDate = new Date(ts);
-                    if (Number.isNaN(eventDate.getTime())) return false;
-                    if (!(!fromDate || eventDate >= fromDate) || !(!toDate || eventDate <= toDate)) return false;
-                    // Filtrar por turno si hay uno seleccionado
-                    if (currentMetricsShift !== 'all' && e.shift && e.shift !== currentMetricsShift) return false;
-                    return true;
-                });
-
-                // Group by day
-                const byDay = {};
-                filtered.forEach(e => {
-                    try {
-                        const dt = new Date(e.at || e.timestamp);
-                        if (Number.isNaN(dt.getTime())) return;
-                        const day = dt.toISOString().split('T')[0];
-                        if (!byDay[day]) byDay[day] = [];
-                        byDay[day].push(e);
-                    } catch (_) {}
-                });
-
-                // Summary
-                if (summaryBar) {
-                    if (filtered.length) {
-                        const actionTypes = {};
-                        filtered.forEach(e => {
-                            actionTypes[e.type] = (actionTypes[e.type] || 0) + 1;
-                        });
-                        const topActions = Object.entries(actionTypes).sort((a, b) => b[1] - a[1]).slice(0, 4)
-                            .map(([type, count]) => `<span style="font-weight:600;">${type}</span>: ${count}`).join(' · ');
-                        summaryBar.innerHTML = `<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-                            <span><i class="fas fa-calendar"></i> <strong>${Object.keys(byDay).length}</strong> días</span>
-                            <span><i class="fas fa-bolt"></i> <strong>${filtered.length}</strong> acciones</span>
-                        </div>${topActions ? `<div style="margin-top:6px;color:var(--text-secondary);font-size:.82rem;">${topActions}</div>` : ''}`;
-                        summaryBar.style.display = 'block';
-                    } else {
-                        summaryBar.style.display = 'none';
+                // Para detectar usuarios nuevos por día necesitamos saber el firstSeen
+                // global de cada alias (no solo en el rango filtrado).
+                // Usamos todos los opsProfiles disponibles.
+                const firstSeenByAlias = {};
+                const allProfiles = AppState.opsProfiles || {};
+                for (const alias of Object.keys(allProfiles)) {
+                    const g = allProfiles[alias].opsGranular || [];
+                    for (const op of g) {
+                        const cls = NM.classifyTs(op.ts, op.shift, op.date);
+                        if (!cls) continue;
+                        if (!firstSeenByAlias[alias] || cls.operDay < firstSeenByAlias[alias]) {
+                            firstSeenByAlias[alias] = cls.operDay;
+                        }
                     }
                 }
 
-                if (!Object.keys(byDay).length) {
-                    container.innerHTML = '<div style="color:var(--text-secondary);font-size:.85rem;">No hay actividad en el período seleccionado.</div>';
-                    return;
+                // Agrupar items por día operativo
+                const byOD = {};
+                for (const it of items) {
+                    if (!byOD[it.operDay]) byOD[it.operDay] = {
+                        cargas: 0, retiros: 0, volumenCargas: 0, volumenRetiros: 0,
+                        byShift: { tm: 0, tt: 0, tn: 0 },
+                        byShiftVol: { tm: 0, tt: 0, tn: 0 },
+                        uniqueAliases: new Set(),
+                        newAliases: new Set(),
+                        ops: []
+                    };
+                    const d = byOD[it.operDay];
+                    if (it.amount > 0) {
+                        d.cargas++;
+                        d.volumenCargas += it.amount;
+                        d.byShift[it.shift]++;
+                        d.byShiftVol[it.shift] = (d.byShiftVol[it.shift] || 0) + it.amount;
+                    } else if (it.amount < 0) {
+                        d.retiros++;
+                        d.volumenRetiros += Math.abs(it.amount);
+                    }
+                    d.uniqueAliases.add(it.alias);
+                    if (firstSeenByAlias[it.alias] === it.operDay) d.newAliases.add(it.alias);
+                    d.ops.push(it);
                 }
 
-                // Render days
-                const dayEntries = Object.entries(byDay).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 30);
-                const rows = dayEntries.map(([day, dayEvents]) => {
-                    const date = new Date(day + 'T12:00:00');
-                    const dayStr = date.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' });
-                    
-                    const actionsByType = {};
-                    dayEvents.forEach(e => {
-                        actionsByType[e.type] = (actionsByType[e.type] || 0) + 1;
-                    });
-                    
-                    const topActions = Object.entries(actionsByType).sort((a, b) => b[1] - a[1]).slice(0, 5)
-                        .map(([type, count]) => `${type}: ${count}`).join(' · ');
-                    
-                    return `<div style="background:rgba(30,41,59,.6);border:1px solid rgba(148,163,184,.15);border-radius:10px;padding:10px 12px;font-size:.83rem;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                            <span style="font-weight:700;">${dayStr}</span>
-                            <span style="color:var(--text-secondary);font-size:.78rem;">${dayEvents.length} acciones</span>
+                // Summary bar
+                if (summaryBar) {
+                    const bs = qResult.byShift;
+                    const volStr = qResult.volumenCargas > 0 ? ` · <strong>$${Math.round(qResult.volumenCargas).toLocaleString('es-AR')}</strong>` : '';
+                    summaryBar.innerHTML = `<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center;">
+                        <span><strong>${Object.keys(byOD).length}</strong> días · <strong>${qResult.cargas}</strong> cargas${volStr}</span>
+                        <span style="color:var(--text-secondary);font-size:.8rem;">🌅 TM:${bs.tm} ☀️ TT:${bs.tt} 🌙 TN:${bs.tn} · ${qResult.uniqueAliases} jugadores</span>
+                    </div>`;
+                    summaryBar.style.display = 'block';
+                }
+
+                // Render días operativos — más reciente primero, con desplegable
+                const shiftEmoji = { tm: '🌅', tt: '☀️', tn: '🌙' };
+                const shiftColor = { tm: '#fbbf24', tt: '#f97316', tn: '#a78bfa' };
+                const fmtMoney = v => '$' + Math.round(v).toLocaleString('es-AR');
+                const dayEntries = Object.entries(byOD).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 60);
+
+                const rows = dayEntries.map(([od, d]) => {
+                    const date = new Date(od + 'T12:00:00');
+                    const dayStr = date.toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: '2-digit' });
+                    const uniqueCount = d.uniqueAliases.size;
+                    const newCount = d.newAliases.size;
+                    const volStr = d.volumenCargas > 0 ? ` · <span style="color:#a78bfa;font-weight:700;">${fmtMoney(d.volumenCargas)}</span>` : '';
+
+                    // ¿Día incompleto? Si solo hay datos de 1 o 2 turnos y los otros son 0,
+                    // probablemente el CSV cubría parte del día.
+                    const turnosConData = ['tm','tt','tn'].filter(s => d.byShift[s] > 0).length;
+                    const incompleteTag = turnosConData < 3
+                        ? `<span style="background:rgba(251,191,36,.15);color:#fbbf24;font-size:.7rem;padding:1px 6px;border-radius:4px;margin-left:6px;">⚠️ ${turnosConData}/3 turnos</span>`
+                        : `<span style="background:rgba(34,197,94,.1);color:#22c55e;font-size:.7rem;padding:1px 6px;border-radius:4px;margin-left:6px;">✓ completo</span>`;
+
+                    // Resumen compacto visible siempre
+                    const shiftBars = ['tm','tt','tn'].map(s => {
+                        const cnt = d.byShift[s];
+                        const vol = d.byShiftVol[s];
+                        if (!cnt) return `<span style="color:rgba(148,163,184,.3);font-size:.76rem;">${shiftEmoji[s]} 0</span>`;
+                        const volTxt = vol > 0 ? ` <span style="color:#a78bfa;font-size:.72rem;">${fmtMoney(vol)}</span>` : '';
+                        return `<span style="color:${shiftColor[s]};font-size:.76rem;font-weight:700;">${shiftEmoji[s]} ${cnt}${volTxt}</span>`;
+                    }).join('<span style="color:rgba(148,163,184,.2);margin:0 4px;">|</span>');
+
+                    // Detalle expandido: top 10 jugadores por volumen del día
+                    const aliasTotals = {};
+                    for (const it of d.ops) {
+                        if (it.amount <= 0) continue;
+                        if (!aliasTotals[it.alias]) aliasTotals[it.alias] = { cargas: 0, vol: 0, isNew: d.newAliases.has(it.alias) };
+                        aliasTotals[it.alias].cargas++;
+                        aliasTotals[it.alias].vol += it.amount;
+                    }
+                    const topAliases = Object.entries(aliasTotals)
+                        .sort((a, b) => b[1].vol - a[1].vol)
+                        .slice(0, 10);
+
+                    const aliasRows = topAliases.map(([alias, info]) => {
+                        const newBadge = info.isNew ? '<span style="background:rgba(34,197,94,.2);color:#22c55e;font-size:.68rem;padding:0 4px;border-radius:3px;margin-left:4px;">NUEVO</span>' : '';
+                        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid rgba(148,163,184,.07);">
+                            <span style="color:#e2e8f0;font-size:.8rem;">${alias}${newBadge}</span>
+                            <span style="color:var(--text-secondary);font-size:.78rem;">${info.cargas} cargas · <span style="color:#a78bfa;">${fmtMoney(info.vol)}</span></span>
+                        </div>`;
+                    }).join('');
+
+                    const moreCount = Object.keys(aliasTotals).length - topAliases.length;
+                    const moreRow = moreCount > 0
+                        ? `<div style="color:var(--text-secondary);font-size:.75rem;margin-top:4px;">...y ${moreCount} jugadores más</div>`
+                        : '';
+
+                    const detailId = `od_detail_${od.replace(/-/g, '')}`;
+
+                    return `<div style="background:rgba(30,41,59,.6);border:1px solid rgba(148,163,184,.15);border-radius:10px;overflow:hidden;">
+                        <div style="padding:10px 12px;cursor:pointer;" onclick="const d=document.getElementById('${detailId}');d.style.display=d.style.display==='none'?'block':'none';">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                <span style="font-weight:700;text-transform:capitalize;font-size:.85rem;">${dayStr}${incompleteTag}</span>
+                                <span style="color:#22c55e;font-weight:700;font-size:.85rem;">${d.cargas} cargas${volStr}</span>
+                            </div>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                ${shiftBars}
+                                <span style="color:var(--text-secondary);font-size:.76rem;">· ${uniqueCount} jugadores</span>
+                                ${newCount > 0 ? `<span style="color:#22c55e;font-size:.76rem;">· +${newCount} nuevos</span>` : ''}
+                                ${d.retiros ? `<span style="color:#f87171;font-size:.76rem;">· ${d.retiros} retiros</span>` : ''}
+                                <span style="margin-left:auto;color:var(--text-secondary);font-size:.72rem;">▼ ver detalle</span>
+                            </div>
                         </div>
-                        <div style="color:var(--text-secondary);font-size:.8rem;">${topActions || 'sin actividad'}</div>
+                        <div id="${detailId}" style="display:none;padding:0 12px 10px 12px;border-top:1px solid rgba(148,163,184,.1);">
+                            <div style="margin-top:8px;margin-bottom:6px;font-size:.75rem;color:var(--text-secondary);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Top jugadores por volumen</div>
+                            ${aliasRows || '<div style="color:var(--text-secondary);font-size:.8rem;">Sin datos de cargas.</div>'}
+                            ${moreRow}
+                            ${d.retiros ? `<div style="margin-top:8px;font-size:.78rem;color:#f87171;">${d.retiros} retiros · ${fmtMoney(d.volumenRetiros)} retirado</div>` : ''}
+                        </div>
                     </div>`;
                 }).join('');
-                
+
                 container.innerHTML = rows;
             };
 
@@ -6378,13 +6655,18 @@
 
             window.setMetricsShift = (shift) => {
                 currentMetricsShift = shift || 'all';
-                // Update pills visual
+                // Pills del tab Operador
+                const opMap = { tm: 'metricsShiftMorningBtn', tt: 'metricsShiftAfternoonBtn', tn: 'metricsShiftNightBtn', all: 'metricsShiftResetBtn' };
                 ['metricsShiftMorningBtn','metricsShiftAfternoonBtn','metricsShiftNightBtn','metricsShiftResetBtn'].forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) el.classList.remove('active');
+                    document.getElementById(id)?.classList.remove('active');
                 });
-                const map = { tm: 'metricsShiftMorningBtn', tt: 'metricsShiftAfternoonBtn', tn: 'metricsShiftNightBtn', all: 'metricsShiftResetBtn' };
-                if (map[currentMetricsShift]) document.getElementById(map[currentMetricsShift])?.classList.add('active');
+                document.getElementById(opMap[currentMetricsShift] || 'metricsShiftResetBtn')?.classList.add('active');
+                // Pills del tab Superior
+                const supMap = { tm: 'supShiftMorningBtn', tt: 'supShiftAfternoonBtn', tn: 'supShiftNightBtn', all: 'supShiftAllBtn' };
+                ['supShiftMorningBtn','supShiftAfternoonBtn','supShiftNightBtn','supShiftAllBtn'].forEach(id => {
+                    document.getElementById(id)?.classList.remove('active');
+                });
+                document.getElementById(supMap[currentMetricsShift] || 'supShiftAllBtn')?.classList.add('active');
                 window.renderMetricsHistory();
             };
 
@@ -6662,6 +6944,7 @@
                 // Resetear índice al guardar nuevos templates
                 AppState.whatsappTemplateIdx = 0;
             }
+            window.reloadWhatsAppTemplates = reloadWhatsAppTemplates;
 
             // ── Sistema de Múltiples Mensajes de WhatsApp ──
             function initWhatsAppMessagesData() {
@@ -7722,6 +8005,16 @@
                     lastStorageDiagAt = Date.now();
                     refreshStorageDiagnostics();
                 }
+                // Limpieza automática al arrancar: contactos sin ops en >30 días → sin revisar.
+                // Corre una sola vez por boot, con delay para no bloquear el render inicial.
+                setTimeout(async () => {
+                    try {
+                        if (typeof window.cleanupStaleStatuses === 'function') {
+                            const n = await window.cleanupStaleStatuses();
+                            if (n > 0) console.log(`[BOOT] Limpieza automática: ${n} contactos → sin revisar`);
+                        }
+                    } catch (e) { console.warn('[BOOT] cleanupStaleStatuses falló', e); }
+                }, 2500);
                 updateExportUrgencyBadge();
                 setInterval(() => { if (AppState.contacts.length) render(); else updateExportUrgencyBadge(); }, 300000);
                 setInterval(() => { refreshStorageDiagnostics(); }, 45000);
