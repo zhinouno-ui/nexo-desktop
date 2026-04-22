@@ -16,7 +16,8 @@ contextBridge.exposeInMainWorld('nexoStore', {
 
 // Shadow Logging — telemetría silenciosa de acciones
 contextBridge.exposeInMainWorld('telemetry', {
-  logActivity: (payload) => ipcRenderer.invoke('store:logActivity', payload || {})
+  logActivity: (payload) => ipcRenderer.invoke('store:logActivity', payload || {}),
+  logActivityBatch: (payload) => ipcRenderer.invoke('store:logActivityBatch', payload || {})
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {

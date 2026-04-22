@@ -247,7 +247,8 @@
       mode.queue.splice(mode.cursor, 1);
       persistShiftModeMemory();
       renderQuickReview();
-      actions().renderShiftsView?.();
+      // renderShiftsView() se saca del hot path: es un full-scan de 3 turnos.
+      // La tarjeta visible por detrás se refrescará por inactividad (30s).
     }, 130);
   }
 

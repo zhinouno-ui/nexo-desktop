@@ -1924,27 +1924,24 @@ function rotateActivityLogIfNeeded(logPath) {
   }
 }
 
-function appendActivity(profileId, line) {
+async function appendActivityAsync(profileId, chunk) {
   const logPath = getActivityLogPath(profileId);
   const dir = path.dirname(logPath);
-  if (!fssync.existsSync(dir)) fssync.mkdirSync(dir, { recursive: true });
+  if (!fssync.existsSync(dir)) await fs.mkdir(dir, { recursive: true });
   rotateActivityLogIfNeeded(logPath);
-  fssync.appendFileSync(logPath, line + '\n', 'utf8');
+  await fs.appendFile(logPath, chunk, 'utf8');
 }
 
-ipcMain.handle('store:logActivity', async (_event, payload) => {
-  try {
-    const profileId = String(payload?.profileId || 'default');
-    const now = new Date();
-    const ts = now.toISOString();
-    // Validate timestamp isn't garbage
-    if (payload?.timestamp) {
-      const parsed = new Date(payload.timestamp);
-      if (!Number.isNaN(parsed.getTime())) {
-        // use provided timestamp if valid
-      }
-    }
-    const entry = {
+function buildActivityEntry(payload) {
+  const profileId = String(payload?.profileId || 'default');
+  let ts = new Date().toISOString();
+  if (payload?.timestamp) {
+    const parsed = new Date(payload.timestamp);
+    if (!Number.isNaN(parsed.getTime())) ts = parsed.toISOString();
+  }
+  return {
+    profileId,
+    entry: {
       timestamp: ts,
       profileId,
       action: String(payload?.action || 'unknown'),
@@ -1952,11 +1949,37 @@ ipcMain.handle('store:logActivity', async (_event, payload) => {
       from: payload?.from || null,
       to: payload?.to || null,
       shift: payload?.shift || null
-    };
-    appendActivity(profileId, JSON.stringify(entry));
+    }
+  };
+}
+
+ipcMain.handle('store:logActivity', async (_event, payload) => {
+  try {
+    const { profileId, entry } = buildActivityEntry(payload);
+    await appendActivityAsync(profileId, JSON.stringify(entry) + '\n');
     return { ok: true };
   } catch (err) {
     console.error('[SHADOW-LOG] Error:', err.message);
+    return { ok: false, message: err.message };
+  }
+});
+
+ipcMain.handle('store:logActivityBatch', async (_event, payload) => {
+  try {
+    const events = Array.isArray(payload?.events) ? payload.events : [];
+    if (!events.length) return { ok: true, count: 0 };
+    const byProfile = new Map();
+    for (const raw of events) {
+      const { profileId, entry } = buildActivityEntry(raw);
+      if (!byProfile.has(profileId)) byProfile.set(profileId, []);
+      byProfile.get(profileId).push(JSON.stringify(entry));
+    }
+    for (const [profileId, lines] of byProfile) {
+      await appendActivityAsync(profileId, lines.join('\n') + '\n');
+    }
+    return { ok: true, count: events.length };
+  } catch (err) {
+    console.error('[SHADOW-LOG] Batch error:', err.message);
     return { ok: false, message: err.message };
   }
 });

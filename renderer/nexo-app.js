@@ -1402,13 +1402,15 @@
             if (auxSaveTimer) clearTimeout(auxSaveTimer);
             auxSaveTimer = setTimeout(() => {
                 auxSaveTimer = null;
-                try {
-                    localStorage.setItem(`buttonPressEvents:${AppState.activeProfileId||'default'}`, JSON.stringify((AppState.buttonPressEvents || []).slice(0, 20000)));
-                    localStorage.setItem(`statusTransitions:${AppState.activeProfileId||'default'}`, JSON.stringify((AppState.statusTransitions || []).slice(0, 5000)));
-                    localStorage.setItem(`contactsHistory:${AppState.activeProfileId||'default'}`, JSON.stringify(AppState.history || []));
-                } catch (e) {
-                    reportError('queueAuxStorageSave', e);
-                }
+                withPerfStage('save-aux', () => {
+                    try {
+                        localStorage.setItem(`buttonPressEvents:${AppState.activeProfileId||'default'}`, JSON.stringify((AppState.buttonPressEvents || []).slice(0, 20000)));
+                        localStorage.setItem(`statusTransitions:${AppState.activeProfileId||'default'}`, JSON.stringify((AppState.statusTransitions || []).slice(0, 5000)));
+                        localStorage.setItem(`contactsHistory:${AppState.activeProfileId||'default'}`, JSON.stringify(AppState.history || []));
+                    } catch (e) {
+                        reportError('queueAuxStorageSave', e);
+                    }
+                });
             }, AppState.perfDebug ? 1400 : 2400);
         }
 
@@ -2469,7 +2471,7 @@
 
         async function refreshStorageDiagnostics() {
             try {
-                const usageBytes = (() => {
+                const usageBytes = withPerfStage('storage-scan', () => {
                     let total = 0;
                     for (let i = 0; i < localStorage.length; i++) {
                         const key = localStorage.key(i) || '';
@@ -2477,7 +2479,7 @@
                         total += (key.length + val.length) * 2;
                     }
                     return total;
-                })();
+                });
 
                 let quotaBytes = 5 * 1024 * 1024;
                 if (navigator.storage && typeof navigator.storage.estimate === 'function') {
@@ -2548,22 +2550,24 @@
             if (!contactsDirty || contactsFlushInFlight) return;
             contactsFlushInFlight = true;
             const startedAt = performance.now();
-            const safeContacts = sanitizeContactsForStorage(AppState.contacts);
+            const safeContacts = withPerfStage('save-sanitize', () => sanitizeContactsForStorage(AppState.contacts));
             AppState.currentPerfStage = 'save';
             try {
                 // Guardar en disco via IPC — fuente de verdad, no localStorage
                 const _saveProfileId = AppState.activeProfileId || 'default';
-                const _profileContacts = safeContacts.filter(c => (c.profileId || 'default') === _saveProfileId);
+                const _profileContacts = withPerfStage('save-filter', () => safeContacts.filter(c => (c.profileId || 'default') === _saveProfileId));
 
                 if (window.electronAPI?.saveProfile) {
                     // IPC directo al archivo de perfil en disco
+                    AppState.currentPerfStage = 'save-ipc';
                     await window.electronAPI.saveProfile({ profileId: _saveProfileId, contacts: _profileContacts });
+                    AppState.currentPerfStage = 'save';
                 } else if (window.nexoStore && typeof window.nexoStore.asyncSaveRequest === 'function') {
                     // Fallback legacy — manda solo los del perfil activo
                     window.nexoStore.asyncSaveRequest({ contactsData: _profileContacts });
                 }
-                manageAutomaticBackup();
-                maybeDownloadAutomaticBackup(`save:${reason}`);
+                withPerfStage('save-backup-manage', () => manageAutomaticBackup());
+                withPerfStage('save-backup-download', () => maybeDownloadAutomaticBackup(`save:${reason}`));
                 setSaveState('ok', `Guardado · ${AppState.contacts.length.toLocaleString()} contactos · ${new Date().toLocaleTimeString('es-ES')}`);
                 if (Date.now() - lastStorageDiagAt > 15000) {
                     lastStorageDiagAt = Date.now();
@@ -2609,9 +2613,12 @@
         }
 
         function saveLightweightData() {
+            return withPerfStage('save-lightweight', () => _saveLightweightDataInner());
+        }
+        function _saveLightweightDataInner() {
             try {
                 const profileId = AppState.activeProfileId || 'default';
-                
+
                 // MÉTRICAS TOTALES - no limitadas
                 localStorage.setItem(`metricEvents:${profileId}`, JSON.stringify(AppState.metricEvents || []));
                 
@@ -3417,6 +3424,7 @@
         }
 
         function checkShiftCompletion(progressPercentage, totals) {
+            if (AppState.perfDebug) return; // Modo rendimiento: sin overlay animado
             // Only check for completion if we have a reasonable amount of contacts
             if (totals.total < 10) return;
             
@@ -3686,10 +3694,9 @@
         // RENDIMIENTO EN TIEMPO REAL - Sin workers, sin giladas. Solo array loop.
 
         function renderShiftsView() {
-            // Importante: en vista Turnos no siempre se llama render() completo,
-            // así que actualizamos stats/progreso global acá también.
-            try { updateStats(); } catch (_) {}
-            assignShifts();
+            // assignShifts() y updateStats() NO se llaman acá: son full-scans
+            // costosos que solo corren al inicio (loadData) y en el interval de
+            // inactividad de 30s. Re-renderizar la vista no cambia asignaciones.
             const shifts = ['tm', 'tt', 'tn'];
             const shiftStats = shifts.map(shift => ({ shift, st: getShiftStats(shift), data: AppState.shiftMode[shift] }));
             const totals = shiftStats.reduce((acc, row) => {
@@ -3895,28 +3902,56 @@
             }
         };
 
+        // Coalesced: timer de render se reemplaza en cada llamada.
+        // YA NO dispara saveData — el save lo maneja scheduleStatusDeltaFlush
+        // (5s de inactividad) para evitar double-save por click.
+        let _fastRenderTimer = null;
         function scheduleFastBackgroundSave(source = 'common') {
-            setTimeout(() => {
-                try { saveData(); } catch (_) {}
-            }, 1200);
-            if (source === 'shift') {
-                // Renderizar solo la vista de turnos, pero sin perder stats/progreso global.
-                setTimeout(() => {
-                    try { updateStats(); } catch (_) {}
-                }, 250);
-                setTimeout(() => {
-                    try { renderShiftsView(); } catch (_) {}
-                }, 500);
-            } else {
-                setTimeout(() => {
+            if (source !== 'shift') {
+                if (_fastRenderTimer) clearTimeout(_fastRenderTimer);
+                _fastRenderTimer = setTimeout(() => {
+                    _fastRenderTimer = null;
                     try { render(); } catch (_) {}
                 }, 500);
             }
         }
 
+        // Shadow log buffer — acumula eventos y flushea tras 5s de inactividad.
+        // Evita un IPC + write a disco por cada click de copiar/cambiar estado.
+        const SHADOW_LOG_IDLE_MS = 5000;
+        const SHADOW_LOG_MAX_BUFFER = 500;
+        let shadowLogBuffer = [];
+        let shadowLogIdleTimer = null;
+
+        function flushShadowLog(reason = 'idle') {
+            if (shadowLogIdleTimer) { clearTimeout(shadowLogIdleTimer); shadowLogIdleTimer = null; }
+            if (!shadowLogBuffer.length) return;
+            const events = shadowLogBuffer;
+            shadowLogBuffer = [];
+            try {
+                window.telemetry?.logActivityBatch?.({ events }).catch?.(() => {});
+            } catch (_) {}
+        }
+
+        function enqueueShadowLog(event) {
+            if (!event) return;
+            shadowLogBuffer.push({ ...event, timestamp: event.timestamp || new Date().toISOString() });
+            if (shadowLogBuffer.length >= SHADOW_LOG_MAX_BUFFER) {
+                flushShadowLog('buffer-full');
+                return;
+            }
+            if (shadowLogIdleTimer) clearTimeout(shadowLogIdleTimer);
+            shadowLogIdleTimer = setTimeout(() => {
+                shadowLogIdleTimer = null;
+                flushShadowLog('idle-5s');
+            }, SHADOW_LOG_IDLE_MS);
+        }
+
+        window.flushShadowLog = flushShadowLog;
+
         window.copyToClipboard = (text, event) => {
             if (event) event.stopPropagation();
-            
+
             // Zero-lag: ejecución síncrona inmediata
             try {
                 // Método moderno y rápido
@@ -3935,10 +3970,10 @@
                 fallbackCopy(text);
             }
 
-            // Shadow log — fire & forget, no bloquea la UI
+            // Shadow log — bufferizado, flush tras 5s de inactividad
             try {
                 const shift = (typeof getLocalCompetitionShift === 'function') ? getLocalCompetitionShift(new Date()) : '';
-                window.telemetry?.logActivity?.({
+                enqueueShadowLog({
                     action: 'copyToClipboard',
                     profileId: AppState.activeProfileId || 'default',
                     contactId: text || null,
@@ -4041,7 +4076,7 @@
             if (AppState.statusTransitions.length > 5000) AppState.statusTransitions = AppState.statusTransitions.slice(0, 5000);
             AppState.buttonPressEvents.unshift({ at: eventAt, action: 'status-change', from: oldStatus, to: requestedStatus, shift: shiftByEvent || contact.shiftReviewedByShift || contact.assignedShift || '', profileId: contact.profileId || 'default', actor: AppState.operatorName || 'PC local' });
             if (AppState.buttonPressEvents.length > 20000) AppState.buttonPressEvents = AppState.buttonPressEvents.slice(0, 20000);
-            if (oldStatus === 'sin revisar' && requestedStatus !== 'sin revisar') {
+            if (!AppState.perfDebug && oldStatus === 'sin revisar' && requestedStatus !== 'sin revisar') {
                 try {
                     ensureReviewMilestonesState();
                     ensureMotivationWindow();
@@ -4061,9 +4096,9 @@
             enqueueStatusDelta(contact, oldStatus, requestedStatus, eventAt);
             scheduleFastBackgroundSave(source);
 
-            // Shadow log — fire & forget
+            // Shadow log — bufferizado, flush tras 5s de inactividad
             try {
-                window.telemetry?.logActivity?.({
+                enqueueShadowLog({
                     action: 'changeContactStatus',
                     profileId: contact.profileId || AppState.activeProfileId || 'default',
                     contactId: contact.id,
@@ -4220,6 +4255,9 @@
 
         let preferencesSaveTimer = null;
         function persistPreferencesNow() {
+            return withPerfStage('save-prefs', () => _persistPreferencesNowInner());
+        }
+        function _persistPreferencesNowInner() {
             try {
                 localStorage.setItem('whatsappTemplate', AppState.whatsappTemplate);
                 localStorage.setItem('whatsappTemplateIdx', String(AppState.whatsappTemplateIdx || 0));
@@ -4241,9 +4279,13 @@
                 localStorage.setItem('activeThemeId', AppState.activeThemeId || 'whaticket-blue');
                 localStorage.setItem('lightMode', AppState.lightMode ? '1' : '0');
                 localStorage.setItem('profilePageMap', JSON.stringify(AppState.profilePageMap || {}));
-                
-                // SEPARACIÓN ESTRICTA: Guardar contactos del perfil activo automáticamente
-                saveCurrentProfileContacts();
+
+                // saveCurrentProfileContacts() se removió de acá: con perfiles
+                // grandes (20k+ contactos) bloqueaba el main thread 3-4s por
+                // JSON.stringify + localStorage.setItem cada vez que se guardaba
+                // una preferencia (ej. tras cada recordMetricEvent). Los contactos
+                // ya se persisten via IPC a disco (saveDataImmediate) con su
+                // propio debounce — no hace falta el mirror en localStorage.
             } catch (e) {
                 console.error('Error al guardar preferencias:', e);
                 // Graceful degradation: try saving only essential preferences
@@ -5365,14 +5407,25 @@
                     AppState.perfDebug = !!e.target.checked;
                     document.body.classList.toggle('perf-mode', AppState.perfDebug);
                     localStorage.setItem('perfDebugMode', AppState.perfDebug ? '1' : '0');
-                    showNotification(AppState.perfDebug ? 'Modo rendimiento activado: animaciones y efectos mínimos' : 'Modo rendimiento desactivado', 'info');
+                    showNotification(AppState.perfDebug ? 'Modo rendimiento activado: animaciones, observers y tareas de fondo pesadas desactivadas' : 'Modo rendimiento desactivado', 'info');
                     updatePerfPanel();
+                    // Apagar/prender observer de long tasks al toggle.
+                    if (AppState.perfDebug) {
+                        if (typeof window.__stopPerfObserver === 'function') window.__stopPerfObserver();
+                    } else {
+                        if (typeof window.__startPerfObserver === 'function') window.__startPerfObserver();
+                    }
                 };
                 updatePerfPanel();
             }
-            if (window.PerformanceObserver) {
+            // PerformanceObserver: solo activo cuando se necesita diagnóstico.
+            // El propio observer y su updatePerfPanel son overhead que no queremos
+            // cargar en PCs lentas con modo rendimiento activado.
+            let _perfObserver = null;
+            function startPerfObserver() {
+                if (_perfObserver || !window.PerformanceObserver) return;
                 try {
-                    const po = new PerformanceObserver((list) => {
+                    _perfObserver = new PerformanceObserver((list) => {
                         const entries = list.getEntries() || [];
                         if (!entries.length) return;
                         AppState.perfStats.longTasks += entries.length;
@@ -5383,9 +5436,18 @@
                         AppState.perfStats.longTaskTop = top.slice(0, 8);
                         updatePerfPanel();
                     });
-                    po.observe({ entryTypes: ['longtask'] });
+                    _perfObserver.observe({ entryTypes: ['longtask'] });
                 } catch (_) {}
             }
+            function stopPerfObserver() {
+                if (!_perfObserver) return;
+                try { _perfObserver.disconnect(); } catch (_) {}
+                _perfObserver = null;
+            }
+            window.__startPerfObserver = startPerfObserver;
+            window.__stopPerfObserver = stopPerfObserver;
+            // Arranca solo si NO está el modo rendimiento (el panel lo usa para diagnóstico).
+            if (!AppState.perfDebug) startPerfObserver();
             if (elements.checkUpdatesOption && window.electronAPI?.checkForUpdates) {
                 elements.checkUpdatesOption.onclick = async () => {
                     elements.updateStatusText.textContent = 'Estado: buscando…';
@@ -7087,11 +7149,13 @@
                 if (window.nexoStore?.flushDeltas) window.nexoStore.flushDeltas('beforeunload').catch(() => {});
                 flushAuxStorageSave();
                 savePreferences(true);
+                flushShadowLog('beforeunload');
             });
 
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'hidden') {
                     hiddenAt = Date.now();
+                    flushShadowLog('visibility-hidden');
                     setTimeout(() => {
                         if (document.visibilityState === 'hidden' && contactsDirty && Date.now() - hiddenAt >= 10000) {
                             flushSaveQueue('hidden-10s');
@@ -7110,6 +7174,14 @@
                 if (Date.now() - lastInteractionAt >= 30000) {
                     flushSaveQueue('idle-30s');
                     if (window.nexoStore?.flushDeltas) window.nexoStore.flushDeltas('idle-30s').catch(() => {});
+                    // Refresh diferido de stats globales y vista de turnos —
+                    // se sacaron del hot path y solo corren acá tras inactividad.
+                    try { updateStats(); } catch (_) {}
+                    try {
+                        if (elements.shiftsView && !elements.shiftsView.classList.contains('hidden')) {
+                            renderShiftsView();
+                        }
+                    } catch (_) {}
                 }
             }, 5000);
 
@@ -8016,9 +8088,19 @@
                     } catch (e) { console.warn('[BOOT] cleanupStaleStatuses falló', e); }
                 }, 2500);
                 updateExportUrgencyBadge();
-                setInterval(() => { if (AppState.contacts.length) render(); else updateExportUrgencyBadge(); }, 300000);
-                setInterval(() => { refreshStorageDiagnostics(); }, 45000);
+                // En modo rendimiento se evitan tareas de fondo que no son críticas
+                // (re-render cada 5min, diagnósticos de storage cada 45s, backup auto
+                // cada 60s). Respetan la flag perfDebug al disparar, no al programar.
                 setInterval(() => {
+                    if (AppState.perfDebug) return;
+                    if (AppState.contacts.length) render(); else updateExportUrgencyBadge();
+                }, 300000);
+                setInterval(() => {
+                    if (AppState.perfDebug) return;
+                    refreshStorageDiagnostics();
+                }, 45000);
+                setInterval(() => {
+                    if (AppState.perfDebug) return;
                     if (!AppState.contacts.length) return;
                     maybeDownloadAutomaticBackup('interval');
                 }, 60000);
