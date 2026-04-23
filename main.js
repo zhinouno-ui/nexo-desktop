@@ -1173,6 +1173,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: path.join(__dirname, 'nexo.ico'),
     webPreferences: {
       contextIsolation: true,
       sandbox: true,
@@ -2177,6 +2178,36 @@ function getOpsUploadsDir(profileId) {
 function sanitizeFilename(name) {
   return String(name || 'upload.csv').replace(/[^a-z0-9._-]/gi, '_').slice(0, 120);
 }
+
+function getOpsReconPath(profileId) {
+  const safe = String(profileId || 'default').replace(/[^a-z0-9_-]/gi, '_');
+  return path.join(app.getPath('userData'), 'ops-recon', `recon-${safe}.json`);
+}
+
+ipcMain.handle('ops-recon:save', async (_event, payload) => {
+  try {
+    const profileId = String(payload?.profileId || 'default');
+    const file = getOpsReconPath(profileId);
+    const dir = path.dirname(file);
+    if (!fssync.existsSync(dir)) await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(file, JSON.stringify(payload), 'utf8');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: err.message };
+  }
+});
+
+ipcMain.handle('ops-recon:load', async (_event, payload) => {
+  try {
+    const profileId = String(payload?.profileId || 'default');
+    const file = getOpsReconPath(profileId);
+    if (!fssync.existsSync(file)) return { ok: true, data: null };
+    const raw = await fs.readFile(file, 'utf8');
+    return { ok: true, data: JSON.parse(raw) };
+  } catch (err) {
+    return { ok: false, message: err.message };
+  }
+});
 
 ipcMain.handle('ops:saveRawUpload', async (_event, payload) => {
   try {

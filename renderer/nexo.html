@@ -44,7 +44,8 @@
         <!-- Barra de navegación -->
         <div class="navbar">
             <div class="nexo-brand" title="Nexo Desktop">
-                <div class="nexo-brand-logo">N</div>
+                <img src="../nexo.ico" class="nexo-brand-logo-img" alt="Nexo" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="nexo-brand-logo" style="display:none">N</div>
                 <div>
                     <div class="nexo-brand-text">Nexo</div>
                     <div class="nexo-brand-sub">Desktop</div>
@@ -374,6 +375,13 @@
                     <div class="export-option-text">
                         <div class="export-option-title">Temas y colores</div>
                         <div class="export-option-desc">Seleccionar, crear, exportar e importar temas</div>
+                    </div>
+                </div>
+                <div class="export-option" id="openOpsComparatorOption">
+                    <i class="fas fa-balance-scale"></i>
+                    <div class="export-option-text">
+                        <div class="export-option-title">Comparador de diferencias</div>
+                        <div class="export-option-desc">Conciliar movimientos Agente vs Chunior</div>
                     </div>
                 </div>
                 <div class="export-option" id="checkUpdatesOption">
@@ -769,6 +777,8 @@
     <script src="shifts-memory.js"></script>
     <script src="sync-manager.js"></script>
     <script src="temperature-dashboard.js"></script>
+    <script src="../node_modules/xlsx-js-style/dist/xlsx.bundle.js"></script>
+    <script src="modules/ops-comparator.js"></script>
     <script src="nexo-app.js"></script>
 
 

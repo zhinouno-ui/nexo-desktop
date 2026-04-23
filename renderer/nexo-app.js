@@ -196,6 +196,7 @@
             rollbackPreviousOption: $('#rollbackPreviousOption'),
             showQuickMetricsOption: $('#showQuickMetricsOption'),
             openThemesOption: $('#openThemesOption'),
+            openOpsComparatorOption: $('#openOpsComparatorOption'),
             metricsModal: $('#metricsModal'),
             metricEditedToday: $('#metricEditedToday'),
             metricEditedYesterday: $('#metricEditedYesterday'),
@@ -2260,6 +2261,10 @@
                     setSaveState('ok', `Operaciones listas ${new Date().toLocaleTimeString('es-ES')}`);
                     showNotification(`✅ Operaciones actualizadas (${importedRows} filas · +${syncResult.createdCount} nuevos)`, 'success');
                     announceGeneral(`Operaciones importadas: ${importedRows} filas`, 'success');
+                    // Si el overlay de resumen de turno está abierto, refrescarlo con los datos nuevos
+                    if (document.getElementById('shiftSummaryOverlay')) {
+                        setTimeout(() => { if (typeof window.showShiftSummaryOverlay === 'function') window.showShiftSummaryOverlay('refresh'); }, 400);
+                    }
                 } catch (err) {
                     console.error('Error importando operaciones:', err);
                     setLoadingState(false, '', 100, false);
@@ -2471,20 +2476,14 @@
 
         async function refreshStorageDiagnostics() {
             try {
-                const usageBytes = withPerfStage('storage-scan', () => {
-                    let total = 0;
-                    for (let i = 0; i < localStorage.length; i++) {
-                        const key = localStorage.key(i) || '';
-                        const val = localStorage.getItem(key) || '';
-                        total += (key.length + val.length) * 2;
-                    }
-                    return total;
-                });
-
+                // Usar navigator.storage.estimate() — evita el loop que leía
+                // todos los valores de localStorage (costoso con muchos datos).
+                let usageBytes = 0;
                 let quotaBytes = 5 * 1024 * 1024;
                 if (navigator.storage && typeof navigator.storage.estimate === 'function') {
                     const estimate = await navigator.storage.estimate();
                     if (estimate?.quota) quotaBytes = estimate.quota;
+                    if (estimate?.usage) usageBytes = estimate.usage;
                 }
 
                 const pct = Math.min(100, Math.round((usageBytes / Math.max(1, quotaBytes)) * 100));
@@ -2592,13 +2591,12 @@
 
         function saveData(force = false, options = {}) {
             const deltaOnly = !!options?.deltaOnly;
-            if (!deltaOnly) AppState.searchIndexDirty = true;
+            // searchIndexDirty NO se marca acá — el índice se actualiza incrementalmente
+            // por addContactToIndex() en cada cambio. Marcarlo en save forzaba un
+            // rebuild completo de 22k contactos en cada render posterior al guardado.
             AppState.statsDirty = true;
             if (!deltaOnly) contactsDirty = true;
             pendingContactMutations += 1;
-            
-            // Guardar datos livianos en localStorage siempre
-            saveLightweightData();
             
             // Buffer system: acumular cambios hasta 1000 o forzar
             contactBuffer.push(...AppState.contacts.slice(-10)); // Últimos contactos modificados
@@ -2633,8 +2631,6 @@
                 
                 // DATOS DE RENDIMIENTO
                 localStorage.setItem(`perfStats:${profileId}`, JSON.stringify(AppState.perfStats || {}));
-                
-                console.log(`[saveLightweightData] ✅ Datos históricos completos guardados para ${profileId}`);
             } catch (e) {
                 console.warn('Error guardando datos históricos:', e);
                 // Si localStorage se llena, guardar en disco
@@ -3708,15 +3704,15 @@
             const pct = totals.total ? Math.round((totals.revisados / totals.total) * 100) : 0;
 
             const overviewCard = `
-                <div class="shifts-overview-card">
+                <div class="shifts-overview-card" data-overview>
                     <div>
                         <div style="font-weight:800; font-size:1rem;">Vista de competencia por turnos</div>
                         <div style="color:var(--text-secondary); font-size:.86rem; margin-top:2px;">En este modo ocultamos búsqueda/filtros generales para enfocarte en productividad por turno.</div>
                         <div class="shifts-overview-stats" style="margin-top:8px;">
-                            <span>Total asignados: <strong>${totals.total}</strong></span>
-                            <span>Revisados: <strong>${totals.revisados}</strong></span>
-                            <span>Pendientes: <strong>${totals.pendientes}</strong></span>
-                            <span>Avance global: <strong>${pct}%</strong></span>
+                            <span>Total asignados: <strong data-ovw="total">${totals.total}</strong></span>
+                            <span>Revisados: <strong data-ovw="revisados">${totals.revisados}</strong></span>
+                            <span>Pendientes: <strong data-ovw="pendientes">${totals.pendientes}</strong></span>
+                            <span>Avance global: <strong data-ovw="pct">${pct}%</strong></span>
                         </div>
                     </div>
                     <div class="shifts-overview-actions">
@@ -3727,19 +3723,19 @@
 
             const cards = shiftStats.map(({ shift, st, data }) => {
                 return `
-                <div class="shift-card">
+                <div class="shift-card" data-shift-card="${shift}">
                     <h3>
                         <span>${shift.toUpperCase()}</span>
                         <input class="filter-select" value="${data.name}" onchange="renameShift('${shift}', this.value)">
                     </h3>
                     <div class="shift-card-sub">Operador y cola de revisión para este turno.</div>
                     <div class="shift-stats">
-                        <span>Asignados: <strong>${st.total}</strong></span>
-                        <span>Revisados: <strong>${st.revisados}</strong></span>
-                        <span>Pendientes: <strong>${st.pendientes}</strong></span>
-                        <span>Avance: <strong>${st.pct}%</strong></span>
+                        <span>Asignados: <strong data-stat="total">${st.total}</strong></span>
+                        <span>Revisados: <strong data-stat="revisados">${st.revisados}</strong></span>
+                        <span>Pendientes: <strong data-stat="pendientes">${st.pendientes}</strong></span>
+                        <span>Avance: <strong data-stat="pct">${st.pct}%</strong></span>
                     </div>
-                    <div class="shift-progress"><span style="width:${st.pct}%"></span></div>
+                    <div class="shift-progress"><span data-stat="bar" style="width:${st.pct}%"></span></div>
                     <div class="shift-controls">
                         <button class="btn" onclick="startShiftReview('${shift}')"><i class="fas fa-play"></i> Empezar revisión</button>
                         <button class="btn" onclick="rebalanceShift('${shift}')"><i class="fas fa-random"></i> Rebalancear</button>
@@ -3747,108 +3743,7 @@
                 </div>`;
             }).join('');
 
-            // ── Bloque de operaciones diarias por turno ──
-            const opsBlock = _buildOpsProgressBlock();
-
-            elements.shiftsView.innerHTML = overviewCard + cards + opsBlock;
-        }
-
-        // Progreso diario de operaciones — cuenta por DÍA OPERATIVO desde NexoMetrics.
-        // Día operativo = día del turno: 00:00–05:59 pertenece al tn del día anterior,
-        // así "ver ayer a las 06:40 de hoy" muestra el tn completo sin cortarlo.
-        function _buildOpsProgressBlock() {
-            const pid = AppState.activeProfileId || 'default';
-            const now = new Date();
-            const currentShift = getLocalCompetitionShift(now);
-            const NM = window.NexoMetrics;
-            if (!NM) return '';
-
-            const todayOperDay = NM.getOperDayForNow();
-            const yesterdayOperDay = NM.operDayOffset(1);
-
-            const shiftOrder = ['tm', 'tt', 'tn'];
-            const currentIdx = shiftOrder.indexOf(currentShift);
-            const visibleShifts = shiftOrder.slice(0, currentIdx + 1);
-
-            const qToday = NM.query({ operDay: todayOperDay });
-            const qYesterday = NM.query({ operDay: yesterdayOperDay });
-
-            const opsToday = { tm: qToday.byShift.tm, tt: qToday.byShift.tt, tn: qToday.byShift.tn, total: qToday.count };
-            const opsYesterday = { tm: qYesterday.byShift.tm, tt: qYesterday.byShift.tt, tn: qYesterday.byShift.tn, total: qYesterday.count };
-
-            // Alias que operaron hoy o ayer (para detectar usuarios nuevos sin teléfono)
-            const newUsersCreatedLastDay = new Set();
-            const qBoth = NM.query({ fromOperDay: yesterdayOperDay, toOperDay: todayOperDay, includeItems: true, itemsLimit: 50000 });
-            for (const it of (qBoth.items || [])) newUsersCreatedLastDay.add(it.alias);
-
-            // Detectar usuarios nuevos: sin teléfono que tuvieron operaciones ayer o hoy
-            const newUsersNoPhone = (AppState.contacts || []).filter(c => {
-                if ((c.profileId || 'default') !== pid || c.phone) return false;
-                const alias = String(c.ops?.alias || c.alias || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                return newUsersCreatedLastDay.has(alias);
-            });
-
-            if (opsToday.total === 0 && opsYesterday.total === 0) return '';
-
-            const shiftMeta = {
-                tm: { emoji: '🌅', label: 'TM', color: '#fbbf24' },
-                tt: { emoji: '☀️', label: 'TT', color: '#f97316' },
-                tn: { emoji: '🌙', label: 'TN', color: '#a78bfa' }
-            };
-
-            const maxOps = Math.max(opsToday.total, opsYesterday.total, 1);
-
-            function renderBars(data, shiftsToShow, label) {
-                let html = `<div style="margin-bottom:6px;font-size:.78rem;color:var(--text-secondary);">${label} — <strong>${data.total}</strong> ops totales</div>`;
-                for (const s of shiftsToShow) {
-                    const m = shiftMeta[s];
-                    const val = data[s] || 0;
-                    const pct = maxOps > 0 ? Math.round((val / maxOps) * 100) : 0;
-                    const isCurrent = s === currentShift;
-                    html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                        <span style="min-width:50px;font-size:.78rem;font-weight:${isCurrent ? '700' : '400'};">${m.emoji} ${m.label}</span>
-                        <div style="flex:1;background:rgba(148,163,184,.12);border-radius:6px;height:18px;overflow:hidden;">
-                            <div style="background:${m.color};height:100%;width:${pct}%;border-radius:6px;transition:width .4s;"></div>
-                        </div>
-                        <span style="min-width:45px;text-align:right;font-size:.78rem;font-weight:700;color:${m.color};">${val}</span>
-                    </div>`;
-                }
-                return html;
-            }
-
-            let html = `<div id="opsProgressBlock" style="margin-top:14px;background:var(--card-bg,#1e293b);border:1px solid var(--border,#334155);border-radius:10px;padding:14px 16px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                    <div style="font-weight:700;font-size:.9rem;">📊 Operaciones del día</div>
-                    <div style="display:flex;gap:4px;">
-                        <button class="btn" style="padding:3px 10px;font-size:.75rem;" onclick="window._opsProgressDay='today';window.NexoActions.renderShiftsView();">Hoy</button>
-                        <button class="btn" style="padding:3px 10px;font-size:.75rem;opacity:.6;" onclick="window._opsProgressDay='yesterday';window.NexoActions.renderShiftsView();">Ayer</button>
-                        <button class="btn" style="padding:3px 10px;font-size:.72rem;opacity:.5;" onclick="window._opsProgressDay='today';window.NexoActions.renderShiftsView();" title="Refrescar">🔄</button>
-                    </div>
-                </div>`;
-
-            const showDay = window._opsProgressDay || 'today';
-            if (showDay === 'today') {
-                html += renderBars(opsToday, visibleShifts, 'Hoy hasta ahora');
-            } else {
-                html += renderBars(opsYesterday, shiftOrder, 'Ayer');
-            }
-
-            if (newUsersNoPhone.length > 0) {
-                html += `<div style="margin-top:10px;padding:8px 10px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);border-radius:8px;">
-                    <div style="font-weight:700;font-size:.78rem;color:#60a5fa;margin-bottom:4px;">🆕 ${newUsersNoPhone.length} usuario${newUsersNoPhone.length > 1 ? 's' : ''} nuevo${newUsersNoPhone.length > 1 ? 's' : ''} (últimas 48h) sin teléfono</div>`;
-                const showMax = Math.min(newUsersNoPhone.length, 5);
-                for (let i = 0; i < showMax; i++) {
-                    const safeName = String(newUsersNoPhone[i].name || newUsersNoPhone[i].alias || '?').replace(/[<>"]/g, '');
-                    html += `<div style="font-size:.78rem;color:#93c5fd;margin-bottom:2px;">→ ${safeName}</div>`;
-                }
-                if (newUsersNoPhone.length > 5) {
-                    html += `<div style="font-size:.72rem;color:#93c5fd;margin-top:2px;">...y ${newUsersNoPhone.length - 5} más</div>`;
-                }
-                html += '</div>';
-            }
-
-            html += '</div>';
-            return html;
+            elements.shiftsView.innerHTML = overviewCard + cards;
         }
 
         // getContactUrgency, getExportUrgency, updateExportUrgencyBadge, getMessageSentBadge
@@ -3902,9 +3797,84 @@
             }
         };
 
+        // Update incremental de contadores de turno: toca solo los elementos DOM
+        // afectados (la tarjeta del shift que cambió + contadores globales) sin
+        // recorrer los 22k contactos. Delta-based en O(1).
+        //   prev:  { wasReviewedHere: bool, wasUnreviewed: bool }  estado previo
+        //   next:  { isReviewedHere: bool, isUnreviewed: bool }    estado nuevo
+        function applyShiftIncrementalUpdate(shift, prev, next) {
+            if (!elements.shiftsView || AppState.currentView !== 'shifts') return;
+            const card = elements.shiftsView.querySelector(`[data-shift-card="${shift}"]`);
+            const overview = elements.shiftsView.querySelector('[data-overview]');
+            // Si no hay data-attrs (DOM viejo renderizado antes del cambio), re-render una vez
+            // y re-consultar. Pasa solo la primera vez tras upgrade.
+            if (!card && !overview) {
+                try { renderShiftsView(); } catch (_) {}
+                return;
+            }
+
+            // Delta de "revisados del turno": suma si empezó a contar como revisado acá,
+            // resta si dejó de contar (ej. volvió a sin revisar).
+            const dRev = (next.isReviewedHere ? 1 : 0) - (prev.wasReviewedHere ? 1 : 0);
+            // Delta de "pendientes": +1 si volvió a sin revisar, -1 si salió de sin revisar.
+            const dPend = (next.isUnreviewed ? 1 : 0) - (prev.wasUnreviewed ? 1 : 0);
+
+            const bumpInt = (el, delta) => {
+                if (!el || !delta) return;
+                const cur = parseInt(el.textContent, 10) || 0;
+                el.textContent = String(Math.max(0, cur + delta));
+            };
+
+            if (card) {
+                const totalEl = card.querySelector('[data-stat="total"]');
+                const revEl = card.querySelector('[data-stat="revisados"]');
+                const pendEl = card.querySelector('[data-stat="pendientes"]');
+                const pctEl = card.querySelector('[data-stat="pct"]');
+                const barEl = card.querySelector('[data-stat="bar"]');
+                bumpInt(revEl, dRev);
+                bumpInt(pendEl, dPend);
+                const total = parseInt(totalEl?.textContent || '0', 10) || 0;
+                const rev = parseInt(revEl?.textContent || '0', 10) || 0;
+                const pct = total ? Math.min(100, Math.round((rev / total) * 100)) : 0;
+                if (pctEl) pctEl.textContent = `${pct}%`;
+                if (barEl) barEl.style.width = `${pct}%`;
+            }
+
+            if (overview) {
+                const revEl = overview.querySelector('[data-ovw="revisados"]');
+                const pendEl = overview.querySelector('[data-ovw="pendientes"]');
+                const pctEl = overview.querySelector('[data-ovw="pct"]');
+                const totalEl = overview.querySelector('[data-ovw="total"]');
+                bumpInt(revEl, dRev);
+                bumpInt(pendEl, dPend);
+                const total = parseInt(totalEl?.textContent || '0', 10) || 0;
+                const rev = parseInt(revEl?.textContent || '0', 10) || 0;
+                const pct = total ? Math.round((rev / total) * 100) : 0;
+                if (pctEl) pctEl.textContent = `${pct}%`;
+            }
+
+            // Barra de progreso global (arriba del todo): #progressFill, #reviewedCount, #progressPercentage
+            const gRev = document.getElementById('reviewedCount');
+            const gTotal = document.getElementById('totalContactsCount');
+            const gPct = document.getElementById('progressPercentage');
+            const gFill = document.getElementById('progressFill');
+            if (gRev) {
+                // Para la barra global, "revisados" = todos los que no están en 'sin revisar'.
+                const dGlobalReviewed = -dPend; // si pendientes bajan, revisados globales suben
+                bumpInt(gRev, dGlobalReviewed);
+            }
+            if (gRev && gTotal) {
+                const rev = parseInt(gRev.textContent, 10) || 0;
+                const total = parseInt(gTotal.textContent, 10) || 0;
+                const pct = total ? Math.round((rev / total) * 100) : 0;
+                if (gPct) gPct.textContent = `${pct}%`;
+                if (gFill) gFill.style.width = `${pct}%`;
+            }
+        }
+
         // Coalesced: timer de render se reemplaza en cada llamada.
-        // YA NO dispara saveData — el save lo maneja scheduleStatusDeltaFlush
-        // (5s de inactividad) para evitar double-save por click.
+        // En modo turno no se usa — los contadores se actualizan al instante de
+        // forma incremental desde changeContactStatus (ver applyShiftIncrementalUpdate).
         let _fastRenderTimer = null;
         function scheduleFastBackgroundSave(source = 'common') {
             if (source !== 'shift') {
@@ -4002,7 +3972,11 @@
         let _statusDeltaFlushTimer = null;
         function scheduleStatusDeltaFlush(reason = 'manual') {
             if (_statusDeltaFlushTimer) clearTimeout(_statusDeltaFlushTimer);
-            const delay = reason === 'idle-5s' ? 5000 : 1500;
+            // 15s de inactividad antes de guardar. Con 22k contactos el save
+            // completo bloquea ~1.5s, así que solo vale la pena cuando el usuario
+            // realmente frenó. También se flushea al cerrar revisión (closeQuickReview)
+            // y al cerrar la app (beforeunload).
+            const delay = reason === 'idle-5s' ? 15000 : 3000;
             _statusDeltaFlushTimer = setTimeout(() => {
                 _statusDeltaFlushTimer = null;
                 try {
@@ -4040,6 +4014,14 @@
             }
             const eventAt = meta?.at || new Date().toISOString();
             const shiftByEvent = meta?.shift || inferShiftFromIso(eventAt) || '';
+
+            // Snapshot previo para update incremental de contadores de turno.
+            const _incrShift = (source === 'shift') ? (shiftByEvent || contact.assignedShift || '') : null;
+            const _incrPrev = _incrShift ? {
+                wasReviewedHere: !!(contact.shiftReviewed && contact.shiftReviewedByShift === _incrShift),
+                wasUnreviewed: oldStatus === 'sin revisar'
+            } : null;
+
             if (oldStatus === requestedStatus) {
                 const moved = updateCompetitionCredit(contact, requestedStatus, source, { forceTransfer: true, shiftOverride: shiftByEvent, atOverride: eventAt });
                 if (!moved) return;
@@ -4050,6 +4032,7 @@
                 scheduleFastBackgroundSave(source);
                 // Registrar en timeline del contacto que fue transferido
                 addContactTimeline(contact.id, 'Turno transferido', `Pasó a contar para ${String(contact.shiftReviewedByShift || '-').toUpperCase()} (estado: ${requestedStatus})`);
+                // Para transferencias el estado no cambió → no hay delta de revisados/pendientes del mismo shift.
                 return;
             }
 
@@ -4057,6 +4040,20 @@
             addContactToIndex(contact);
             adjustStatsCountersForStatus(contact.profileId || 'default', oldStatus, requestedStatus);
             updateCompetitionCredit(contact, requestedStatus, source, { shiftOverride: shiftByEvent, atOverride: eventAt });
+
+            // Update incremental instantáneo de tarjetas de turno (sin full scan).
+            if (source === 'shift' && _incrPrev) {
+                // Fallback: si shiftByEvent/assignedShift estaban vacíos, usar el que quedó
+                // seteado por updateCompetitionCredit (shiftReviewedByShift).
+                const shiftKey = _incrShift || contact.shiftReviewedByShift || contact.assignedShift || '';
+                if (shiftKey) {
+                    const _incrNext = {
+                        isReviewedHere: !!(contact.shiftReviewed && contact.shiftReviewedByShift === shiftKey),
+                        isUnreviewed: requestedStatus === 'sin revisar'
+                    };
+                    try { applyShiftIncrementalUpdate(shiftKey, _incrPrev, _incrNext); } catch (_) {}
+                }
+            }
             try { setReviewMetadata(contact, requestedStatus); } catch (e) { console.error('Error metadata estado:', e); }
             touchContactEdit(contact, source === 'shift' ? 'turno_status' : 'status_change');
             AppState.lastEditedContact = id;
@@ -5987,9 +5984,199 @@
                 else elements.midnightExportBtn.classList.remove('btn-midnight-pulse');
             };
 
+            // ── Resumen de fin de turno ──────────────────────────────────────
+            function buildShiftSummaryData(shift) {
+                const now = new Date();
+                const pid = AppState.activeProfileId || 'default';
+                const shiftRange = getShiftDateRange(shift, now);
+                const shiftFromTs = shiftRange.from.getTime();
+                const shiftToTs = shiftRange.to.getTime();
+
+                // Movimientos Nexo del turno
+                const transitions = (AppState.statusTransitions || []).filter(t => {
+                    const ts = new Date(t.at || 0).getTime();
+                    return ts >= shiftFromTs && ts <= shiftToTs && (t.profileId || 'default') === pid;
+                });
+                const transMap = new Map();
+                transitions.forEach(t => {
+                    if (!t.from || !t.to) return;
+                    const k = `${t.from}→${t.to}`;
+                    transMap.set(k, (transMap.get(k) || 0) + 1);
+                });
+                const topTrans = Array.from(transMap.entries()).sort((a,b) => b[1]-a[1]);
+
+                // Ops del turno desde NexoMetrics
+                const NM = window.NexoMetrics;
+                let ops = { cargas: 0, retiros: 0, volumenCargas: 0, volumenRetiros: 0, uniqueAliases: 0, neto: 0 };
+                let newUsersNoPhone = [];
+                if (NM) {
+                    const todayOD = NM.getOperDayForNow();
+                    const q = NM.query({ operDay: todayOD, shift });
+                    ops = { cargas: q.cargas, retiros: q.retiros, volumenCargas: q.volumenCargas, volumenRetiros: q.volumenRetiros, uniqueAliases: q.uniqueAliases, neto: q.neto };
+
+                    // Usuarios nuevos: operaron en este turno pero NO están en Nexo
+                    // (alias no matchea ningún contacto del perfil activo).
+                    const qItems = NM.query({ operDay: todayOD, shift, includeItems: true, itemsLimit: 50000 });
+                    const activeAliasesRaw = [...new Set((qItems.items || []).map(it => it.alias).filter(Boolean))];
+                    // Construir set de aliases conocidos en Nexo
+                    const knownAliases = new Set(
+                        (AppState.contacts || [])
+                            .filter(c => (c.profileId || 'default') === pid)
+                            .flatMap(c => {
+                                const keys = [];
+                                if (c.alias) keys.push(String(c.alias).toLowerCase().replace(/[^a-z0-9]/g, ''));
+                                if (c.name) keys.push(String(c.name).toLowerCase().replace(/[^a-z0-9]/g, ''));
+                                if (c.ops?.alias) keys.push(String(c.ops.alias).toLowerCase().replace(/[^a-z0-9]/g, ''));
+                                return keys.filter(Boolean);
+                            })
+                    );
+                    newUsersNoPhone = activeAliasesRaw
+                        .filter(a => !knownAliases.has(String(a).toLowerCase().replace(/[^a-z0-9]/g, '')))
+                        .map(a => ({ name: a, alias: a, _notInNexo: true }));
+                }
+
+                const shiftLabel = { tm: 'TM (06-14)', tt: 'TT (14-22)', tn: 'TN (22-06)' }[shift] || shift.toUpperCase();
+                return { shift, shiftLabel, transitions, topTrans, ops, newUsersNoPhone };
+            }
+
+            function showShiftSummaryOverlay(reason = 'auto') {
+                const now = new Date();
+                const shift = getLocalCompetitionShift(now);
+                const summaryKey = `shiftSummaryShown:${shift}:${now.toISOString().slice(0, 10)}`;
+
+                // Auto: solo si no se cerró este turno. Manual (X del turno): siempre.
+                if (reason === 'auto' && localStorage.getItem(summaryKey)) return;
+                // Refresh: solo si el overlay ya está abierto.
+                if (reason === 'refresh' && !document.getElementById('shiftSummaryOverlay')) return;
+
+                const d = buildShiftSummaryData(shift);
+                const fmt = n => Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                const fmtM = n => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+                // Quitar overlay anterior si existe
+                const prev = document.getElementById('shiftSummaryOverlay');
+                if (prev) prev.remove();
+
+                const overlay = document.createElement('div');
+                overlay.id = 'shiftSummaryOverlay';
+                overlay.className = 'shift-summary-overlay';
+
+                const transRows = d.topTrans.slice(0, 8).map(([k, v]) => {
+                    const [from, to] = k.split('→');
+                    return `<div class="ss-trans-row"><span class="ss-trans-from">${from}</span><i class="fas fa-arrow-right"></i><span class="ss-trans-to">${to}</span><strong>${v}</strong></div>`;
+                }).join('');
+
+                const newUsersHtml = d.newUsersNoPhone.length > 0 ? `
+                    <div class="ss-section ss-section-alert">
+                        <div class="ss-section-header">
+                            <i class="fas fa-user-plus"></i>
+                            <span>${d.newUsersNoPhone.length} usuario${d.newUsersNoPhone.length > 1 ? 's nuevos detectados' : ' nuevo detectado'}</span>
+                        </div>
+                        <div class="ss-alert-msg">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Estos jugadores operaron hoy pero <strong>no están registrados en Nexo</strong>.
+                            Al ser nuevos, probablemente no los tenés agendados.
+                            Verificalos, agendá su número en tu celular y después subí el número a Nexo para poder contactarlos.
+                        </div>
+                        <div class="ss-new-users-grid">
+                            ${d.newUsersNoPhone.map(c => `<div class="ss-new-user-chip"><i class="fas fa-user-slash"></i> ${String(c.name || c.alias || '?').replace(/[<>"]/g, '')}</div>`).join('')}
+                        </div>
+                    </div>` : '';
+
+                overlay.innerHTML = `
+                    <div class="ss-card">
+                        <div class="ss-header">
+                            <div class="ss-header-left">
+                                <div class="ss-emoji">☕</div>
+                                <div>
+                                    <div class="ss-title">Tomate un descanso</div>
+                                    <div class="ss-subtitle">Resumen del turno ${d.shiftLabel}</div>
+                                </div>
+                            </div>
+                            <button class="ss-close" id="shiftSummaryClose"><i class="fas fa-times"></i></button>
+                        </div>
+
+                        <div class="ss-grid">
+                            <div class="ss-section">
+                                <div class="ss-section-header"><i class="fas fa-exchange-alt"></i> <span>Movimientos en Nexo</span></div>
+                                <div class="ss-big-num">${d.transitions.length}</div>
+                                <div class="ss-label">cambios de estado</div>
+                                <div class="ss-trans-list">${transRows || '<div class="ss-empty">Sin movimientos en este turno</div>'}</div>
+                            </div>
+
+                            <div class="ss-section">
+                                <div class="ss-section-header"><i class="fas fa-chart-bar"></i> <span>Operaciones del turno</span></div>
+                                <div class="ss-ops-grid">
+                                    <div class="ss-ops-item good">
+                                        <div class="ss-ops-val">${fmt(d.ops.cargas)}</div>
+                                        <div class="ss-ops-lbl">Cargas</div>
+                                        <div class="ss-ops-sub">${fmtM(d.ops.volumenCargas)}</div>
+                                    </div>
+                                    <div class="ss-ops-item bad">
+                                        <div class="ss-ops-val">${fmt(d.ops.retiros)}</div>
+                                        <div class="ss-ops-lbl">Retiros</div>
+                                        <div class="ss-ops-sub">${fmtM(d.ops.volumenRetiros)}</div>
+                                    </div>
+                                    <div class="ss-ops-item neutral">
+                                        <div class="ss-ops-val">${fmt(d.ops.uniqueAliases)}</div>
+                                        <div class="ss-ops-lbl">Jugadores</div>
+                                        <div class="ss-ops-sub">neto ${fmtM(d.ops.neto)}</div>
+                                    </div>
+                                </div>
+                                <div class="ss-ops-hint">
+                                    <i class="fas fa-info-circle"></i>
+                                    ${d.ops.cargas === 0 && d.ops.retiros === 0 ? 'Subí el archivo de ops para ver tus operaciones del turno' : 'Si tenés ops más recientes, volvé a subirlas para actualizar'}
+                                    <button class="btn ss-upload-btn" id="ssUploadOpsBtn">
+                                        <i class="fas fa-upload"></i> Subir ops
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        ${newUsersHtml}
+
+                        <div class="ss-footer">
+                            <button class="btn ss-dismiss-btn" id="shiftSummaryClose2"><i class="fas fa-check"></i> Entendido, seguimos</button>
+                        </div>
+                    </div>
+                `;
+
+                document.body.appendChild(overlay);
+                requestAnimationFrame(() => overlay.classList.add('active'));
+
+                const close = () => {
+                    localStorage.setItem(summaryKey, '1');
+                    overlay.classList.remove('active');
+                    setTimeout(() => overlay.remove(), 300);
+                };
+                overlay.querySelector('#shiftSummaryClose').onclick = close;
+                overlay.querySelector('#shiftSummaryClose2').onclick = close;
+                overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+                // Botón subir ops — dispara el input de ops sin cerrar el overlay
+                const uploadBtn = overlay.querySelector('#ssUploadOpsBtn');
+                if (uploadBtn) {
+                    uploadBtn.onclick = () => {
+                        const opsInput = document.getElementById('opsFileInput') || elements.opsFileInput;
+                        if (opsInput) {
+                            opsInput.click();
+                        } else {
+                            // Fallback: cerrar overlay y navegar a Operaciones
+                            close();
+                            setTimeout(() => {
+                                const opsTab = document.querySelector('[data-view="ops"], #opsTab, [onclick*="operaciones"]');
+                                if (opsTab) opsTab.click();
+                            }, 300);
+                        }
+                    };
+                }
+            }
+
+            window.showShiftSummaryOverlay = showShiftSummaryOverlay;
+
             const startMidnightControlScheduler = () => {
                 updateMidnightButtonState();
                 let lastCheckedShift = getLocalCompetitionShift(new Date());
+                let _summaryShownThisWindow = false;
                 setInterval(() => {
                     const now = new Date();
                     const dateKey = now.toISOString().slice(0, 10);
@@ -6003,9 +6190,15 @@
                     // Archive shift log when shift boundary is crossed
                     const currentShift = getLocalCompetitionShift(now);
                     if (currentShift !== lastCheckedShift) {
-                        // Archive the shift that just ended
                         archiveShiftDailyLog(lastCheckedShift);
                         lastCheckedShift = currentShift;
+                        _summaryShownThisWindow = false; // reset para el nuevo turno
+                    }
+                    // Mostrar resumen a las xx:45–xx:55 si la app está visible
+                    const min = now.getMinutes();
+                    if (!_summaryShownThisWindow && min >= 45 && min <= 55 && document.visibilityState !== 'hidden') {
+                        _summaryShownThisWindow = true;
+                        showShiftSummaryOverlay('auto');
                     }
                 }, 30000);
             };
@@ -6204,7 +6397,15 @@
                     if (elements.metricTransitions24h) elements.metricTransitions24h.textContent = String(statusChanges || transitionsShift.length);
                     if (elements.metricTopShift24h) elements.metricTopShift24h.textContent = topShiftText;
                     if (elements.metricButtonsPerHour) elements.metricButtonsPerHour.textContent = String(buttonsPerHour || newUsers);
-                    const allTransitions = buildTransitionSummary();
+                    // Usar transitionsShift (ya filtrado al rango del turno actual)
+                    // en vez de buildTransitionSummary() sin filtro que traía todo el histórico.
+                    const shiftTransMap = new Map();
+                    transitionsShift.forEach((t) => {
+                        if (!t?.from || !t?.to) return;
+                        const key = `${t.from}=>${t.to}`;
+                        shiftTransMap.set(key, (shiftTransMap.get(key) || 0) + 1);
+                    });
+                    const allTransitions = Array.from(shiftTransMap.entries()).sort((a, b) => b[1] - a[1]);
                     renderTransitionTable(allTransitions);
                     const transitionRows = allTransitions.map(([key, count]) => {
                         const [from, to] = key.split('=>');
@@ -6851,6 +7052,13 @@
                     elements.userOptionsModal.classList.remove('active');
                 };
             }
+            if (elements.openOpsComparatorOption) {
+                elements.openOpsComparatorOption.onclick = () => {
+                    elements.userOptionsModal?.classList.remove('active');
+                    if (window.OpsComparator) window.OpsComparator.open();
+                    else showNotification('Comparador no disponible', 'error');
+                };
+            }
             if (elements.lightModeToggle) {
                 elements.lightModeToggle.onchange = (e) => {
                     AppState.lightMode = !!e.target.checked;
@@ -7148,6 +7356,7 @@
                 flushSaveQueue('beforeunload');
                 if (window.nexoStore?.flushDeltas) window.nexoStore.flushDeltas('beforeunload').catch(() => {});
                 flushAuxStorageSave();
+                saveLightweightData();
                 savePreferences(true);
                 flushShadowLog('beforeunload');
             });
@@ -7771,9 +7980,19 @@
         // Registrar módulo de shadow logging en el Bridge
         if (window.NexoBridge) window.NexoBridge.register('shadow-log');
 
+        // Expuestos para módulos externos (ops-comparator)
+        window.mergeOpsProfiles = mergeOpsProfiles;
+        window.syncOpsToContacts = syncOpsToContacts;
+        if (window.NexoActions && typeof window.NexoActions === 'object') {
+            window.NexoActions.showNotification = showNotification;
+        } else {
+            // se setea más abajo cuando se construye NexoActions
+        }
+
         window.NexoActions = {
             render,
             saveData,
+            showNotification,
             applyFilters,
             setLoadingState,
             loadData,
@@ -7788,6 +8007,7 @@
             ensureProfileByName,
             detectDuplicates,
             renderShiftsView,
+            updateStats,
             getStatusOption,
             getLocalCompetitionShift,
             showNotification,
@@ -8078,15 +8298,17 @@
                     refreshStorageDiagnostics();
                 }
                 // Limpieza automática al arrancar: contactos sin ops en >30 días → sin revisar.
-                // Corre una sola vez por boot, con delay para no bloquear el render inicial.
+                // Delay de 60s: la app ya arrancó y el usuario está activo. No corre
+                // en modo rendimiento para evitar el full scan de 22k contactos en PCs lentas.
                 setTimeout(async () => {
+                    if (AppState.perfDebug) return;
                     try {
                         if (typeof window.cleanupStaleStatuses === 'function') {
                             const n = await window.cleanupStaleStatuses();
                             if (n > 0) console.log(`[BOOT] Limpieza automática: ${n} contactos → sin revisar`);
                         }
                     } catch (e) { console.warn('[BOOT] cleanupStaleStatuses falló', e); }
-                }, 2500);
+                }, 60000);
                 updateExportUrgencyBadge();
                 // En modo rendimiento se evitan tareas de fondo que no son críticas
                 // (re-render cada 5min, diagnósticos de storage cada 45s, backup auto

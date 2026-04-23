@@ -82,6 +82,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listOpsRawUploads: (payload) => ipcRenderer.invoke('ops:listRawUploads', payload || {}),
   loadOpsRawUpload: (payload) => ipcRenderer.invoke('ops:loadRawUpload', payload || {}),
 
+  // Ops Reconciliation — comparador de diferencias
+  opsReconSave: (payload) => ipcRenderer.invoke('ops-recon:save', payload || {}),
+  opsReconLoad: (payload) => ipcRenderer.invoke('ops-recon:load', payload || {}),
+
   zoomIn: () => ipcRenderer.invoke('zoom:in'),
   zoomOut: () => ipcRenderer.invoke('zoom:out'),
   zoomReset: () => ipcRenderer.invoke('zoom:reset'),

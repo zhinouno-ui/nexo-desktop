@@ -73,10 +73,13 @@
     fresh.sort((a, b) => tsOf(a) - tsOf(b));
     recon.sort((a, b) => tsOf(a) - tsOf(b));
 
-    // Intercalar: cada `spacing` usuarios frescos, insertar 1 de recontacto
+    // Intercalar: cada `spacing` usuarios frescos, insertar 1 de recontacto.
+    // Spacing entre 8 y 15: suficientemente frecuente para que aparezcan recontactos
+    // espaciados sin apelotonarse ni quedar todos al final de la cola.
     if (recon.length === 0) return fresh;
     if (fresh.length === 0) return recon;
-    const spacing = Math.max(20, Math.floor(fresh.length / (recon.length + 1)));
+    const rawSpacing = Math.floor(fresh.length / (recon.length + 1));
+    const spacing = Math.max(8, Math.min(15, rawSpacing));
     const merged = [];
     let fi = 0, ri = 0;
     while (fi < fresh.length) {
@@ -280,6 +283,15 @@
     persistShiftModeMemory();
     const _qr = elements().quickReview;
     if (_qr) _qr.style.display = 'none';
+    // Refrescar stats al cerrar
+    try { actions().updateStats?.(); } catch (_) {}
+    try { actions().renderShiftsView?.(); } catch (_) {}
+    // Mostrar resumen de fin de turno si estamos en xx:45–xx:55
+    try {
+      if (typeof window.showShiftSummaryOverlay === 'function') {
+        window.showShiftSummaryOverlay('manual');
+      }
+    } catch (_) {}
   }
 
   window.persistShiftModeMemory = persistShiftModeMemory;
